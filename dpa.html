@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Accord de Sous-Traitance des Données (DPA) — Labosync</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Inter',system-ui,sans-serif;color:#0f172a;background:#f8fafc;line-height:1.7;}
+  header{background:#fff;border-bottom:1px solid #e2e8f0;padding:16px 24px;}
+  header .inner{max-width:860px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;}
+  .brand{font-weight:800;font-size:1.2rem;text-decoration:none;color:#0f172a;}.brand span{color:#2563eb;}
+  .back{font-size:.88rem;color:#64748b;text-decoration:none;}
+  main{max-width:860px;margin:0 auto;padding:40px 24px 80px;}
+  h1{font-size:2rem;font-weight:800;margin-bottom:8px;letter-spacing:-.02em;}
+  .updated{color:#64748b;font-size:.84rem;margin-bottom:32px;}
+  h2{font-size:1.25rem;font-weight:700;margin:32px 0 12px;color:#1e293b;}
+  h3{font-size:1.02rem;font-weight:700;margin:18px 0 8px;color:#1e293b;}
+  p,li{font-size:.95rem;color:#334155;margin-bottom:10px;}
+  ul,ol{padding-left:24px;margin-bottom:14px;}
+  a{color:#2563eb;}
+  table{width:100%;border-collapse:collapse;margin:14px 0;}
+  th,td{border:1px solid #e2e8f0;padding:10px 12px;text-align:left;font-size:.9rem;vertical-align:top;}
+  th{background:#f1f5f9;font-weight:600;}
+  .callout{background:#eff6ff;border-left:4px solid #2563eb;padding:14px 18px;border-radius:0 8px 8px 0;margin:16px 0;font-size:.92rem;color:#1e40af;}
+  .callout strong{color:#1d4ed8;}
+  .warn{background:#fef9c3;border-left:4px solid #facc15;padding:14px 18px;border-radius:0 8px 8px 0;margin:16px 0;font-size:.92rem;color:#854d0e;}
+  .ok{background:#d1fae5;border-left:4px solid #10b981;padding:14px 18px;border-radius:0 8px 8px 0;margin:16px 0;font-size:.92rem;color:#065f46;}
+  .toc{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 22px;margin-bottom:28px;}
+  .toc h3{margin-top:0;}
+  .toc ol{margin:0;padding-left:22px;}
+  .toc a{text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
+  .signature{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:22px 26px;margin-top:32px;}
+  .sig-row{display:flex;gap:24px;margin-top:18px;flex-wrap:wrap;}
+  .sig-box{flex:1;min-width:240px;}
+  .sig-box .lbl{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:6px;}
+  .sig-box .line{border-bottom:1.5px solid #94a3b8;height:60px;margin-bottom:6px;}
+  .sig-box .hint{font-size:.78rem;color:#64748b;}
+  @media print{
+    header,.back,.toc{display:none!important;}
+    body{background:#fff;}
+    main{padding:0;}
+  }
+</style>
+</head>
+<body>
+<header><div class="inner"><a href="index.html" class="brand">Labo<span>sync</span></a><a href="confidentialite.html" class="back">← Confidentialité</a></div></header>
+<main>
+<h1>Accord de Sous-Traitance des Données</h1>
+<p style="font-size:1rem;color:#475569;margin-bottom:6px;">(Data Processing Agreement — Article 28 RGPD)</p>
+<div class="updated">Dernière mise à jour : 6 mai 2026 · Version 1.0</div>
+
+<div class="ok">
+  <strong>🛡️ Engagement clé.</strong> Labosync est conçu selon le principe de <em>privacy by design</em> : aucune donnée nominative de patient (nom, prénom, date de naissance, adresse, n° de sécurité sociale) n'est collectée, stockée, transmise ou traitée par la plateforme. Les patients sont exclusivement identifiés par un code anonyme (pseudonyme) que seul le client peut rapprocher d'une personne identifiable.
+</div>
+
+<div class="toc">
+  <h3>Table des matières</h3>
+  <ol>
+    <li><a href="#parties">Parties</a></li>
+    <li><a href="#objet">Objet et champ d'application</a></li>
+    <li><a href="#definitions">Définitions</a></li>
+    <li><a href="#roles">Qualification des parties — responsable et sous-traitant</a></li>
+    <li><a href="#donnees">Catégories de données traitées</a></li>
+    <li><a href="#exclusion">Exclusion expresse des données nominatives patients</a></li>
+    <li><a href="#instructions">Obligations de Labosync (sous-traitant)</a></li>
+    <li><a href="#client">Obligations du Client (responsable de traitement)</a></li>
+    <li><a href="#sous-traitants">Sous-traitants ultérieurs</a></li>
+    <li><a href="#securite">Mesures techniques et organisationnelles</a></li>
+    <li><a href="#violation">Notification de violation de données</a></li>
+    <li><a href="#droits">Assistance pour les droits des personnes concernées</a></li>
+    <li><a href="#duree">Durée, restitution et suppression</a></li>
+    <li><a href="#audit">Droit d'audit</a></li>
+    <li><a href="#hds">Statut HDS — Hébergement de Données de Santé</a></li>
+    <li><a href="#responsabilite">Responsabilité</a></li>
+    <li><a href="#droit">Droit applicable et juridiction</a></li>
+  </ol>
+</div>
+
+<h2 id="parties">1. Parties</h2>
+<p>Le présent Accord de Sous-Traitance des Données (ci-après « <strong>l'Accord</strong> » ou « <strong>DPA</strong> ») est conclu entre :</p>
+<ul>
+  <li><strong>Labosync</strong>, éditeur du Service Labosync, identifié dans les <a href="mentions-legales.html">mentions légales</a> (ci-après « <strong>Labosync</strong> » ou « <strong>le Sous-traitant</strong> ») ;</li>
+  <li><strong>Le Client</strong>, laboratoire de prothèse dentaire ou cabinet dentaire utilisateur du Service, dûment identifié lors de la souscription de son compte (ci-après « <strong>le Client</strong> » ou « <strong>le Responsable de Traitement</strong> »).</li>
+</ul>
+<p>L'acceptation des Conditions Générales d'Utilisation (CGU) du Service vaut acceptation pleine et entière du présent DPA, qui en constitue une annexe indissociable.</p>
+
+<h2 id="objet">2. Objet et champ d'application</h2>
+<p>Le présent DPA encadre les conditions dans lesquelles Labosync, en sa qualité de sous-traitant au sens de l'article 28 du RGPD, traite des données à caractère personnel pour le compte du Client, dans le cadre de l'exécution du contrat de souscription au Service.</p>
+<p>Il s'applique à l'ensemble des traitements effectués par Labosync sur des données fournies, saisies ou générées par le Client via le Service.</p>
+
+<h2 id="definitions">3. Définitions</h2>
+<p>Les termes utilisés dans le présent DPA ont le sens qui leur est donné par le RGPD (Règlement UE 2016/679). En particulier :</p>
+<ul>
+  <li><strong>Données à caractère personnel</strong> : toute information se rapportant à une personne physique identifiée ou identifiable.</li>
+  <li><strong>Pseudonymisation</strong> : traitement de données rendu de telle façon qu'elles ne puissent plus être attribuées à une personne sans informations supplémentaires conservées séparément.</li>
+  <li><strong>Code patient</strong> : pseudonyme défini librement par le Client (initiales + numéro, code interne, etc.) servant à identifier un patient sans révéler son identité.</li>
+  <li><strong>Donnée de santé</strong> : au sens de l'article 4-15 RGPD, toute donnée relative à la santé physique ou mentale d'une personne identifiée ou identifiable.</li>
+</ul>
+
+<h2 id="roles">4. Qualification des parties</h2>
+<p>Le Client est <strong>seul Responsable du Traitement</strong> au sens de l'article 4-7 du RGPD. À ce titre, il décide des finalités et des moyens du traitement et exerce un contrôle exclusif sur :</p>
+<ul>
+  <li>La liste des cabinets dentaires avec lesquels il interagit ;</li>
+  <li>Les codes patients qu'il saisit dans le Service ;</li>
+  <li>La table de correspondance entre ces codes et les patients identifiables, qui reste exclusivement dans ses systèmes (logiciel de gestion cabinet, registre interne, etc.) et n'est <strong>jamais</strong> transmise à Labosync.</li>
+</ul>
+<p>Labosync agit en qualité de <strong>Sous-traitant</strong> au sens de l'article 28 du RGPD, agissant sur instruction documentée du Client (à savoir : l'utilisation du Service conformément à sa documentation).</p>
+
+<h2 id="donnees">5. Catégories de données traitées</h2>
+<table>
+  <tr><th>Catégorie</th><th>Personnes concernées</th><th>Finalité</th></tr>
+  <tr><td>Données de compte (email, mot de passe haché, nom du laboratoire)</td><td>Utilisateur du laboratoire/cabinet</td><td>Authentification, facturation de l'abonnement</td></tr>
+  <tr><td>Données métier (cabinets clients, travaux dentaires, types de prothèses, prix, factures, bons de livraison)</td><td>Le laboratoire et ses cabinets clients</td><td>Fonctionnement du Service de gestion</td></tr>
+  <tr><td><strong>Codes patients (pseudonymes)</strong></td><td>Aucune personne directement identifiable par Labosync</td><td>Suivi anonyme des prothèses</td></tr>
+  <tr><td>Adresse IP, logs de connexion</td><td>Utilisateur</td><td>Sécurité et prévention de la fraude</td></tr>
+</table>
+
+<h2 id="exclusion">6. Exclusion expresse des données nominatives patients</h2>
+<div class="callout">
+  <strong>Engagement contractuel central.</strong> Le Service Labosync ne propose <em>aucun champ</em> destiné à recevoir le nom, le prénom, la date de naissance, l'adresse, le numéro de sécurité sociale ou tout autre identifiant direct d'un patient. Tous les champs liés au patient sont libellés « Code patient » et accompagnés d'un avertissement invitant à utiliser un identifiant anonyme.
+</div>
+<p>Labosync s'engage à :</p>
+<ul>
+  <li>Ne <strong>jamais</strong> introduire dans son interface un champ collectant un identifiant direct de patient ;</li>
+  <li>Mettre à disposition un <strong>générateur de code anonyme</strong> intégré, qui transforme un nom (saisi localement, jamais transmis ni enregistré) en pseudonyme avant toute saisie dans le Service ;</li>
+  <li>Détecter les saisies suspectes (chaîne ressemblant à un nom usuel) et alerter l'utilisateur avant validation ;</li>
+  <li>Ne pas tenter, par quelque moyen que ce soit, de réidentifier un patient à partir des codes traités.</li>
+</ul>
+<div class="warn">
+  <strong>Responsabilité du Client.</strong> En cas de saisie volontaire ou involontaire d'un nom patient à la place d'un code, la responsabilité incombe exclusivement au Client. Labosync décline toute responsabilité pour les données saisies en contradiction avec les présentes stipulations et la documentation du Service.
+</div>
+
+<h2 id="instructions">7. Obligations de Labosync</h2>
+<p>Labosync s'engage, conformément à l'article 28 du RGPD, à :</p>
+<ol>
+  <li>Ne traiter les données personnelles que sur instruction documentée du Client (le contrat et la documentation du Service constituant ces instructions) ;</li>
+  <li>Garantir que les personnes autorisées à traiter les données sont soumises à une obligation de confidentialité ;</li>
+  <li>Mettre en œuvre les mesures techniques et organisationnelles appropriées (cf. article 10) ;</li>
+  <li>Ne pas recourir à un sous-traitant ultérieur sans information préalable du Client ;</li>
+  <li>Aider le Client à répondre aux demandes d'exercice des droits des personnes concernées ;</li>
+  <li>Aider le Client à se conformer à ses propres obligations RGPD (sécurité, notification de violations, AIPD le cas échéant) ;</li>
+  <li>Supprimer ou restituer les données à la fin du contrat (cf. article 13) ;</li>
+  <li>Mettre à disposition du Client les informations nécessaires à la démonstration du respect des présentes obligations.</li>
+</ol>
+
+<h2 id="client">8. Obligations du Client</h2>
+<p>Le Client s'engage à :</p>
+<ol>
+  <li>Saisir uniquement des codes patients <strong>anonymes</strong>, conformément à l'engagement de l'article 6 ;</li>
+  <li>Maintenir, dans ses propres systèmes et sous son seul contrôle, la table de correspondance entre codes et patients identifiables ;</li>
+  <li>Informer ses propres patients du recours à Labosync comme outil interne du laboratoire, dans le cadre de sa propre politique de confidentialité ;</li>
+  <li>Recueillir, le cas échéant, les consentements nécessaires auprès de ses propres patients ;</li>
+  <li>S'assurer que les cabinets dentaires partenaires utilisant le portail respectent également les présentes stipulations ;</li>
+  <li>Notifier Labosync sans délai en cas de soupçon de violation de données affectant les données traitées.</li>
+</ol>
+
+<h2 id="sous-traitants">9. Sous-traitants ultérieurs</h2>
+<p>Le Client autorise Labosync à recourir aux sous-traitants ultérieurs suivants :</p>
+<table>
+  <tr><th>Sous-traitant</th><th>Service fourni</th><th>Localisation des serveurs</th></tr>
+  <tr><td>Supabase Inc.</td><td>Hébergement de la base de données et de l'authentification</td><td>Union européenne (Francfort, Allemagne)</td></tr>
+  <tr><td>Netlify Inc.</td><td>Hébergement du frontend (HTML/CSS/JS)</td><td>États-Unis (clauses contractuelles types)</td></tr>
+  <tr><td>Stripe Payments Europe</td><td>Traitement des paiements d'abonnement</td><td>Irlande, traitement aux États-Unis (clauses contractuelles types)</td></tr>
+  <tr><td>Anthropic PBC (optionnel)</td><td>Assistant IA intégré, uniquement si activé par le Client</td><td>États-Unis (clauses contractuelles types)</td></tr>
+</table>
+<p>Tout changement substantiel de sous-traitant fera l'objet d'une notification au Client par email avec préavis raisonnable, pendant lequel le Client peut s'opposer au changement et résilier le contrat sans pénalité.</p>
+
+<h2 id="securite">10. Mesures techniques et organisationnelles</h2>
+<p>Labosync met en œuvre les mesures suivantes :</p>
+<ul>
+  <li><strong>Chiffrement</strong> : HTTPS/TLS 1.2+ pour toutes les communications ; chiffrement des données au repos par Supabase ;</li>
+  <li><strong>Authentification</strong> : mot de passe haché (bcrypt), gestion par Supabase Auth, jetons JWT à durée limitée ;</li>
+  <li><strong>Cloisonnement</strong> : Row Level Security (RLS) côté Supabase — chaque utilisateur ne voit que ses propres données ;</li>
+  <li><strong>Sauvegardes</strong> : sauvegardes automatiques journalières par Supabase ;</li>
+  <li><strong>Protection contre l'écrasement</strong> : système de détection des sauvegardes destructives empêchant la perte accidentelle de données ;</li>
+  <li><strong>Journalisation</strong> : logs d'accès et de modification conservés 12 mois ;</li>
+  <li><strong>Mises à jour</strong> : application régulière des correctifs de sécurité ;</li>
+  <li><strong>Personnel</strong> : accès aux serveurs limité au strict nécessaire, soumis à confidentialité.</li>
+</ul>
+
+<h2 id="violation">11. Notification de violation de données</h2>
+<p>En cas de violation de données à caractère personnel, Labosync notifie le Client sans délai injustifié et au plus tard dans les <strong>48 heures</strong> suivant la prise de connaissance de l'incident. La notification précisera la nature de la violation, les catégories et le nombre approximatif de personnes concernées, les conséquences probables et les mesures prises ou proposées.</p>
+
+<h2 id="droits">12. Assistance pour les droits des personnes concernées</h2>
+<p>Compte tenu de la nature du traitement (pseudonymisation), les demandes d'exercice des droits (accès, rectification, effacement, portabilité, opposition) doivent être adressées en priorité au Client, qui dispose seul de la table de correspondance. Labosync apporte au Client une assistance raisonnable pour répondre à ces demandes (extraction des données pseudonymisées du Client, par exemple).</p>
+
+<h2 id="duree">13. Durée, restitution et suppression</h2>
+<p>Le présent DPA prend effet à la date d'acceptation des CGU et reste en vigueur tant que le contrat de souscription est actif.</p>
+<p>À la fin du contrat (résiliation, non-renouvellement) :</p>
+<ul>
+  <li>Le Client dispose de <strong>60 jours</strong> pour exporter ses données via la fonction d'export prévue dans le Service ;</li>
+  <li>À l'issue de ce délai, Labosync procède à la suppression définitive des données métier du Client de ses systèmes de production ;</li>
+  <li>Les sauvegardes contenant ces données sont purgées dans un délai maximum de 90 jours supplémentaires ;</li>
+  <li>Les données strictement nécessaires au respect d'obligations légales (factures de Labosync envers le Client, logs de sécurité) peuvent être conservées selon les durées légales applicables.</li>
+</ul>
+
+<h2 id="audit">14. Droit d'audit</h2>
+<p>Le Client peut, sous réserve d'un préavis raisonnable (au moins 30 jours), demander à Labosync de fournir toute information nécessaire à la démonstration du respect des obligations du présent DPA. Un audit sur site peut être effectué une fois par an, à la charge du Client, par un tiers indépendant accepté par les deux parties, dans des conditions préservant la confidentialité et la continuité du Service.</p>
+
+<h2 id="hds">15. Statut HDS — Hébergement de Données de Santé</h2>
+<p>Compte tenu de l'absence totale de données nominatives de patients dans le Service (cf. articles 6 et 8) :</p>
+<ul>
+  <li>Labosync n'est <strong>pas tenu</strong> de souscrire à un hébergement HDS au sens de l'article L.1111-8 du Code de la Santé Publique ;</li>
+  <li>Les données pseudonymisées traitées par Labosync ne constituent pas des « données de santé à caractère personnel » au sens dudit article ;</li>
+  <li>Le Client demeure cependant tenu, pour ses propres traitements internes (table de correspondance, dossiers patients), au respect des obligations applicables à sa propre activité (HDS, secret médical, etc.).</li>
+</ul>
+
+<h2 id="responsabilite">16. Responsabilité</h2>
+<p>Chaque partie est responsable, dans la limite de ses propres obligations, des dommages causés par un manquement au RGPD ou au présent DPA. La responsabilité de Labosync est plafonnée conformément aux conditions prévues dans les CGU/CGV. Aucune limitation ne s'applique en cas de faute lourde, dol ou manquement aux obligations légales d'ordre public.</p>
+
+<h2 id="droit">17. Droit applicable et juridiction</h2>
+<p>Le présent DPA est soumis au droit français. Tout litige relatif à son interprétation ou son exécution sera porté, à défaut de résolution amiable, devant les tribunaux français compétents conformément aux CGU.</p>
+
+<div class="signature">
+  <h3 style="margin-top:0;">Acceptation</h3>
+  <p style="margin-bottom:0;">L'acceptation des Conditions Générales d'Utilisation du Service emporte acceptation du présent DPA. Pour les Clients souhaitant une signature formelle de l'Accord (par exemple pour leur propre conformité interne ou en réponse à un audit), une version PDF signée peut être obtenue sur demande à <a href="mailto:contact@labosync.app">contact@labosync.app</a>.</p>
+  <div class="sig-row">
+    <div class="sig-box">
+      <div class="lbl">Pour Labosync</div>
+      <div class="line"></div>
+      <div class="hint">Nom, qualité, date</div>
+    </div>
+    <div class="sig-box">
+      <div class="lbl">Pour le Client</div>
+      <div class="line"></div>
+      <div class="hint">Nom, qualité, date, cachet</div>
+    </div>
+  </div>
+</div>
+
+<p style="margin-top:32px;font-size:.86rem;color:#64748b;">Document version 1.0 — 6 mai 2026. Pour toute question : <a href="mailto:contact@labosync.app">contact@labosync.app</a>.</p>
+
+</main>
+</body>
+</html>

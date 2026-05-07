@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Dent stylisée -->
+  <path fill="#ffffff" d="M256 92
+    C 332 92 380 144 380 220
+    C 380 274 364 322 348 360
+    L 322 412
+    C 314 428 290 428 284 410
+    L 268 352
+    C 266 342 260 336 256 336
+    C 252 336 246 342 244 352
+    L 228 410
+    C 222 428 198 428 190 412
+    L 164 360
+    C 148 322 132 274 132 220
+    C 132 144 180 92 256 92 Z"/>
+  <!-- Petits points "sync" autour -->
+  <circle cx="120" cy="160" r="14" fill="#ffffff" opacity="0.5"/>
+  <circle cx="392" cy="160" r="14" fill="#ffffff" opacity="0.5"/>
+  <circle cx="100" cy="280" r="10" fill="#ffffff" opacity="0.3"/>
+  <circle cx="412" cy="280" r="10" fill="#ffffff" opacity="0.3"/>
+</svg>

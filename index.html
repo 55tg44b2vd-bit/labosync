@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Labosync — Logiciel de gestion pour laboratoires de prothèse dentaire</title>
+<meta name="description" content="Planification, bons de livraison, factures, portail cabinet. L'outil métier pensé par des prothésistes, pour des prothésistes. Essai gratuit 14 jours."/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  :root{--accent:#2563eb;--ink:#0f172a;--ink-soft:#64748b;--bg:#f8fafc;--border:#e2e8f0;--surface:#fff;}
+  body{font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6;}
+  a{color:var(--accent);text-decoration:none;}
+  .container{max-width:1100px;margin:0 auto;padding:0 24px;}
+  header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);}
+  header .inner{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;max-width:1100px;margin:0 auto;}
+  .brand{font-weight:800;font-size:1.3rem;letter-spacing:-.02em;}
+  .brand span{color:var(--accent);}
+  nav a{margin-left:18px;color:var(--ink);font-weight:500;font-size:.9rem;}
+  .btn{display:inline-block;padding:12px 22px;border-radius:10px;font-weight:600;font-size:.92rem;cursor:pointer;transition:all .15s;border:none;text-align:center;}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:hover{background:#1d4fd8;transform:translateY(-1px);}
+  .btn-ghost{background:transparent;color:var(--ink);border:1.5px solid var(--border);}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+  .hero{padding:90px 0 72px;text-align:center;background:radial-gradient(ellipse at top,#dbeafe 0%,transparent 62%);}
+  .hero h1{font-size:clamp(2rem,5vw,3.4rem);font-weight:800;letter-spacing:-.03em;line-height:1.15;margin-bottom:18px;}
+  .hero h1 .accent{color:var(--accent);}
+  .hero p{font-size:1.12rem;color:var(--ink-soft);max-width:700px;margin:0 auto 30px;}
+  .hero-cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+  .hero-trust{margin-top:24px;font-size:.82rem;color:var(--ink-soft);}
+  .hero-proof{margin-top:26px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+  .pill{background:#fff;border:1px solid var(--border);border-radius:99px;padding:7px 14px;font-size:.78rem;color:#334155;box-shadow:0 2px 8px rgba(15,23,42,.05);}
+  .hero-mock{margin:34px auto 0;max-width:920px;background:#fff;border:1px solid var(--border);border-radius:18px;box-shadow:0 18px 45px rgba(37,99,235,.15);padding:18px;}
+  .hero-mock-inner{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;}
+  .mock-card{border:1px solid var(--border);border-radius:12px;padding:14px;background:#f8fafc;text-align:left;}
+  .mock-title{font-size:.8rem;font-weight:700;color:#334155;margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em;}
+  .mock-line{height:10px;background:#e2e8f0;border-radius:6px;margin-bottom:8px;}
+  .mock-line.w70{width:70%;}.mock-line.w50{width:50%;}.mock-line.w30{width:30%;}
+  .mock-kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .mock-kpi div{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;}
+  .mock-kpi strong{display:block;font-size:1rem;color:#0f172a;}
+  .mock-kpi span{font-size:.68rem;color:#64748b;}
+  .section-soft{background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);}
+  .section{padding:80px 0;}
+  .section-title{font-size:2rem;font-weight:800;text-align:center;margin-bottom:12px;letter-spacing:-.02em;}
+  .section-sub{text-align:center;color:var(--ink-soft);font-size:1.05rem;max-width:620px;margin:0 auto 48px;}
+  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;}
+  .feature{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px;}
+  .feature-icon{font-size:1.8rem;margin-bottom:14px;}
+  .feature h3{font-size:1.1rem;font-weight:700;margin-bottom:8px;}
+  .feature p{color:var(--ink-soft);font-size:.9rem;}
+  .pricing{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;max-width:760px;margin:0 auto;}
+  .plan{background:var(--surface);border:2px solid var(--border);border-radius:18px;padding:36px 28px;position:relative;}
+  .plan.featured{border-color:var(--accent);}
+  .plan-badge{position:absolute;top:-14px;right:24px;background:var(--accent);color:#fff;padding:5px 14px;border-radius:99px;font-size:.7rem;font-weight:700;letter-spacing:.08em;}
+  .plan-name{font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);}
+  .plan-price{font-size:2.8rem;font-weight:800;margin:12px 0 4px;letter-spacing:-.03em;}
+  .plan-price small{font-size:1rem;font-weight:500;color:var(--ink-soft);}
+  .plan-note{color:var(--ink-soft);font-size:.85rem;margin-bottom:22px;}
+  .plan ul{list-style:none;margin-bottom:24px;}
+  .plan li{padding:6px 0;font-size:.9rem;}
+  .plan li::before{content:'✓ ';color:var(--accent);font-weight:700;margin-right:6px;}
+  .cta-section{background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%);color:#fff;text-align:center;padding:72px 24px;border-radius:20px;margin:0 24px;}
+  .cta-section h2{font-size:2rem;font-weight:800;margin-bottom:12px;}
+  .cta-section p{color:#dbeafe;margin-bottom:28px;}
+  .cta-section .btn-primary{background:#fff;color:var(--accent);}
+  .faq{max-width:720px;margin:0 auto;}
+  .how-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+  .how-step{background:#fff;border:1px solid var(--border);border-radius:14px;padding:22px;}
+  .how-step .n{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.82rem;margin-bottom:10px;}
+  .how-step h3{font-size:1rem;margin-bottom:6px;}
+  .how-step p{font-size:.88rem;color:var(--ink-soft);}
+  .testi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+  .testi{background:#fff;border:1px solid var(--border);border-radius:14px;padding:20px;}
+  .testi p{font-size:.88rem;color:#334155;margin-bottom:10px;}
+  .testi .who{font-size:.78rem;color:#64748b;font-weight:600;}
+  details{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 22px;margin-bottom:10px;cursor:pointer;}
+  details summary{font-weight:600;font-size:.95rem;list-style:none;display:flex;justify-content:space-between;align-items:center;}
+  details summary::after{content:'+';font-size:1.4rem;color:var(--ink-soft);}
+  details[open] summary::after{content:'−';}
+  details p{color:var(--ink-soft);margin-top:12px;font-size:.9rem;}
+  footer{background:#0f172a;color:#cbd5e1;padding:48px 24px;margin-top:60px;}
+  footer .inner{max-width:1100px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:space-between;gap:32px;}
+  footer a{color:#cbd5e1;font-size:.85rem;display:block;margin-bottom:6px;}
+  footer a:hover{color:#fff;}
+  footer h4{color:#fff;font-size:.95rem;margin-bottom:12px;}
+  .copyright{border-top:1px solid #1e293b;padding-top:20px;margin-top:32px;text-align:center;font-size:.8rem;color:#64748b;}
+  @media(max-width:640px){
+    .hero{padding:50px 0 40px;}
+    .section{padding:56px 0;}
+    nav a:not(.btn){display:none;}
+    .hero-mock-inner,.how-grid,.testi-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="inner">
+    <div class="brand">Labo<span>sync</span></div>
+    <nav>
+      <a href="#features">Fonctionnalités</a>
+      <a href="#pricing">Tarif</a>
+      <a href="#faq">FAQ</a>
+      <a href="app.html" class="btn btn-ghost" style="padding:8px 16px;">Se connecter</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <h1>Reprenez le contrôle du labo <span class="accent">sans Excel, sans stress</span></h1>
+    <p>Labosync centralise production, livraisons, facturation et relation cabinets dans une interface claire. Vos équipes gagnent du temps, vos cabinets gagnent en visibilité.</p>
+    <div class="hero-cta">
+      <a href="app.html?signup=1" class="btn btn-primary">🚀 Essai gratuit 14 jours</a>
+      <a href="#features" class="btn btn-ghost">Voir la démo</a>
+    </div>
+    <div class="hero-trust">Sans carte bancaire · Setup en 2 minutes · Données hébergées en Europe</div>
+    <div class="hero-proof">
+      <div class="pill">✅ Essai complet, pas une version bridée</div>
+      <div class="pill">📱 Mobile + Desktop synchronisés</div>
+      <div class="pill">💳 Paiement Stripe intégré</div>
+    </div>
+    <div class="hero-mock" aria-hidden="true">
+      <div class="hero-mock-inner">
+        <div class="mock-card">
+          <div class="mock-title">Tableau de bord production</div>
+          <div class="mock-kpi">
+            <div><strong>38</strong><span>Travaux en cours</span></div>
+            <div><strong>12</strong><span>Livraisons aujourd'hui</span></div>
+            <div><strong>7 840€</strong><span>CA mois</span></div>
+          </div>
+          <div style="margin-top:12px;">
+            <div class="mock-line"></div>
+            <div class="mock-line w70"></div>
+            <div class="mock-line w50"></div>
+          </div>
+        </div>
+        <div class="mock-card">
+          <div class="mock-title">Messagerie cabinets</div>
+          <div class="mock-line"></div>
+          <div class="mock-line w70"></div>
+          <div class="mock-line"></div>
+          <div class="mock-line w30"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section section-soft">
+  <div class="container">
+    <h2 class="section-title">Comment ça marche ?</h2>
+    <p class="section-sub">Un flux simple qui sécurise toute la chaîne labo ↔ cabinet.</p>
+    <div class="how-grid">
+      <div class="how-step"><div class="n">1</div><h3>Le cabinet envoie sa demande</h3><p>Via son portail dédié, avec étapes de cas et pièces jointes si besoin.</p></div>
+      <div class="how-step"><div class="n">2</div><h3>Le labo pilote la production</h3><p>Planification équipe, suivi des étapes, BL conformes et échanges centralisés.</p></div>
+      <div class="how-step"><div class="n">3</div><h3>Facturation et paiement fluides</h3><p>Facture générée, lien Stripe envoyé, paiement et statut automatiquement synchronisés.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="features">
+  <div class="container">
+    <h2 class="section-title">Un produit métier, pas un outil générique</h2>
+    <p class="section-sub">Pensé pour les labos dentaires : concret, opérationnel, sans complexité inutile.</p>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">📅</div>
+        <h3>Planification intelligente</h3>
+        <p>Auto-attribution des tâches par technicien selon la charge, gestion des congés et absences, calendrier semaine/mois.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📋</div>
+        <h3>Bons de livraison conformes</h3>
+        <p>Génération automatique avec certificat de conformité CE (MDR 2017/745), matériaux, N° de lot, signatures.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💰</div>
+        <h3>Facturation et encaissement intégrés</h3>
+        <p>Factures prêtes en quelques clics, lien de paiement immédiat, suivi du règlement sans ressaisie.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🏥</div>
+        <h3>Portail cabinet inclus</h3>
+        <p>Chaque cabinet dispose de son espace sécurisé pour consulter ses BL, factures et discuter avec vous.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📱</div>
+        <h3>Mobile & desktop synchronisés</h3>
+        <p>Créez un travail depuis votre téléphone, retrouvez-le sur l'ordi. Accès portail cabinet inclus en version mobile.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💬</div>
+        <h3>Messagerie cabinet contextualisée</h3>
+        <p>Les échanges sont rattachés aux cas, plus besoin de fouiller dans des emails ou WhatsApp.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📊</div>
+        <h3>Statistiques & suivi</h3>
+        <p>Tableau de bord, KPI de production, montants en attente, revenus mensuels. Pilotez votre labo d'un coup d'œil.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔒</div>
+        <h3>Conçu pour la conformité</h3>
+        <p>Codes patients anonymes, architecture RGPD, export des données et contrôle des accès.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section section-soft">
+  <div class="container">
+    <h2 class="section-title">Ce que disent les utilisateurs</h2>
+    <p class="section-sub">Des retours orientés terrain : gain de temps, meilleure communication, moins d’erreurs.</p>
+    <div class="testi-grid">
+      <div class="testi">
+        <p>“On a remplacé trois outils. Le matin, on voit tout de suite les urgences et qui fait quoi.”</p>
+        <div class="who">Responsable de labo · 9 personnes</div>
+      </div>
+      <div class="testi">
+        <p>“Le portail cabinet a réduit les appels. Les praticiens ont leurs BL, factures et messages au même endroit.”</p>
+        <div class="who">Prothésiste associé</div>
+      </div>
+      <div class="testi">
+        <p>“La partie facturation/paiement est un vrai soulagement. On encaisse plus vite et on relance moins.”</p>
+        <div class="who">Assistante administrative</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="pricing" style="background:#fff;">
+  <div class="container">
+    <h2 class="section-title">Un tarif simple, rentable dès le 1er mois</h2>
+    <p class="section-sub">Un seul abonnement pour tout le labo, sans surprise.</p>
+
+    <div class="pricing">
+      <div class="plan">
+        <div class="plan-name">Mensuel</div>
+        <div class="plan-price">49&nbsp;€<small> / mois</small></div>
+        <div class="plan-note">Facturation mensuelle · sans engagement</div>
+        <ul>
+          <li>Utilisateurs illimités</li>
+          <li>Cabinets illimités</li>
+          <li>Facturation Stripe intégrée</li>
+          <li>Portail cabinet inclus</li>
+          <li>Mobile + desktop</li>
+          <li>Support par email</li>
+        </ul>
+        <a href="app.html?signup=1" class="btn btn-primary" style="width:100%;">Essai gratuit 14 jours</a>
+      </div>
+
+      <div class="plan featured">
+        <div class="plan-badge">−20%</div>
+        <div class="plan-name">Annuel</div>
+        <div class="plan-price">470,40&nbsp;€<small> / an</small></div>
+        <div class="plan-note">Soit <strong>39,20 €/mois</strong> — 2 mois offerts</div>
+        <ul>
+          <li>Tout du plan mensuel</li>
+          <li>Économie de 117,60 €</li>
+          <li>Support prioritaire</li>
+          <li>Accès anticipé aux nouveautés</li>
+          <li>Facturation annuelle</li>
+        </ul>
+        <a href="app.html?signup=1" class="btn btn-primary" style="width:100%;">Essai gratuit 14 jours</a>
+      </div>
+    </div>
+
+    <p style="text-align:center;font-size:.82rem;color:var(--ink-soft);margin-top:28px;">
+      TVA non applicable (art. 261-4-1° ter du CGI) · Paiement sécurisé par Stripe
+    </p>
+  </div>
+</section>
+
+<section class="section" id="faq">
+  <div class="container">
+    <h2 class="section-title">Questions fréquentes</h2>
+    <div class="faq">
+      <details><summary>Puis-je essayer avant de m'engager ?</summary><p>Oui, 14 jours d'essai gratuit, sans carte bancaire. Vous accédez à 100% des fonctionnalités. Si ça ne vous convient pas, vous ne payez rien.</p></details>
+      <details><summary>Est-ce que je peux résilier à tout moment ?</summary><p>Oui. Le plan mensuel est sans engagement — vous résiliez depuis votre espace client Stripe et gardez l'accès jusqu'à la fin du mois payé. Le plan annuel est résiliable en fin de période (pas de remboursement partiel).</p></details>
+      <details><summary>Mes données sont-elles sauvegardées ?</summary><p>Oui, toutes vos données sont stockées sur Supabase (hébergement européen, conforme RGPD) avec sauvegardes automatiques. Vous pouvez exporter à tout moment.</p></details>
+      <details><summary>Est-ce compatible avec mon logiciel de compta ?</summary><p>Vous pouvez exporter vos factures en PDF. L'export comptable au format FEC est en préparation. L'intégration avec les plateformes de dématérialisation (PDP) pour la facturation électronique 2026/2027 est également prévue.</p></details>
+      <details><summary>Combien d'utilisateurs peuvent se connecter ?</summary><p>Illimité. Le prix est par laboratoire, pas par utilisateur. Tous vos techniciens et l'administration peuvent utiliser Labosync.</p></details>
+      <details><summary>Y a-t-il une version mobile ?</summary><p>Oui, une version mobile optimisée pour iPhone et Android, synchronisée avec le desktop. Créez des travaux, générez des BL, facturez — depuis votre téléphone.</p></details>
+      <details><summary>Les cabinets dentaires doivent-ils payer pour accéder à leur portail ?</summary><p>Non. Le portail cabinet est inclus gratuitement dans votre abonnement. Vos dentistes y accèdent avec un code + mot de passe que vous leur partagez.</p></details>
+      <details><summary>Puis-je changer de formule en cours de route ?</summary><p>Oui, vous pouvez passer du mensuel à l'annuel (ou inversement) à tout moment depuis votre espace client Stripe. Le calcul est fait au prorata.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="cta-section">
+      <h2>Essayez Labosync avec votre vrai flux métier</h2>
+      <p>14 jours gratuits, sans CB. En 2 minutes vous avez un compte, un cabinet, un cas et une facture test.</p>
+      <a href="app.html?signup=1" class="btn btn-primary">🚀 Lancer mon essai gratuit</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="inner">
+    <div>
+      <div class="brand" style="color:#fff;margin-bottom:10px;">Labo<span>sync</span></div>
+      <div style="font-size:.82rem;color:#94a3b8;max-width:280px;">Le logiciel de gestion tout-en-un pour les laboratoires de prothèse dentaire.</div>
+    </div>
+    <div>
+      <h4>Produit</h4>
+      <a href="#features">Fonctionnalités</a>
+      <a href="#pricing">Tarifs</a>
+      <a href="app.html">Se connecter</a>
+    </div>
+    <div>
+      <h4>Légal</h4>
+      <a href="cgv.html">CGV</a>
+      <a href="cgu.html">CGU</a>
+      <a href="mentions-legales.html">Mentions légales</a>
+      <a href="confidentialite.html">Politique de confidentialité</a>
+      <a href="dpa.html">DPA — Sous-traitance RGPD</a>
+    </div>
+    <div>
+      <h4>Contact</h4>
+      <a href="mailto:contact@labosync.app">contact@labosync.app</a>
+    </div>
+  </div>
+  <div class="copyright">© 2026 Labosync · Tous droits réservés</div>
+</footer>
+
+</body>
+</html>

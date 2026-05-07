@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Politique de confidentialité — Labosync</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Inter',system-ui,sans-serif;color:#0f172a;background:#f8fafc;line-height:1.7;}
+  header{background:#fff;border-bottom:1px solid #e2e8f0;padding:16px 24px;}
+  header .inner{max-width:820px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;}
+  .brand{font-weight:800;font-size:1.2rem;text-decoration:none;color:#0f172a;}.brand span{color:#2563eb;}
+  .back{font-size:.88rem;color:#64748b;text-decoration:none;}
+  main{max-width:820px;margin:0 auto;padding:40px 24px 80px;}
+  h1{font-size:2rem;font-weight:800;margin-bottom:8px;letter-spacing:-.02em;}
+  .updated{color:#64748b;font-size:.84rem;margin-bottom:32px;}
+  h2{font-size:1.2rem;font-weight:700;margin:28px 0 10px;color:#1e293b;}
+  p,li{font-size:.95rem;color:#334155;margin-bottom:10px;}
+  ul{padding-left:22px;margin-bottom:14px;}
+  a{color:#2563eb;}
+  table{width:100%;border-collapse:collapse;margin:12px 0;}
+  th,td{border:1px solid #e2e8f0;padding:10px;text-align:left;font-size:.9rem;vertical-align:top;}
+  th{background:#f1f5f9;font-weight:600;}
+</style>
+</head>
+<body>
+<header><div class="inner"><a href="index.html" class="brand">Labo<span>sync</span></a><a href="index.html" class="back">← Retour au site</a></div></header>
+<main>
+<h1>Politique de confidentialité</h1>
+<div class="updated">Dernière mise à jour : 24 avril 2026</div>
+
+<p>Cette politique décrit comment Labosync collecte, utilise et protège vos données personnelles, conformément au Règlement Général sur la Protection des Données (RGPD — Règlement UE 2016/679).</p>
+
+<h2>1. Responsable du traitement</h2>
+<p>Le responsable du traitement est la société éditrice de Labosync, identifiée dans les <a href="mentions-legales.html">mentions légales</a>. Pour toute demande relative à vos données, contactez : <a href="mailto:contact@labosync.app">contact@labosync.app</a>.</p>
+
+<h2>2. Données collectées et finalités</h2>
+<table>
+  <tr><th>Donnée</th><th>Finalité</th><th>Base légale</th><th>Durée de conservation</th></tr>
+  <tr><td>Email, mot de passe, nom du laboratoire</td><td>Création et authentification du compte</td><td>Exécution du contrat</td><td>Durée du compte + 3 ans</td></tr>
+  <tr><td>Données métier du laboratoire (cabinets, travaux, factures, codes patients <strong>anonymes</strong>)</td><td>Fonctionnement du Service</td><td>Exécution du contrat</td><td>Durée du compte + 60 jours après résiliation</td></tr>
+  <tr><td>Adresse IP, logs de connexion</td><td>Sécurité, prévention de la fraude</td><td>Intérêt légitime</td><td>12 mois</td></tr>
+  <tr><td>Informations de paiement</td><td>Facturation de l'abonnement</td><td>Exécution du contrat</td><td>Gérées par Stripe, non stockées par Labosync</td></tr>
+</table>
+<p><strong>Aucune donnée nominative de patient (nom, prénom, date de naissance, adresse) n'est collectée, stockée ni transmise par Labosync.</strong> Les patients sont identifiés exclusivement par un code anonyme (pseudonyme) défini par le laboratoire ou le cabinet dentaire.</p>
+
+<h2>3. Destinataires des données</h2>
+<p>Vos données ne sont transmises qu'aux sous-traitants strictement nécessaires au fonctionnement du Service :</p>
+<ul>
+  <li><strong>Supabase (base de données)</strong> — hébergé en Union européenne (Francfort)</li>
+  <li><strong>Netlify (hébergement web)</strong> — données en transit uniquement</li>
+  <li><strong>Stripe (paiements)</strong> — informations de paiement uniquement</li>
+  <li><strong>Anthropic (assistant IA, optionnel)</strong> — uniquement si vous utilisez l'assistant intégré</li>
+</ul>
+<p>Aucune donnée n'est vendue ou partagée avec des tiers à des fins commerciales.</p>
+
+<h2>4. Transferts hors UE</h2>
+<p>Certains sous-traitants (Netlify, Stripe, Anthropic) peuvent traiter des données aux États-Unis. Ces transferts sont encadrés par des clauses contractuelles types approuvées par la Commission européenne.</p>
+
+<h2>5. Vos droits</h2>
+<p>Conformément au RGPD, vous disposez des droits suivants :</p>
+<ul>
+  <li><strong>Accès</strong> — consulter vos données</li>
+  <li><strong>Rectification</strong> — corriger vos données</li>
+  <li><strong>Effacement</strong> — supprimer votre compte et vos données</li>
+  <li><strong>Portabilité</strong> — exporter vos données dans un format structuré</li>
+  <li><strong>Limitation</strong> — restreindre le traitement</li>
+  <li><strong>Opposition</strong> — vous opposer au traitement</li>
+</ul>
+<p>Pour exercer ces droits, écrivez à <a href="mailto:contact@labosync.app">contact@labosync.app</a>. Réponse sous 30 jours maximum.</p>
+
+<h2>6. Sécurité</h2>
+<p>Nous mettons en œuvre des mesures techniques et organisationnelles pour protéger vos données : chiffrement HTTPS/TLS, authentification forte, sauvegardes automatiques, cloisonnement des données par utilisateur (Row Level Security sur Supabase).</p>
+
+<h2>7. Cookies</h2>
+<p>Labosync utilise uniquement des cookies strictement nécessaires à l'authentification (session Supabase) et au bon fonctionnement du Service. Aucun cookie publicitaire, analytique tiers ou de traçage n'est déposé sans votre consentement.</p>
+
+<h2>8. Pseudonymisation et exclusion des données de santé nominatives</h2>
+<p><strong>Privacy by design.</strong> Labosync est conçu pour ne <em>jamais</em> traiter de données de santé à caractère personnel au sens des articles 4-15 et 9 du RGPD :</p>
+<ul>
+  <li>Aucun champ d'identification nominative du patient (nom, prénom, date de naissance, adresse, n° de sécurité sociale) n'est présent dans l'interface ni transmis à nos serveurs.</li>
+  <li>Les patients sont systématiquement référencés par un <strong>code anonyme</strong> (pseudonyme) que seul le cabinet dentaire ou le laboratoire peut associer à un patient identifiable, via ses propres systèmes internes (logiciel cabinet, dossier papier, etc.).</li>
+  <li>Un <strong>générateur de code anonyme</strong> est intégré dans l'application pour aider le laboratoire à pseudonymiser une fiche papier sans qu'aucun nom ne soit enregistré ou transmis.</li>
+</ul>
+<p>En conséquence, Labosync n'a <strong>pas l'obligation de souscrire à un hébergement HDS</strong> (Hébergement de Données de Santé) au titre de l'article L.1111-8 du Code de la Santé Publique, puisque les données traitées ne permettent pas d'identifier directement ou indirectement un patient sans recourir à des informations détenues exclusivement par le client (laboratoire/cabinet).</p>
+<p>Le rôle des parties est précisé dans le <a href="dpa.html"><strong>Data Processing Agreement (DPA)</strong></a> :</p>
+<ul>
+  <li>Le <strong>laboratoire</strong> et le <strong>cabinet dentaire</strong> sont <strong>responsables du traitement</strong> des données qu'ils saisissent et de la table de correspondance code/patient qui reste sous leur seul contrôle.</li>
+  <li>Labosync agit en <strong>sous-traitant</strong> au sens de l'article 28 du RGPD, exclusivement sur les données pseudonymisées.</li>
+</ul>
+<p><strong>Engagement contractuel</strong> : si un utilisateur saisit involontairement un nom à la place d'un code, l'application l'avertit et propose de générer un code anonyme. Le laboratoire reste néanmoins responsable de la qualité des données qu'il saisit.</p>
+
+<h2>9. Réclamation</h2>
+<p>Si vous estimez que le traitement de vos données ne respecte pas le RGPD, vous pouvez adresser une réclamation à la CNIL : <a href="https://www.cnil.fr/fr/plaintes" target="_blank">www.cnil.fr/fr/plaintes</a>.</p>
+
+<h2>10. Modifications</h2>
+<p>Cette politique peut être modifiée. Les utilisateurs seront informés par email en cas de modification substantielle.</p>
+</main>
+</body>
+</html>

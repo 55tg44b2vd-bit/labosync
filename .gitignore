@@ -1,0 +1,23 @@
+# Secrets locaux (jamais dans le dépôt)
+.env
+.env.*
+!.env.example
+netlify/.env
+netlify/.env.*
+
+# Dépendances & build
+node_modules/
+.netlify/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Fichiers temporaires / backup local
+*.bak
+*~

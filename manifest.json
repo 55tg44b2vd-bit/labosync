@@ -1,0 +1,18 @@
+{
+  "name": "Labosync",
+  "short_name": "Labosync",
+  "start_url": "/app.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "description": "Gestion de laboratoire dentaire, portail cabinet, facturation et suivi.",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

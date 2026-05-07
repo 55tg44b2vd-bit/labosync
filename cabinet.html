@@ -1,0 +1,2135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="theme-color" content="#ffffff"/>
+<link rel="manifest" href="/manifest.json"/>
+<link rel="icon" href="/icon.svg" type="image/svg+xml"/>
+<link rel="apple-touch-icon" href="/icon.svg"/>
+<title>Espace Cabinet — Labosync</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html{font-size:17px;} /* +6% pour lisibilité utilisateurs 60+ */
+:root{
+  --bg:#f1f5f9;--surface:#ffffff;--ink:#0f172a;--ink-soft:#475569;
+  --accent:#2563eb;--accent-hover:#1d4ed8;--accent-soft:#eff6ff;
+  --blue:#2563eb;--blue-soft:#dbeafe;--green:#059669;--green-soft:#d1fae5;
+  --border:#e2e8f0;--radius:10px;--radius-lg:14px;
+  --shadow:0 1px 8px rgba(15,23,42,.08),0 2px 4px rgba(15,23,42,.04);
+  --shadow-lg:0 4px 24px rgba(15,23,42,.12),0 2px 8px rgba(15,23,42,.06);
+}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;padding-bottom:env(safe-area-inset-bottom);font-size:15px;line-height:1.55;}
+input,select,textarea{font-size:15px;}
+/* ── HELP TIPS : petit "?" cliquable ── */
+.help-tip{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#e2e8f0;color:#475569;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px;user-select:none;vertical-align:middle;transition:all .15s;border:none;font-family:inherit;}
+.help-tip:hover{background:var(--accent);color:#fff;}
+
+/* ===== LOGIN ===== */
+#login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.login-card{background:var(--surface);border-radius:20px;padding:40px 36px;width:100%;max-width:420px;box-shadow:var(--shadow-lg);border:1px solid var(--border);}
+.login-brand{display:flex;align-items:center;gap:10px;margin-bottom:28px;}
+.login-brand-logo{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--accent-hover));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.login-brand-name{font-family:'Inter',sans-serif;font-size:1.4rem;font-weight:800;color:var(--ink);}
+.login-brand-sub{font-size:.72rem;color:var(--ink-soft);margin-top:1px;}
+.login-title{font-size:1.05rem;font-weight:700;margin-bottom:4px;}
+.login-sub{font-size:.8rem;color:var(--ink-soft);margin-bottom:24px;}
+.fl{display:flex;flex-direction:column;gap:5px;margin-bottom:14px;}
+.fl label{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft);}
+.fl input{border:1.5px solid var(--border);border-radius:8px;padding:10px 13px;font-family:monospace;font-size:.88rem;color:var(--ink);background:var(--bg);outline:none;transition:border-color .15s,box-shadow .15s;}
+.fl input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.1);}
+.btn{border:none;border-radius:8px;padding:11px 18px;font-family:'Inter',sans-serif;font-size:.84rem;font-weight:600;cursor:pointer;transition:all .15s;}
+.btn-a{background:var(--accent);color:#fff;box-shadow:0 1px 4px rgba(37,99,235,.3);}
+.btn-a:hover{background:var(--accent-hover);transform:translateY(-1px);}
+.btn-g{background:var(--bg);color:var(--ink-soft);border:1.5px solid var(--border);}
+.btn-g:hover{background:var(--border);}
+#login-err{font-size:.78rem;color:#c0392b;margin-top:12px;min-height:18px;text-align:center;}
+.login-footer{margin-top:28px;font-size:.72rem;color:var(--ink-soft);text-align:center;}
+
+/* ===== PORTAL ===== */
+#portal{display:none;min-height:100vh;flex-direction:column;}
+header{background:var(--surface);border-bottom:1px solid var(--border);box-shadow:var(--shadow);padding:0 24px;position:sticky;top:0;z-index:100;padding-top:env(safe-area-inset-top);}
+.header-inner{max-width:1100px;margin:0 auto;height:58px;display:flex;align-items:center;gap:16px;}
+.brand{font-family:'Inter',sans-serif;font-size:1.1rem;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px;}
+.brand-pill{background:var(--accent-soft);border-radius:6px;padding:2px 8px;font-family:'Inter',sans-serif;font-size:.68rem;font-weight:600;color:var(--accent);letter-spacing:.06em;text-transform:uppercase;}
+.cab-name-header{flex:1;text-align:right;font-size:.82rem;color:var(--ink-soft);font-weight:500;}
+.cab-name-header strong{color:var(--ink);font-weight:700;}
+.btn-logout{background:var(--bg);border:1px solid var(--border);color:var(--ink-soft);border-radius:7px;padding:6px 12px;font-family:'Inter',sans-serif;font-size:.74rem;cursor:pointer;transition:background .15s;}
+.btn-logout:hover{background:var(--border);}
+
+.portal-body{flex:1;max-width:1100px;margin:0 auto;width:100%;padding:28px 24px 60px;}
+
+/* Stats */
+.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:28px;}
+.stat-card{background:var(--surface);border-radius:var(--radius);padding:16px 18px;border:1px solid var(--border);box-shadow:var(--shadow);}
+.stat-val{font-family:'Inter',sans-serif;font-size:1.6rem;font-weight:800;color:var(--ink);line-height:1;}
+.stat-val.accent{color:var(--accent);}
+.stat-val.blue{color:var(--blue);}
+.stat-val.green{color:var(--green);}
+.stat-lbl{font-size:.71rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft);margin-top:5px;}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;background:rgba(28,23,20,.06);border-radius:12px;padding:4px;width:fit-content;margin-bottom:24px;}
+.tab{border:none;background:none;border-radius:8px;padding:8px 20px;font-family:'Inter',sans-serif;font-size:.82rem;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all .15s;}
+.tab.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}
+.mention-item:hover,.mention-item.active{background:var(--accent-soft);}
+
+/* Cards */
+.card{background:var(--surface);border-radius:var(--radius-lg);padding:22px;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:16px;}
+.card h2{font-family:'Inter',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:14px;color:var(--ink);}
+.stitle{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-bottom:10px;}
+
+/* BL Items */
+.bl-item{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);margin-bottom:8px;transition:box-shadow .15s;}
+.bl-item:hover{box-shadow:var(--shadow);}
+.bl-avatar{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:.72rem;font-weight:600;color:#fff;flex-shrink:0;}
+.bl-info{flex:1;min-width:0;}
+.bl-num{font-family:monospace;font-size:.75rem;font-weight:600;color:var(--blue);margin-bottom:2px;}
+.bl-patient{font-size:.9rem;font-weight:700;color:var(--ink);}
+.bl-detail{font-size:.75rem;color:var(--ink-soft);margin-top:2px;}
+.bl-amount{font-family:'Inter',sans-serif;font-size:1.1rem;font-weight:800;color:var(--accent);flex-shrink:0;}
+.bl-date{font-size:.72rem;color:var(--ink-soft);flex-shrink:0;text-align:right;}
+.badge{display:inline-block;font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:99px;letter-spacing:.04em;}
+.badge-blue{background:var(--blue-soft);color:var(--blue);}
+.badge-green{background:var(--green-soft);color:var(--green);}
+.badge-orange{background:#fff3e8;color:#a04000;}
+.badge-red{background:#fdecea;color:#c0392b;}
+
+/* Factures */
+.fac-item{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);margin-bottom:8px;transition:box-shadow .15s;}
+.fac-item:hover{box-shadow:var(--shadow);}
+.fac-info{flex:1;}
+.fac-num{font-family:monospace;font-size:.75rem;font-weight:600;color:var(--ink);}
+.fac-date{font-size:.75rem;color:var(--ink-soft);margin-top:2px;}
+.fac-amount{font-family:'Inter',sans-serif;font-size:1.15rem;font-weight:800;flex-shrink:0;}
+.fac-amount.due{color:var(--accent);}
+.fac-amount.paid{color:var(--green);}
+
+/* Empty state */
+.empty-state{text-align:center;padding:40px 20px;color:var(--ink-soft);font-size:.82rem;}
+.empty-icon{font-size:2.2rem;margin-bottom:10px;opacity:.5;}
+
+/* Print button */
+.btn-print{background:var(--blue-soft);color:var(--blue);border:none;border-radius:6px;padding:5px 10px;font-size:.69rem;font-weight:600;cursor:pointer;transition:background .15s;white-space:nowrap;}
+.btn-print:hover{background:#c0d4e8;}
+
+/* Responsive */
+@media(max-width:640px){
+  .portal-body{padding:12px 10px 60px;}
+  .stats-bar{grid-template-columns:1fr 1fr;gap:8px;}
+  .stat-card{padding:12px 14px;}
+  .stat-val{font-size:1.3rem;}
+  .stat-lbl{font-size:.64rem;}
+  .header-inner{gap:8px;padding:0 12px;}
+  .brand{font-size:.95rem;}
+  .brand-pill{font-size:.6rem;padding:2px 6px;}
+  .cab-name-header{display:none;}
+  .btn-logout{padding:6px 10px;font-size:.7rem;}
+  /* Tabs: horizontal scroll */
+  .tabs{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;padding:3px;gap:2px;}
+  .tab{padding:8px 14px;font-size:.78rem;white-space:nowrap;flex-shrink:0;min-height:44px;display:flex;align-items:center;}
+  /* BL items: stack layout */
+  .bl-item{flex-direction:column;align-items:flex-start;gap:8px;padding:12px 14px;}
+  .bl-avatar{width:32px;height:32px;font-size:.65rem;position:absolute;top:12px;right:12px;}
+  .bl-item{position:relative;}
+  .bl-info{width:100%;}
+  .bl-patient{font-size:.88rem;}
+  .bl-detail{font-size:.73rem;}
+  .bl-date{font-size:.7rem;}
+  .btn-print{min-height:44px;padding:8px 14px;font-size:.74rem;}
+  /* Facture items */
+  .fac-item{flex-direction:column;align-items:flex-start;gap:8px;padding:12px 14px;}
+  .fac-info{width:100%;}
+  /* Login card */
+  .login-card{padding:28px 20px;border-radius:14px;}
+  .login-brand-name{font-size:1.2rem;}
+  /* Chat: full screen on mobile */
+  #chat-portal-wrap{height:calc(100vh - 200px) !important;min-height:400px;border-radius:10px !important;}
+  #chat-portal-input{font-size:16px !important;}
+  /* Touch-friendly tap targets */
+  .btn,.btn-a,.btn-g,.btn-print,.btn-logout,.tab,button{min-height:44px;}
+  /* Filter inputs */
+  #bl-search,#bl-filter-status{font-size:16px !important;padding:10px 12px;}
+  /* Prevent zoom on input focus (iOS) */
+  input,select,textarea{font-size:16px !important;}
+}
+@media(max-width:380px){
+  .stats-bar{grid-template-columns:1fr;gap:6px;}
+  .stat-card{padding:10px 12px;display:flex;align-items:center;justify-content:space-between;}
+  .stat-val{font-size:1.2rem;}
+  .portal-body{padding:10px 8px 50px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== ÉCRAN DE CONNEXION ===== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-brand-logo">🔬</div>
+      <div>
+        <div class="login-brand-name">Labosync</div>
+        <div class="login-brand-sub">Espace Cabinet Dentaire</div>
+      </div>
+    </div>
+    <div class="login-title">Connexion</div>
+    <div class="login-sub">Entrez vos identifiants transmis par votre laboratoire.</div>
+    <div class="fl"><label>Code d'accès</label><input type="text" id="inp-code" placeholder="Ex : AB12CD" autocomplete="username" style="text-transform:uppercase;letter-spacing:.1em;"/></div>
+    <div class="fl">
+      <label>Mot de passe</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="password" id="inp-pwd" placeholder="••••••••" autocomplete="current-password" style="flex:1;"/>
+        <button type="button" id="btn-pwd-toggle" class="btn btn-g" style="padding:8px 10px;min-height:42px;">Afficher</button>
+      </div>
+    </div>
+    <button class="btn btn-a" id="btn-login" style="width:100%;margin-top:6px;">Se connecter →</button>
+    <div id="login-err"></div>
+    <div class="login-footer">Votre laboratoire vous a transmis ces identifiants.<br/>Pour toute question, contactez directement votre laboratoire.</div>
+  </div>
+</div>
+
+<!-- ===== PORTAIL CABINET ===== -->
+<div id="portal">
+  <header>
+    <div class="header-inner">
+      <div class="brand">🔬 Labosync <span class="brand-pill">Espace Cabinet</span></div>
+      <div class="cab-name-header" id="hdr-cab-name"></div>
+      <button class="btn-logout" id="btn-logout">Déconnexion</button>
+    </div>
+  </header>
+
+  <div class="portal-body">
+    <!-- Labo info bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div id="portal-labo-name" style="font-family:'Inter',sans-serif;font-size:1.3rem;font-weight:800;color:var(--ink);"></div>
+        <div id="portal-labo-info" style="font-size:.76rem;color:var(--ink-soft);margin-top:2px;"></div>
+      </div>
+      <div id="portal-updated" style="font-size:.71rem;color:var(--ink-soft);"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-val" id="stat-bl-total">0</div>
+        <div class="stat-lbl">Bons de livraison</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val accent" id="stat-due">0 €</div>
+        <div class="stat-lbl">À régler</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val green" id="stat-paid">0 €</div>
+        <div class="stat-lbl">Déjà réglé</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val blue" id="stat-fac-total">0</div>
+        <div class="stat-lbl">Factures</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab on" data-ptab="bls">📋 Mes bons de livraison</button>
+      <button class="tab" data-ptab="orders">📝 Mes commandes en cours</button>
+      <button class="tab" data-ptab="neworder" style="background:#dbeafe;color:#1d4ed8;border:1.5px solid #3b82f6;">+ Nouvelle commande</button>
+      <button class="tab" data-ptab="factures">💰 Mes factures</button>
+      <button class="tab" data-ptab="messages" id="tab-messages">💬 Messages<span id="chat-notif" style="display:none;margin-left:5px;background:#e53935;color:#fff;border-radius:99px;padding:1px 7px;font-size:.6rem;font-weight:700;">●</span></button>
+    </div>
+
+    <!-- BLs pane -->
+    <div id="ptab-bls">
+      <!-- Filter / search -->
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <input type="text" id="bl-search" placeholder="Rechercher un patient..." style="flex:1;min-width:180px;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-family:'Inter',sans-serif;font-size:.82rem;background:var(--bg);color:var(--ink);outline:none;"/>
+        <select id="bl-filter-status" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-family:'Inter',sans-serif;font-size:.8rem;background:var(--bg);color:var(--ink);outline:none;">
+          <option value="">Tous les statuts</option>
+          <option value="envoye">Envoyés</option>
+          <option value="facture">Facturés</option>
+        </select>
+      </div>
+      <div id="bl-list"></div>
+    </div>
+
+    <!-- Orders pane (fiches de commande envoyées) -->
+    <div id="ptab-orders" style="display:none;">
+      <div style="position:relative;margin-bottom:14px;">
+        <input type="search" id="orders-search" oninput="renderOrdersList(true)" placeholder="🔍 Rechercher par patient, type de prothèse, description…" autocomplete="off" style="width:100%;padding:11px 14px;font-size:.94rem;border:1.5px solid var(--border);border-radius:10px;outline:none;background:var(--surface);"/>
+      </div>
+      <div id="orders-list"></div>
+    </div>
+
+    <!-- New Order pane -->
+    <div id="ptab-neworder" style="display:none;">
+      <div id="order-form-container"></div>
+    </div>
+
+    <!-- Factures pane -->
+    <div id="ptab-factures" style="display:none;">
+      <div id="fac-list"></div>
+    </div>
+
+    <!-- Messages pane -->
+    <div id="ptab-messages" style="display:none;">
+      <div id="chat-portal-wrap" style="display:flex;flex-direction:column;height:500px;border:1px solid var(--border);border-radius:12px;background:var(--surface);position:relative;">
+        <div id="chat-portal-msgs" style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:8px;border-radius:12px 12px 0 0;">
+          <div style="text-align:center;color:var(--ink-soft);font-size:.78rem;padding:30px 0;">Chargement des messages…</div>
+        </div>
+        <div id="portal-photo-preview" style="display:none;padding:8px 14px 0;border-top:1px solid var(--border);">
+          <div style="position:relative;display:inline-block;">
+            <img id="portal-photo-img" style="max-height:100px;max-width:200px;border-radius:8px;border:1px solid var(--border);display:none;"/>
+            <div id="portal-file-card" style="display:none;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;max-width:280px;">
+              <span id="portal-file-icon" style="font-size:1.6rem;">📎</span>
+              <span id="portal-file-name" style="font-size:.84rem;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;"></span>
+              <span id="portal-file-size" style="font-size:.74rem;color:var(--ink-soft);"></span>
+            </div>
+            <button onclick="portalClearPhoto()" style="position:absolute;top:-6px;right:-6px;background:#e53935;color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+          </div>
+        </div>
+        <div style="position:relative;padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end;background:var(--bg);">
+          <div id="portal-mention-dd" style="display:none;position:absolute;bottom:calc(100% + 4px);left:14px;right:14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.15);max-height:180px;overflow-y:auto;z-index:10;"></div>
+          <input type="file" id="portal-file-input" accept="image/*,.stl,.obj,.ply,application/pdf" style="display:none;" onchange="portalFileSelected(this)"/>
+          <button onclick="document.getElementById('portal-file-input').click()" title="Joindre une photo, un fichier STL ou un PDF" style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 11px;font-size:1rem;cursor:pointer;flex-shrink:0;color:var(--ink-soft);">📎</button>
+          <textarea id="chat-portal-input" placeholder="Votre message… (tapez @ pour mentionner un patient)" rows="2" style="flex:1;resize:none;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.82rem;outline:none;background:var(--surface);color:var(--ink);" onkeydown="chatPortalKeyDown(event)" oninput="chatMentionInput(this,'portal-mention-dd','cabinet')"></textarea>
+          <button onclick="sendPortalMsg()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:.85rem;cursor:pointer;flex-shrink:0;font-weight:600;min-height:44px;">Envoyer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL='https://ljnfpslgwgagdisixuxz.supabase.co';
+const SB_ANON='sb_publishable_vUJCiePex3KYK5CS3SezGw_60mzxHa8';
+const _clientTraceId='tr_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
+
+let portalData = null;
+let sessionPortalId = null;
+
+function reportClientError(payload){
+  const body=JSON.stringify(Object.assign({
+    app:'cabinet',
+    page:window.location.pathname,
+    traceId:_clientTraceId,
+    userId:sessionPortalId||'',
+  },payload||{}));
+  try{
+    if(navigator.sendBeacon){
+      const blob=new Blob([body],{type:'application/json'});
+      navigator.sendBeacon('/.netlify/functions/log-client-error',blob);
+      return;
+    }
+  }catch(e){}
+  fetch('/.netlify/functions/log-client-error',{method:'POST',headers:{'Content-Type':'application/json'},body:body}).catch(function(){});
+}
+window.addEventListener('error',function(ev){
+  reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:ev&&ev.error&&ev.error.stack?ev.error.stack:''});
+});
+window.addEventListener('unhandledrejection',function(ev){
+  const r=ev&&ev.reason;
+  reportClientError({level:'error',message:r&&r.message?r.message:String(r||'unhandledrejection'),stack:r&&r.stack?r.stack:''});
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+(function init(){
+  // Check session storage for saved session
+  const saved = sessionStorage.getItem('ls_portal_session');
+  if(saved){
+    try{
+      const s = JSON.parse(saved);
+      if(s.portalId && s.portalData && s.expiry > Date.now()){
+        portalData = s.portalData;
+        portalData._updatedAt = s.updatedAt || null;
+        sessionPortalId = s.portalId;
+        showPortal();
+        return;
+      }
+    }catch(e){}
+    sessionStorage.removeItem('ls_portal_session');
+  }
+
+  // Get portalId from URL
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+
+  // Enter button
+  document.getElementById('btn-login').addEventListener('click', doLogin);
+  document.getElementById('inp-pwd').addEventListener('keydown', function(e){
+    if(e.key==='Enter') doLogin();
+  });
+  document.getElementById('inp-code').addEventListener('keydown', function(e){
+    if(e.key==='Enter'){e.preventDefault();document.getElementById('inp-pwd').focus();}
+  });
+  document.getElementById('btn-pwd-toggle').addEventListener('click', function(){
+    const p=document.getElementById('inp-pwd');
+    const isPwd=p.type==='password';
+    p.type=isPwd?'text':'password';
+    this.textContent=isPwd?'Masquer':'Afficher';
+  });
+  document.getElementById('inp-code').addEventListener('input', function(){
+    this.value = this.value.toUpperCase();
+    try{localStorage.setItem('lb_last_cab_code',this.value);}catch(e){}
+  });
+  (function initCabLoginUX(){
+    try{
+      const codeInput=document.getElementById('inp-code');
+      const pwdInput=document.getElementById('inp-pwd');
+      const lastCode=localStorage.getItem('lb_last_cab_code')||'';
+      if(lastCode&&!codeInput.value){
+        codeInput.value=lastCode;
+        pwdInput.focus();
+      }else{
+        codeInput.focus();
+      }
+    }catch(e){}
+  })();
+
+  // If we have portalId in URL, pre-fill hint
+  if(id){
+    document.querySelector('.login-sub').textContent = 'Entrez le code et le mot de passe transmis par votre laboratoire.';
+  }
+
+  async function doLogin(){
+    const code = document.getElementById('inp-code').value.trim().toUpperCase();
+    const pwd  = document.getElementById('inp-pwd').value.trim();
+    const err  = document.getElementById('login-err');
+    if(!code || !pwd){ err.textContent = 'Veuillez remplir tous les champs.'; return; }
+    err.textContent = '';
+
+    const btn = document.getElementById('btn-login');
+    btn.textContent = 'Connexion…'; btn.disabled = true;
+
+    let portalId = id;
+
+    // If no portalId in URL, we need to search by code
+    // For simplicity: try to load by code scan (limited query)
+    // Better approach: always share URL with id. But support login without URL too.
+    if(!portalId){
+      err.textContent = 'Lien incomplet — utilisez le lien complet fourni par votre laboratoire.';
+      btn.textContent = 'Se connecter →'; btn.disabled = false;
+      return;
+    }
+
+    try{
+      await Promise.race([
+        loadPortal(portalId, code, pwd, false),
+        new Promise(function(_,reject){setTimeout(function(){reject(new Error('Connexion trop longue'));},12000);})
+      ]);
+    }catch(e){
+      err.textContent = e && e.message ? e.message : 'Erreur de connexion.';
+    }finally{
+      btn.textContent = 'Se connecter →'; btn.disabled = false;
+    }
+  }
+})();
+
+async function loadPortal(portalId, code, pwd, fromSession){
+  const err = document.getElementById('login-err');
+  try{
+    if(fromSession){
+      throw new Error('Session invalide.');
+    }
+    const r = await fetch('/.netlify/functions/portal-login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({portalId:portalId, code:code, pwd:pwd}),
+    });
+    const payload = await r.json().catch(function(){return {};});
+    if(!r.ok){
+      throw new Error(payload.error || ('Erreur serveur ('+r.status+')'));
+    }
+    portalData = payload.portalData || null;
+    if(!portalData){
+      throw new Error('Portail indisponible.');
+    }
+    portalData._updatedAt = payload.updatedAt || null;
+    sessionPortalId = portalId;
+    // Save session (4h expiry) avec snapshot sanitizé
+    sessionStorage.setItem('ls_portal_session', JSON.stringify({
+      portalId: portalId,
+      portalData: portalData,
+      updatedAt: payload.updatedAt || null,
+      expiry: Date.now() + 4*3600*1000
+    }));
+    showPortal();
+  }catch(e){
+    if(err) err.textContent = e&&e.message ? e.message : 'Connexion impossible pour le moment.';
+    console.error(e);
+  }
+}
+
+function showPortal(){
+  document.getElementById('login-screen').style.display='none';
+  const p = document.getElementById('portal');
+  p.style.display='flex';
+
+  // Header
+  document.getElementById('hdr-cab-name').innerHTML = 'Cabinet : <strong>'+esc(portalData.cabName)+'</strong>';
+
+  // Labo info
+  const labo = portalData.laboLegal || {};
+  document.getElementById('portal-labo-name').textContent = esc(portalData.laboName||labo.raisonSociale||'');
+  const infoParts = [];
+  if(labo.adresse) infoParts.push(labo.adresse);
+  if(labo.tel) infoParts.push('Tél : '+labo.tel);
+  if(labo.email) infoParts.push(labo.email);
+  document.getElementById('portal-labo-info').textContent = infoParts.join(' · ');
+
+  if(portalData._updatedAt){
+    const d = new Date(portalData._updatedAt);
+    document.getElementById('portal-updated').textContent = 'Mis à jour le '+d.toLocaleDateString('fr-FR')+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  }
+
+  renderStats();
+  renderBLs();
+  renderFactures();
+  setupTabs();
+  setupFilters();
+  restoreLastPortalTab();
+
+  // Check for unread chat messages
+  setTimeout(checkPortalChatNotif, 1000);
+  showPortalWelcomeHint();
+
+  // Auto-refresh des données toutes les 30s (factures, BDL)
+  startPortalDataPoll();
+
+  document.getElementById('btn-logout').addEventListener('click', function(){
+    sessionStorage.removeItem('ls_portal_session');
+    location.reload();
+  });
+}
+
+function openPortalTab(id){
+  const btn=document.querySelector('[data-ptab="'+id+'"]');
+  if(btn)btn.click();
+}
+
+function restoreLastPortalTab(){
+  try{
+    if(!sessionPortalId)return;
+    const last=localStorage.getItem('cab_last_tab_'+sessionPortalId)||'';
+    if(last&&document.querySelector('[data-ptab="'+last+'"]')){
+      openPortalTab(last);
+    }
+  }catch(e){}
+}
+
+function showPortalWelcomeHint(){
+  try{
+    if(!sessionPortalId)return;
+    const key='cab_onboard_seen_'+sessionPortalId;
+    if(localStorage.getItem(key)==='1')return;
+    localStorage.setItem(key,'1');
+    showToast('👋 Bienvenue ! Commencez par "Mes commandes", puis "Mes factures".');
+  }catch(e){}
+}
+
+function startPortalDataPoll(){
+  setInterval(async function(){
+    if(!sessionPortalId) return;
+    try{
+      const sbPortal = supabase.createClient(SB_URL, SB_ANON);
+      const { data: rows } = await sbPortal.from('labo_data').select('data,updated_at').eq('id','portal_'+sessionPortalId);
+      if(!rows||!rows.length) return;
+      const newUpdatedAt = rows[0].updated_at;
+      // Ne mettre à jour que si les données ont changé
+      if(newUpdatedAt === portalData._updatedAt) return;
+      portalData = rows[0].data;
+      portalData._updatedAt = newUpdatedAt;
+      // Rafraîchir silencieusement tous les panneaux
+      renderStats();
+      renderBLs();
+      renderFactures();
+      const d = new Date(newUpdatedAt);
+      const el = document.getElementById('portal-updated');
+      if(el) el.textContent = 'Mis à jour le '+d.toLocaleDateString('fr-FR')+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    }catch(e){ /* silencieux */ }
+  }, 30000);
+}
+
+function renderStats(){
+  const bls = portalData.bdl||[];
+  const facs = portalData.factures||[];
+  document.getElementById('stat-bl-total').textContent = bls.length;
+  document.getElementById('stat-fac-total').textContent = facs.length;
+
+  // Les montants ne viennent que des factures (prix internes au labo)
+  const due = facs.filter(f=>f.status!=='paye'&&f.status!=='paid'&&f.status!=='payee'&&f.status!=='payé').reduce((s,f)=>s+(f.total||0),0);
+  const paid = facs.filter(f=>f.status==='paye'||f.status==='paid'||f.status==='payee'||f.status==='payé').reduce((s,f)=>s+(f.total||0),0);
+
+  document.getElementById('stat-due').textContent = facs.length ? fmtEur(due) : '—';
+  document.getElementById('stat-paid').textContent = facs.length ? fmtEur(paid) : '—';
+}
+
+function renderBLs(filter){
+  const container = document.getElementById('bl-list');
+  let bls = (portalData.bdl||[]).slice().sort(function(a,b){return b.createdAt>a.createdAt?1:-1;});
+
+  const search = (document.getElementById('bl-search')?.value||'').toLowerCase();
+  const status = document.getElementById('bl-filter-status')?.value||'';
+  if(search) bls = bls.filter(b=>(b.patient||'').toLowerCase().includes(search)||(b.typeLabel||'').toLowerCase().includes(search)||(b.num||'').toLowerCase().includes(search));
+  if(status) bls = bls.filter(b=>status==='facture'?b.invoiced:!b.invoiced);
+
+  if(!bls.length){
+    container.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div>Aucun bon de livraison trouvé.</div>';
+    return;
+  }
+  container.innerHTML='';
+  bls.forEach(function(bl){
+    const div = document.createElement('div');
+    div.className='bl-item';
+    const ini = (bl.patient||'?')[0].toUpperCase();
+    const dateStr = bl.date ? new Date(bl.date+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}) : '';
+    const badgeHtml = bl.invoiced
+      ? '<span class="badge badge-green">Facturé — '+(bl.invoiceNum||'')+'</span>'
+      : '<span class="badge badge-blue">En attente</span>';
+    div.innerHTML=
+      '<div class="bl-avatar" style="background:var(--accent);">'+ini+'</div>'+
+      '<div class="bl-info">'+
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
+          '<span class="bl-num">'+esc(bl.num)+'</span>'+
+          badgeHtml+
+          '<span title="Certificat de Conformité CE — MDR 2017/745 inclus" style="font-size:.6rem;font-weight:900;color:var(--accent);border:1.5px solid var(--accent);border-radius:3px;padding:0 4px;line-height:1.5;display:inline-block;cursor:default;">CE</span>'+
+        '</div>'+
+        '<div class="bl-patient">'+esc(bl.patient||'—')+'</div>'+
+        '<div class="bl-detail">'+esc(bl.typeLabel||'')+(bl.nb>1?' × '+bl.nb:'')+(bl.materiaux?' · '+esc(bl.materiaux):'')+(bl.lot?' · <span style="font-family:monospace;font-size:.7rem;background:var(--green-soft);color:var(--green);border:1px solid #86efac;padding:1px 6px;border-radius:4px;font-weight:700;">Lot : '+esc(bl.lot)+'</span>':'')+'</div>'+
+        (bl.note?'<div class="bl-detail" style="color:var(--ink-soft);font-style:italic;">'+esc(bl.note)+'</div>':'')+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">'+
+        '<div class="bl-date">'+dateStr+'</div>'+
+        '<button class="btn-print" data-print-bl-id="'+esc(bl.id)+'" title="Ouvre le bon de livraison avec le Certificat de Conformité CE (MDR 2017/745)">📄 BL + Certificat CE</button>'+
+        (bl.orderId?'<button onclick="viewBLOrder(\''+esc(bl.id)+'\')" style="background:#dbeafe;color:#1d4ed8;border:1.5px solid #3b82f6;border-radius:6px;padding:5px 10px;font-size:.7rem;font-weight:600;cursor:pointer;white-space:nowrap;">📝 Voir la fiche</button>':'')+
+        '<button onclick="requestRetouche(\''+esc(bl.id)+'\')" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fb923c;border-radius:6px;padding:5px 10px;font-size:.7rem;font-weight:600;cursor:pointer;white-space:nowrap;">🔄 Retouche / ajout</button>'+
+      '</div>';
+    container.appendChild(div);
+  });
+}
+
+function renderFactures(){
+  const container = document.getElementById('fac-list');
+  const facs = (portalData.factures||[]).slice().sort(function(a,b){return b.date>a.date?1:-1;});
+  if(!facs.length){
+    container.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div>Aucune facture pour l\'instant.<br/>Votre laboratoire vous enverra vos factures ici dès qu\'elles seront émises.</div>';
+    return;
+  }
+  container.innerHTML='';
+  facs.forEach(function(fac){
+    const isAvoir = fac.type==='avoir';
+    const isPaid = fac.status==='paye'||fac.status==='paid'||fac.status==='payé';
+    const div = document.createElement('div');
+    div.className='fac-item';
+    // Encadré jaune pour les avoirs, sinon bordure neutre
+    div.style.cssText='background:'+(isAvoir?'#fffbeb':'var(--surface)')+';border-radius:12px;border:1.5px solid '+(isAvoir?'#f59e0b':'var(--border)')+';padding:14px 16px;margin-bottom:12px;';
+    const dateStr = fac.date ? new Date(fac.date+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}) : '';
+    const docLabel = isAvoir ? '↩️ Avoir' : '🧾 Facture';
+    const totalLabel = isAvoir ? fmtEur(Math.abs(fac.total||0)) : fmtEur(fac.total);
+    const totalColor = isAvoir ? '#b45309' : (isPaid?'var(--green)':'var(--accent)');
+    const linesHtml = (fac.lines||[]).map(function(l){
+      return '<tr style="border-bottom:1px solid var(--border);">'+
+        '<td style="padding:5px 8px;font-size:.78rem;color:var(--ink);">'+esc(l.label||'')+(l.ref?' <span style="color:var(--ink-soft);font-size:.72rem;">(réf. '+esc(l.ref)+')</span>':'')+'</td>'+
+        (l.patient?'<td style="padding:5px 8px;font-size:.75rem;color:var(--ink-soft);font-style:italic;">'+esc(l.patient)+'</td>':'<td></td>')+
+      '</tr>';
+    }).join('');
+    div.innerHTML=
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:10px;flex-wrap:wrap;">'+
+        '<div>'+
+          '<div style="font-size:.7rem;font-weight:700;color:'+(isAvoir?'#b45309':'var(--ink-soft)')+';margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em;">'+docLabel+(isAvoir&&fac.avoirOf?' sur '+esc(fac.avoirOf):'')+'</div>'+
+          '<div style="font-weight:700;font-size:.95rem;color:var(--ink);">'+esc(fac.num||'—')+'</div>'+
+          '<div style="font-size:.75rem;color:var(--ink-soft);margin-top:2px;">'+dateStr+(fac.note?' · '+esc(fac.note):'')+'</div>'+
+        '</div>'+
+        '<div style="text-align:right;">'+
+          '<div style="font-size:1.15rem;font-weight:800;color:'+totalColor+';">'+(isAvoir?'-':'')+totalLabel+'</div>'+
+          (isAvoir
+            ? '<span style="font-size:.65rem;padding:2px 9px;border-radius:99px;font-weight:700;display:inline-block;margin-top:3px;background:#fef3c7;color:#92400e;">↩️ Crédit</span>'
+            : '<span style="font-size:.65rem;padding:2px 9px;border-radius:99px;font-weight:700;display:inline-block;margin-top:3px;background:'+(isPaid?'var(--green-soft)':'#fdecea')+';color:'+(isPaid?'var(--green)':'#dc2626')+'">'+(isPaid?'✅ Réglée':'⏳ À régler')+'</span>'
+          )+
+        '</div>'+
+      '</div>'+
+      (isAvoir?'<div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:8px 12px;border-radius:0 6px 6px 0;font-size:.82rem;color:#92400e;margin-bottom:10px;">Cet avoir vient en déduction de la facture'+(fac.avoirOf?' '+esc(fac.avoirOf):'')+'. Conservez-le pour votre comptabilité.</div>':'')+
+      (linesHtml?'<table style="width:100%;border-collapse:collapse;background:var(--bg);border-radius:7px;overflow:hidden;margin-bottom:10px;">'+
+        '<thead><tr style="background:var(--bg);"><th style="padding:5px 8px;font-size:.65rem;text-align:left;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">Prestation</th><th style="padding:5px 8px;font-size:.65rem;text-align:left;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">Code patient</th></tr></thead>'+
+        '<tbody>'+linesHtml+'</tbody>'+
+      '</table>':'')+
+      (!isAvoir&&!isPaid&&fac.stripeUrl?'<a href="'+esc(fac.stripeUrl)+'" target="_blank" rel="noopener" style="display:block;width:100%;text-align:center;background:#635bff;color:#fff;border-radius:9px;padding:11px;font-family:monospace;font-size:.86rem;font-weight:700;text-decoration:none;box-sizing:border-box;margin-top:8px;">💳 Payer en ligne — '+fmtEur(fac.total)+'</a>'+
+      '<button onclick="copyPaymentLink(\''+esc(fac.id)+'\')" style="margin-top:8px;width:100%;background:#eef2ff;color:#3730a3;border:1.5px solid #c7d2fe;border-radius:8px;padding:9px 10px;font-size:.8rem;font-weight:600;cursor:pointer;">📋 Copier le lien de paiement</button>':'')+
+      '<div style="margin-top:8px;"><button class="btn-print" onclick="printFacturePortal(\''+esc(fac.id)+'\')">📄 '+(isAvoir?'Avoir PDF':'Facture PDF')+'</button></div>';
+    container.appendChild(div);
+  });
+}
+
+function copyPaymentLink(facId){
+  const fac=(portalData&&portalData.factures||[]).find(function(f){return f.id===facId;});
+  if(!fac||!fac.stripeUrl){showToast('Lien de paiement indisponible','#c0392b');return;}
+  navigator.clipboard.writeText(fac.stripeUrl).then(function(){
+    showToast('📋 Lien de paiement copié !','#2563eb');
+  }).catch(function(){
+    showToast('Copie impossible sur cet appareil','#c0392b');
+  });
+}
+
+/* ══════════════════════════════════════════
+   FICHE DE COMMANDE — Cabinet → Laboratoire
+   ══════════════════════════════════════════ */
+const VITA_SHADES=['A1','A2','A3','A3.5','A4','B1','B2','B3','B4','C1','C2','C3','C4','D2','D3','D4'];
+// FDI : maxillaire (haut) 18-11 | 21-28 ; mandibule (bas) 48-41 | 31-38
+const FDI_UPPER_RIGHT=[18,17,16,15,14,13,12,11];
+const FDI_UPPER_LEFT=[21,22,23,24,25,26,27,28];
+const FDI_LOWER_RIGHT=[48,47,46,45,44,43,42,41];
+const FDI_LOWER_LEFT=[31,32,33,34,35,36,37,38];
+
+// Modèle "cas" : un cas = patient + objectif final + suite d'étapes
+let _orderForm={
+  patient:{name:'',sexe:'',age:''},
+  finalGoal:'',        // ex: "Châssis métallique 44-45"
+  teeth:{},            // dents impactées (au final)
+  links:{},            // solidarisations
+  shadeType:'vita',
+  shadeValue:'',
+  // Première étape (la demande actuelle au labo)
+  firstStep:{
+    description:'',    // ex: "PEI", "Châssis + bourrelets", "Montage"
+    deliveryDate:'',
+    notes:''
+  }
+};
+let _orderStep=1; // étape courante du wizard (1-4)
+
+// Migration : convertit une ancienne commande (single-fiche) en "cas" avec 1 étape
+function _migrateOrderToCase(o){
+  if(!o)return o;
+  if(Array.isArray(o.steps))return o;
+  // Ancien format → conversion
+  o.finalGoal=o.prosthesis||o.finalGoal||'(non précisé)';
+  o.steps=[{
+    id:'step_legacy_'+o.id,
+    description:o.prosthesis||'',
+    deliveryDate:o.deliveryDate||'',
+    notes:o.notes||'',
+    status:o.status||'pending',
+    jobId:o.jobId||null,
+    blId:null,
+    requestedAt:o.createdAt||new Date().toISOString(),
+    acceptedAt:o.acceptedAt||null,
+    deliveredAt:null,
+    rejectedAt:o.rejectedAt||null,
+    rejectionReason:o.rejectionReason||null,
+    questionsAsked:o.questionsAsked||false,
+    questionsAskedAt:o.questionsAskedAt||null
+  }];
+  return o;
+}
+
+function _draftKey(){return 'lb_order_draft_'+(sessionPortalId||'_');}
+function _saveDraft(){try{localStorage.setItem(_draftKey(),JSON.stringify(_orderForm));}catch(e){}}
+function _loadDraft(){
+  try{
+    const raw=localStorage.getItem(_draftKey());
+    if(raw){
+      const d=JSON.parse(raw);
+      _orderForm=Object.assign(_orderForm,d);
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function _clearDraft(){try{localStorage.removeItem(_draftKey());}catch(e){}}
+
+function _stepIndicator(){
+  const steps=[
+    {n:1,lbl:'Code patient'},
+    {n:2,lbl:'Travail'},
+    {n:3,lbl:'Teinte'},
+    {n:4,lbl:'Notes'}
+  ];
+  return '<div style="display:flex;align-items:center;justify-content:center;margin-bottom:24px;gap:0;">'+
+    steps.map(function(s,i){
+      const done=_orderStep>s.n;const active=_orderStep===s.n;
+      const bg=done?'#10b981':active?'var(--accent)':'#e2e8f0';
+      const color=done||active?'#fff':'#94a3b8';
+      const labelColor=active?'var(--accent)':done?'#10b981':'#94a3b8';
+      return '<div style="display:flex;align-items:center;">'+
+        '<button type="button" onclick="_goToStep('+s.n+')" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;cursor:pointer;padding:0;">'+
+          '<div style="width:32px;height:32px;border-radius:50%;background:'+bg+';color:'+color+';display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.84rem;border:2px solid '+bg+';">'+(done?'✓':s.n)+'</div>'+
+          '<div style="font-size:.7rem;color:'+labelColor+';font-weight:'+(active?700:500)+';">'+s.lbl+'</div>'+
+        '</button>'+
+        (i<steps.length-1?'<div style="flex:1;height:2px;background:'+(_orderStep>s.n?'#10b981':'#e2e8f0')+';min-width:40px;margin:0 4px;margin-bottom:18px;"></div>':'')+
+      '</div>';
+    }).join('')+
+  '</div>';
+}
+
+function _goToStep(n){
+  if(n>_orderStep){
+    if(_orderStep===1&&!_orderForm.patient.name.trim()){alert('Veuillez renseigner le code patient.');return;}
+    if(_orderStep===2&&!_orderForm.finalGoal.trim()&&!Object.keys(_orderForm.teeth).length){alert('Décrivez l\'objectif final ou sélectionnez au moins une dent.');return;}
+    if(_orderStep===4&&!_orderForm.firstStep.description.trim()){alert('Décrivez la demande actuelle (ce que vous attendez à cette étape).');return;}
+  }
+  _orderStep=Math.max(1,Math.min(4,n));
+  renderOrderForm();
+  setTimeout(function(){window.scrollTo({top:0,behavior:'smooth'});},10);
+}
+
+function _stepContent(){
+  if(_orderStep===1){
+    // PATIENT
+    const sexes=[{id:'F',lbl:'♀ Femme'},{id:'M',lbl:'♂ Homme'},{id:'',lbl:'— Non précisé'}];
+    return '<div>'+
+      '<div style="font-size:1.05rem;font-weight:700;margin-bottom:4px;">👤 Informations patient</div>'+
+      '<div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;">Étape 1 sur 4 — Code patient et coordonnées.</div>'+
+      // Bouton "Reprendre un patient existant"
+      '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:.82rem;color:#1e40af;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'+
+        '<div>💡 Vous avez déjà commandé un travail pour ce patient ?</div>'+
+        '<button onclick="openPatientPicker()" style="background:#2563eb;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">📂 Reprendre un code patient existant</button>'+
+      '</div>'+
+      '<div style="margin-bottom:14px;">'+
+        '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Code patient *<button class="help-tip" data-help-title="Pourquoi un code et pas un nom ?" data-help="Pour respecter le RGPD (protection des données personnelles), on évite de transmettre le nom complet du patient au laboratoire. Utilisez un code que vous seul comprenez : initiales + numéro (DUP-MAR-001), code interne, n° de dossier, etc. Vous retrouvez le patient grâce à ce code dans votre logiciel cabinet.">?</button></label>'+
+        '<input type="text" id="of-patient" value="'+esc(_orderForm.patient.name)+'" placeholder="Ex: DUP-MAR, P-001, initiales…" oninput="_orderForm.patient.name=this.value;_saveDraft();_checkPatientHistory();" autofocus style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;"/>'+
+        '<div style="font-size:.7rem;color:var(--ink-soft);margin-top:4px;">🔒 RGPD : utilisez un code/pseudonyme. Le laboratoire ne doit pas connaître l\'identité réelle du patient.</div>'+
+        '<div id="of-patient-history"></div>'+
+      '</div>'+
+      '<div style="margin-bottom:14px;">'+
+        '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:6px;">Sexe</label>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+          sexes.map(function(s){
+            const on=_orderForm.patient.sexe===s.id;
+            return '<button type="button" onclick="_orderForm.patient.sexe=\''+s.id+'\';_saveDraft();renderOrderForm();" style="padding:8px 16px;border:1.5px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'var(--surface)')+';color:'+(on?'#fff':'var(--ink)')+';border-radius:7px;font-size:.86rem;font-weight:'+(on?700:500)+';cursor:pointer;">'+s.lbl+'</button>';
+          }).join('')+
+        '</div>'+
+      '</div>'+
+      '<div style="margin-bottom:14px;max-width:50%;">'+
+        '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Âge (ans)</label>'+
+        '<input type="number" id="of-age" value="'+esc(_orderForm.patient.age)+'" min="0" max="120" placeholder="ex: 45" oninput="_orderForm.patient.age=this.value;_saveDraft();" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;"/>'+
+      '</div>'+
+    '</div>';
+  }
+  if(_orderStep===2){
+    // CAS GLOBAL : objectif final + dents
+    return '<div>'+
+      '<div style="font-size:1.05rem;font-weight:700;margin-bottom:4px;">🎯 Objectif final du cas</div>'+
+      '<div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;">Étape 2 sur 4 — Décrivez le travail final visé (le résultat attendu en bout de course) et les dents concernées. Ces informations restent les mêmes pour toutes les étapes du cas.</div>'+
+      '<div style="margin-bottom:18px;">'+
+        '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Objectif final *</label>'+
+        '<textarea id="of-finalgoal" placeholder="Ex: Châssis métallique 44-45 · Couronne céramo-métallique 26 · Bridge zircone 23-25..." oninput="_orderForm.finalGoal=this.value;_saveDraft();" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:70px;resize:vertical;">'+esc(_orderForm.finalGoal)+'</textarea>'+
+        '<div style="font-size:.7rem;color:var(--ink-soft);margin-top:4px;">💡 C\'est le résultat final attendu. Vous préciserez à l\'étape suivante quelle est votre demande pour cette livraison-ci (PEI, châssis, montage, finition…).</div>'+
+      '</div>'+
+      '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">'+
+          '<div style="font-size:.84rem;font-weight:700;">🦷 Dents impactées (notation FDI)<button class="help-tip" data-help-title="Notation FDI" data-help="La notation FDI numérote chaque dent à 2 chiffres. 1er chiffre = quadrant (1: haut-droit, 2: haut-gauche, 3: bas-gauche, 4: bas-droit). 2e chiffre = position depuis la ligne médiane (1 à 8). Exemple : 16 = 1ère molaire haut droite, 36 = 1ère molaire bas gauche. C\'est la notation universelle utilisée par tous les laboratoires.">?</button></div>'+
+          '<div style="font-size:.7rem;color:var(--ink-soft);">Cliquez sur les dents · Cliquez entre dents pour solidariser (bridge)<button class="help-tip" data-help-title="Solidarisation (bridge)" data-help="Cliquer entre deux dents permet de les relier pour signaler au laboratoire qu\'elles sont solidarisées (font partie d\'un même bridge ou d\'une même prothèse). Les dents reliées seront indiquées comme une seule unité dans la fiche envoyée au labo.">?</button></div>'+
+        '</div>'+
+        '<div id="of-chart"></div>'+
+        '<div style="display:flex;gap:14px;font-size:.7rem;color:var(--ink-soft);margin-top:12px;flex-wrap:wrap;">'+
+          '<span><span style="display:inline-block;width:14px;height:14px;background:var(--accent);border:1.5px solid var(--accent);border-radius:3px;vertical-align:middle;"></span> Dent sélectionnée</span>'+
+          '<span><span style="display:inline-block;width:24px;height:7px;background:#10b981;border-radius:4px;vertical-align:middle;"></span> Solidarisé (bridge)</span>'+
+          '<span><span style="display:inline-block;width:10px;height:10px;background:#fff;border:1.5px solid #cbd5e1;border-radius:50%;vertical-align:middle;"></span> Indépendant</span>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+  if(_orderStep===3){
+    // TEINTE
+    return '<div>'+
+      '<div style="font-size:1.05rem;font-weight:700;margin-bottom:4px;">🎨 Teinte</div>'+
+      '<div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;">Étape 3 sur 4 — Choisissez une teinte du guide Vita ou décrivez-la librement.</div>'+
+      '<div style="margin-bottom:14px;">'+
+        '<div style="display:flex;gap:10px;margin-bottom:14px;">'+
+          '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.88rem;"><input type="radio" name="of-shadeType" value="vita" '+(_orderForm.shadeType==='vita'?'checked':'')+' onchange="_orderForm.shadeType=this.value;_saveDraft();renderOrderForm();"/>Guide Vita</label>'+
+          '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.88rem;"><input type="radio" name="of-shadeType" value="custom" '+(_orderForm.shadeType==='custom'?'checked':'')+' onchange="_orderForm.shadeType=this.value;_saveDraft();renderOrderForm();"/>Personnalisée / multi-zones</label>'+
+        '</div>'+
+        (_orderForm.shadeType==='vita'?
+          '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+VITA_SHADES.map(function(s){
+            const on=_orderForm.shadeValue===s;
+            return '<button type="button" onclick="_orderForm.shadeValue=\''+s+'\';_saveDraft();renderOrderForm();" style="padding:8px 14px;border:1.5px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'var(--surface)')+';color:'+(on?'#fff':'var(--ink)')+';border-radius:7px;font-size:.88rem;font-weight:'+(on?700:500)+';cursor:pointer;font-family:monospace;min-width:54px;">'+s+'</button>';
+          }).join('')+'</div>'
+          :
+          '<textarea id="of-shade-custom" placeholder="Décrire la teinte (zones, dégradé, références personnelles, photos jointes…)" oninput="_orderForm.shadeValue=this.value;_saveDraft();" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:90px;resize:vertical;">'+esc(_orderForm.shadeValue)+'</textarea>'
+        )+
+      '</div>'+
+    '</div>';
+  }
+  // Étape 4 : DEMANDE ACTUELLE (première étape du cas)
+  return '<div>'+
+    '<div style="font-size:1.05rem;font-weight:700;margin-bottom:4px;">📨 Demande actuelle</div>'+
+    '<div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;">Étape 4 sur 4 — Précisez ce que vous attendez du laboratoire <strong>pour cette livraison-ci</strong>. Vous pourrez ajouter d\'autres étapes plus tard sur la même fiche (PEI → châssis → montage → finition…).</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Que demandez-vous au labo cette fois-ci ? *</label>'+
+      '<textarea id="of-firststep-desc" placeholder="Ex: PEI · Châssis métallique avec bourrelets d\'occlusion · Montage des dents · Finition…" oninput="_orderForm.firstStep.description=this.value;_saveDraft();" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:80px;resize:vertical;">'+esc(_orderForm.firstStep.description)+'</textarea>'+
+    '</div>'+
+    '<div style="margin-bottom:14px;max-width:50%;">'+
+      '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">📅 Date de livraison souhaitée</label>'+
+      '<input type="date" id="of-firststep-date" value="'+esc(_orderForm.firstStep.deliveryDate)+'" oninput="_orderForm.firstStep.deliveryDate=this.value;_saveDraft();" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;"/>'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">📝 Notes &amp; instructions particulières</label>'+
+      '<textarea id="of-firststep-notes" placeholder="Ex: Allergie au métal · Prévoir un essai esthétique · Précisions sur la prép…" oninput="_orderForm.firstStep.notes=this.value;_saveDraft();" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:90px;resize:vertical;">'+esc(_orderForm.firstStep.notes)+'</textarea>'+
+    '</div>'+
+    '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-top:16px;font-size:.82rem;color:#1e40af;">💡 Cliquez sur <strong>« Voir l\'aperçu »</strong> pour vérifier votre fiche avant l\'envoi définitif au laboratoire.</div>'+
+  '</div>';
+}
+
+function renderOrderForm(){
+  const el=document.getElementById('order-form-container');if(!el)return;
+  const hadDraft=_loadDraft();
+  const cabName=portalData.cabName||'';
+  const cabPhone=portalData.cabPhone||'';
+  const cabEmail=portalData.cabEmail||'';
+
+  const isLastStep=_orderStep===4;
+  const isFirstStep=_orderStep===1;
+
+  let html=
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:880px;margin:0 auto;">'+
+      (hadDraft?'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:.82rem;color:#c2410c;">📝 Brouillon restauré pour <strong>'+esc(_orderForm.patient.name||'(sans nom)')+'</strong>. <button onclick="resetOrderForm()" style="background:none;border:none;color:#c2410c;font-weight:700;cursor:pointer;text-decoration:underline;">Repartir d\'une fiche vierge</button></div>':'')+
+
+      (_orderForm.parentJobInfo?'<div style="background:#fff7ed;border:1.5px solid #fb923c;border-radius:10px;padding:12px 14px;margin-bottom:16px;">'+
+        '<div style="font-size:.78rem;font-weight:700;color:#c2410c;">🔄 Demande de retouche / ajout</div>'+
+        '<div style="font-size:.78rem;color:#92400e;margin-top:4px;">Travail d\'origine : <strong>'+esc(_orderForm.parentJobInfo.patient||'')+'</strong>'+(_orderForm.parentJobInfo.typeLabel?' · '+esc(_orderForm.parentJobInfo.typeLabel):'')+(_orderForm.parentJobInfo.blNum?' · BL '+esc(_orderForm.parentJobInfo.blNum):'')+'</div>'+
+      '</div>':'')+
+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;gap:10px;">'+
+        '<h2 style="font-size:1.2rem;font-weight:700;">📝 Nouvelle fiche de commande</h2>'+
+        '<div style="font-size:.74rem;color:var(--ink-soft);text-align:right;">'+esc(cabName)+(cabPhone?' · '+esc(cabPhone):'')+'</div>'+
+      '</div>'+
+
+      _stepIndicator()+
+
+      '<div style="min-height:280px;">'+_stepContent()+'</div>'+
+
+      '<div style="display:flex;gap:10px;justify-content:space-between;margin-top:24px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:18px;">'+
+        '<button onclick="resetOrderForm()" style="background:none;border:1.5px solid var(--border);color:var(--ink-soft);border-radius:8px;padding:10px 16px;font-size:.84rem;cursor:pointer;">🗑️ Vider</button>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+          (isFirstStep?'':'<button onclick="_goToStep('+(_orderStep-1)+')" style="background:none;border:1.5px solid var(--border);color:var(--ink);border-radius:8px;padding:10px 18px;font-size:.86rem;cursor:pointer;">← Précédent</button>')+
+          (isLastStep?
+            '<button onclick="showOrderPreview()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:.88rem;font-weight:600;cursor:pointer;">📋 Voir l\'aperçu →</button>':
+            '<button onclick="_goToStep('+(_orderStep+1)+')" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:.88rem;font-weight:600;cursor:pointer;">Suivant →</button>')+
+        '</div>'+
+      '</div>'+
+    '</div>';
+
+  el.innerHTML=html;
+  if(_orderStep===2)renderToothChart();
+}
+
+function renderToothChart(){
+  const el=document.getElementById('of-chart');if(!el)return;
+  // Tableau combiné côté droit + côté gauche, avec un index "milieu" à 8
+  function row(arr){
+    let html='<div style="display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;">';
+    arr.forEach(function(num,i){
+      const sel=!!_orderForm.teeth[num];
+      // Espace de séparation au milieu entre côté droit et côté gauche
+      if(i===8)html+='<div style="width:18px;flex-shrink:0;"></div>';
+      // Bord arrondi : début/fin de chaque demi-arcade
+      const radius=(i===0||i===8)?'7px 2px 2px 7px':(i===7||i===arr.length-1)?'2px 7px 7px 2px':'2px';
+      html+='<button type="button" onclick="toggleTooth('+num+')" style="width:36px;height:42px;border:1.5px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'var(--surface)')+';color:'+(sel?'#fff':'var(--ink)')+';font-family:monospace;font-size:.76rem;font-weight:'+(sel?700:500)+';cursor:pointer;border-radius:'+radius+';margin:0 1px;flex-shrink:0;">'+num+'</button>';
+      // Pas de rond entre 11-21 ni 41-31 (ligne médiane = pas de solidarisation)
+      if(i<arr.length-1&&i!==7){
+        const a=num,b=arr[i+1];
+        const key=Math.min(a,b)+'-'+Math.max(a,b);
+        const lk=!!_orderForm.links[key];
+        if(lk){
+          // Bridge visuel : barre verte arrondie qui relie les 2 dents
+          html+='<button type="button" onclick="toggleLink('+a+','+b+')" title="Solidarisation '+a+'-'+b+' (cliquez pour retirer)" style="width:22px;height:8px;border:none;background:linear-gradient(180deg,#10b981,#059669);border-radius:4px;cursor:pointer;flex-shrink:0;box-shadow:0 1px 2px rgba(16,185,129,.4);margin:0 -1px;"></button>';
+        } else {
+          html+='<button type="button" onclick="toggleLink('+a+','+b+')" title="Cliquez pour solidariser '+a+'-'+b+'" style="width:11px;height:11px;border:1.5px solid #cbd5e1;background:#fff;border-radius:50%;cursor:pointer;flex-shrink:0;margin:0 3px;padding:0;"></button>';
+        }
+      }
+    });
+    html+='</div>';
+    return html;
+  }
+  // Ordre miroir de la bouche : 18..11 puis 21..28 (idem en bas)
+  const upper=[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
+  const lower=[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
+  el.innerHTML=
+    '<div style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:8px;text-align:center;">Maxillaire supérieur</div>'+
+    row(upper)+
+    '<div style="height:18px;"></div>'+
+    row(lower)+
+    '<div style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-top:8px;text-align:center;">Mandibule inférieure</div>';
+}
+
+function toggleTooth(num){
+  if(_orderForm.teeth[num])delete _orderForm.teeth[num];
+  else _orderForm.teeth[num]=true;
+  _saveDraft();renderToothChart();
+}
+
+function toggleLink(a,b){
+  const key=Math.min(a,b)+'-'+Math.max(a,b);
+  if(_orderForm.links[key])delete _orderForm.links[key];
+  else _orderForm.links[key]=true;
+  _saveDraft();renderToothChart();
+}
+
+function resetOrderForm(){
+  if(!confirm('Effacer la fiche en cours et repartir vierge ?'))return;
+  _orderForm={patient:{name:'',sexe:'',age:''},finalGoal:'',teeth:{},links:{},shadeType:'vita',shadeValue:'',firstStep:{description:'',deliveryDate:'',notes:''}};
+  _orderStep=1;
+  _clearDraft();
+  renderOrderForm();
+}
+
+function _renderToothChartReadonlyCabinet(teeth,links){
+  const upper=[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
+  const lower=[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
+  function row(arr){
+    let html='<div style="display:flex;align-items:center;justify-content:center;gap:0;">';
+    arr.forEach(function(num,i){
+      if(i===8)html+='<div style="width:14px;flex-shrink:0;"></div>';
+      const sel=teeth.indexOf(num)>=0;
+      html+='<div style="width:30px;height:34px;border:1.5px solid '+(sel?'var(--accent)':'#e2e8f0')+';background:'+(sel?'var(--accent)':'#fff')+';color:'+(sel?'#fff':'#64748b')+';font-family:monospace;font-size:.7rem;font-weight:'+(sel?700:500)+';display:flex;align-items:center;justify-content:center;border-radius:5px;margin:0 1px;">'+num+'</div>';
+      if(i<arr.length-1&&i!==7){
+        const a=num,b=arr[i+1];
+        const key=Math.min(a,b)+'-'+Math.max(a,b);
+        const lk=(links||[]).indexOf(key)>=0;
+        if(lk){html+='<div style="width:18px;height:6px;background:#10b981;border-radius:3px;flex-shrink:0;margin:0 -1px;"></div>';}
+        else{html+='<div style="width:7px;height:7px;border:1px solid #cbd5e1;background:#fff;border-radius:50%;flex-shrink:0;margin:0 3px;"></div>';}
+      }
+    });
+    html+='</div>';
+    return html;
+  }
+  return '<div style="font-size:.62rem;color:#64748b;text-align:center;margin-bottom:6px;">Maxillaire supérieur</div>'+
+    row(upper)+
+    '<div style="height:14px;"></div>'+
+    row(lower)+
+    '<div style="font-size:.62rem;color:#64748b;text-align:center;margin-top:6px;">Mandibule inférieure</div>';
+}
+
+// Cache des fiches précédentes du cabinet pour recherche rapide
+let _portalOrdersCache=null;
+
+async function _loadCabinetOrders(){
+  if(_portalOrdersCache)return _portalOrdersCache;
+  try{
+    const sb=supabase.createClient(SB_URL,SB_ANON);
+    const{data:rows}=await sb.from('labo_data').select('data').eq('id','orders_'+sessionPortalId);
+    _portalOrdersCache=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
+  }catch(e){_portalOrdersCache=[];}
+  return _portalOrdersCache;
+}
+
+// Regroupe les commandes par code patient (insensible à la casse, espaces normalisés)
+function _groupOrdersByPatient(list){
+  const map={};
+  list.forEach(function(o){
+    const key=((o.patient&&o.patient.name)||'').trim().toLowerCase();
+    if(!key)return;
+    if(!map[key])map[key]={code:o.patient.name,sexe:o.patient.sexe||'',age:o.patient.age||'',orders:[]};
+    map[key].orders.push(o);
+  });
+  return Object.values(map).sort(function(a,b){return (b.orders[0].createdAt||'').localeCompare(a.orders[0].createdAt||'');});
+}
+
+async function openPatientPicker(){
+  const list=await _loadCabinetOrders();
+  const groups=_groupOrdersByPatient(list);
+  const overlay=document.createElement('div');
+  overlay.id='patient-picker-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
+  const itemsHtml=groups.length?groups.map(function(g){
+    const lastDate=g.orders[0].createdAt?new Date(g.orders[0].createdAt).toLocaleDateString('fr-FR'):'';
+    const sexeIcon=g.sexe==='F'?' ♀':g.sexe==='M'?' ♂':'';
+    return '<div onclick="pickPatient(\''+esc(g.code).replace(/'/g,"\\'")+'\')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fff;transition:background .15s;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'#fff\'">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-weight:700;font-size:.92rem;color:var(--ink);">👤 '+esc(g.code)+sexeIcon+(g.age?' · '+esc(g.age)+' ans':'')+'</div>'+
+        '<div style="font-size:.74rem;color:var(--ink-soft);margin-top:2px;">'+g.orders.length+' commande'+(g.orders.length>1?'s':'')+(lastDate?' · dernière le '+lastDate:'')+'</div>'+
+      '</div>'+
+      '<div style="background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:4px 10px;font-size:.74rem;font-weight:600;flex-shrink:0;">+ Nouvelle commande</div>'+
+    '</div>';
+  }).join(''):'<div style="text-align:center;padding:40px 20px;color:var(--ink-soft);font-size:.86rem;">Aucun patient encore enregistré.</div>';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">'+
+    '<div style="padding:18px 22px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0;">'+
+      '<div>'+
+        '<div style="font-size:1.1rem;font-weight:700;">📂 Reprendre un patient existant</div>'+
+        '<div style="font-size:.78rem;color:var(--ink-soft);margin-top:2px;">Cliquez sur un patient pour ajouter une nouvelle commande à son historique.</div>'+
+      '</div>'+
+      '<button onclick="document.getElementById(\'patient-picker-overlay\').remove()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#64748b;">×</button>'+
+    '</div>'+
+    '<div style="padding:14px 22px;border-bottom:1px solid #e2e8f0;flex-shrink:0;">'+
+      '<input type="text" id="pp-search" placeholder="🔍 Rechercher par code patient…" oninput="filterPatientPicker(this.value)" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.88rem;outline:none;"/>'+
+    '</div>'+
+    '<div id="pp-list" style="flex:1;overflow-y:auto;padding:14px 22px;">'+itemsHtml+'</div>'+
+  '</div>';
+  document.body.appendChild(overlay);
+  setTimeout(function(){const s=document.getElementById('pp-search');if(s)s.focus();},50);
+}
+
+function filterPatientPicker(q){
+  const list=_portalOrdersCache||[];
+  const groups=_groupOrdersByPatient(list);
+  const filt=q.trim().toLowerCase();
+  const filtered=filt?groups.filter(function(g){return g.code.toLowerCase().includes(filt);}):groups;
+  const el=document.getElementById('pp-list');if(!el)return;
+  if(!filtered.length){el.innerHTML='<div style="text-align:center;padding:30px;color:var(--ink-soft);">Aucun résultat pour "'+esc(q)+'"</div>';return;}
+  el.innerHTML=filtered.map(function(g){
+    const lastDate=g.orders[0].createdAt?new Date(g.orders[0].createdAt).toLocaleDateString('fr-FR'):'';
+    const sexeIcon=g.sexe==='F'?' ♀':g.sexe==='M'?' ♂':'';
+    return '<div onclick="pickPatient(\''+esc(g.code).replace(/'/g,"\\'")+'\')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fff;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'#fff\'">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-weight:700;font-size:.92rem;color:var(--ink);">👤 '+esc(g.code)+sexeIcon+(g.age?' · '+esc(g.age)+' ans':'')+'</div>'+
+        '<div style="font-size:.74rem;color:var(--ink-soft);margin-top:2px;">'+g.orders.length+' commande'+(g.orders.length>1?'s':'')+(lastDate?' · dernière le '+lastDate:'')+'</div>'+
+      '</div>'+
+      '<div style="background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:4px 10px;font-size:.74rem;font-weight:600;flex-shrink:0;">+ Nouvelle commande</div>'+
+    '</div>';
+  }).join('');
+}
+
+function pickPatient(code){
+  const list=_portalOrdersCache||[];
+  const matching=list.filter(function(o){return ((o.patient&&o.patient.name)||'').trim().toLowerCase()===code.trim().toLowerCase();});
+  if(!matching.length)return;
+  matching.forEach(_migrateOrderToCase);
+  const last=matching[0];
+  _orderForm={
+    patient:{
+      name:last.patient.name,
+      sexe:last.patient.sexe||'',
+      age:last.patient.age||''
+    },
+    finalGoal:last.finalGoal||'',
+    teeth:{},links:{},
+    shadeType:last.shadeType||'vita',
+    shadeValue:last.shadeValue||'',
+    firstStep:{description:'',deliveryDate:'',notes:''}
+  };
+  // Reprendre dents/links du dernier cas
+  if(Array.isArray(last.teeth))last.teeth.forEach(function(t){_orderForm.teeth[t]=true;});
+  if(Array.isArray(last.links))last.links.forEach(function(l){_orderForm.links[l]=true;});
+  _orderStep=1;
+  _saveDraft();
+  var ov=document.getElementById('patient-picker-overlay');if(ov)ov.remove();
+  renderOrderForm();
+  showToast('📂 Code patient "'+code+'" repris ('+matching.length+' fiche'+(matching.length>1?'s':'')+' existante'+(matching.length>1?'s':'')+')','#2563eb');
+}
+
+function showToast(msg,color){
+  let t=document.getElementById('cab-toast');
+  if(!t){
+    t=document.createElement('div');
+    t.id='cab-toast';
+    t.style.cssText='position:fixed;top:20px;right:20px;background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:.86rem;z-index:10001;box-shadow:0 4px 20px rgba(0,0,0,.3);opacity:0;transform:translateY(-6px);transition:opacity .22s ease,transform .22s ease;';
+    document.body.appendChild(t);
+  }
+  t.style.background=color||'#1e293b';
+  t.textContent=msg;
+  t.style.display='block';
+  requestAnimationFrame(function(){t.style.opacity='1';t.style.transform='translateY(0)';});
+  clearTimeout(t._h);
+  t._h=setTimeout(function(){t.style.opacity='0';t.style.transform='translateY(-6px)';setTimeout(function(){t.style.display='none';},220);},3500);
+}
+
+// Vérifie en live si le code patient saisi correspond à un patient existant
+let _patientHistoryDebounce=null;
+function _checkPatientHistory(){
+  clearTimeout(_patientHistoryDebounce);
+  _patientHistoryDebounce=setTimeout(async function(){
+    const el=document.getElementById('of-patient-history');if(!el)return;
+    const code=(_orderForm.patient.name||'').trim();
+    if(code.length<2){el.innerHTML='';return;}
+    const list=await _loadCabinetOrders();
+    const matching=list.filter(function(o){return ((o.patient&&o.patient.name)||'').trim().toLowerCase()===code.toLowerCase();});
+    if(!matching.length){el.innerHTML='';return;}
+    const last=matching[0];
+    el.innerHTML='<div style="background:#fff7ed;border:1.5px solid #fb923c;border-radius:8px;padding:10px 14px;margin-top:8px;font-size:.82rem;color:#92400e;">'+
+      '<div style="font-weight:700;margin-bottom:4px;">⚠️ Code patient déjà connu</div>'+
+      '<div>Vous avez déjà envoyé '+matching.length+' commande'+(matching.length>1?'s':'')+' pour <strong>'+esc(code)+'</strong>'+(last.createdAt?' (dernière le '+new Date(last.createdAt).toLocaleDateString('fr-FR')+')':'')+'.</div>'+
+      '<button onclick="pickPatient(\''+esc(code).replace(/'/g,"\\'")+'\')" style="margin-top:6px;background:#fb923c;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:.76rem;font-weight:600;cursor:pointer;">📂 Reprendre l\'historique de ce code patient</button>'+
+    '</div>';
+  },400);
+}
+
+function showOrderPreview(){
+  if(!_orderForm.patient.name.trim()){alert('Le code patient est manquant (étape 1).');_goToStep(1);return;}
+  if(!_orderForm.finalGoal.trim()&&!Object.keys(_orderForm.teeth).length){
+    if(!confirm('Aucun objectif final ni dent sélectionnée. Voulez-vous continuer quand même ?'))return;
+  }
+  if(!_orderForm.firstStep.description.trim()){alert('Décrivez la demande actuelle (étape 4).');_goToStep(4);return;}
+  const o=_orderForm;
+  const teeth=Object.keys(o.teeth).map(Number).sort(function(a,b){return a-b;});
+  const links=Object.keys(o.links);
+  const teethStr=teeth.length?teeth.join(', '):'—';
+  const sexeLbl=o.patient.sexe==='F'?'♀ Femme':o.patient.sexe==='M'?'♂ Homme':'';
+  const cabName=portalData.cabName||'';
+  const cabPhone=portalData.cabPhone||'';
+  const cabEmail=portalData.cabEmail||'';
+
+  const overlay=document.createElement('div');
+  overlay.id='order-preview-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML=
+    '<div style="background:#fff;border-radius:14px;width:100%;max-width:680px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;">'+
+      '<div style="padding:18px 24px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0;">'+
+        '<div>'+
+          '<div style="font-size:1.15rem;font-weight:700;">📋 Aperçu de votre fiche</div>'+
+          '<div style="font-size:.78rem;color:#64748b;margin-top:2px;">Vérifiez avant l\'envoi définitif au laboratoire.</div>'+
+        '</div>'+
+        '<button onclick="document.getElementById(\'order-preview-overlay\').remove()" style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:#64748b;">×</button>'+
+      '</div>'+
+      '<div style="flex:1;overflow-y:auto;padding:20px 24px;">'+
+        '<div style="background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.82rem;color:#475569;">'+
+          '<div><strong>🦷 Cabinet :</strong> '+esc(cabName)+'</div>'+
+          (cabPhone?'<div><strong>📞 Téléphone :</strong> '+esc(cabPhone)+'</div>':'')+
+          (cabEmail?'<div><strong>📧 Email :</strong> '+esc(cabEmail)+'</div>':'')+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px;font-size:.86rem;">'+
+          '<div><strong>👤 Code patient :</strong> '+esc(o.patient.name)+'</div>'+
+          (sexeLbl?'<div><strong>Sexe :</strong> '+sexeLbl+'</div>':'')+
+          (o.patient.age?'<div><strong>Âge :</strong> '+esc(o.patient.age)+' ans</div>':'')+
+        '</div>'+
+        '<div style="margin-bottom:14px;"><div style="font-size:.74rem;font-weight:700;color:#64748b;margin-bottom:4px;">🎯 OBJECTIF FINAL DU CAS</div>'+
+          '<div style="font-size:.92rem;background:#eff6ff;border:1.5px solid #bfdbfe;padding:10px 12px;border-radius:7px;white-space:pre-wrap;color:#1e40af;font-weight:600;">'+esc(o.finalGoal||'(non précisé)')+'</div></div>'+
+        '<div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:14px;">'+
+          '<div style="font-size:.74rem;font-weight:700;color:#64748b;margin-bottom:8px;">DENTS IMPACTÉES : <span style="color:#2563eb;font-family:monospace;">'+esc(teethStr)+'</span></div>'+
+          _renderToothChartReadonlyCabinet(teeth,links)+
+        '</div>'+
+        '<div style="margin-bottom:14px;"><div style="font-size:.74rem;font-weight:700;color:#64748b;margin-bottom:4px;">🎨 TEINTE</div>'+
+          '<div style="font-size:.92rem;font-family:monospace;background:#f8fafc;padding:8px 12px;border-radius:7px;">'+esc(o.shadeValue||'(non précisée)')+(o.shadeType==='custom'?' <span style="font-size:.7rem;color:#64748b;font-family:Inter,sans-serif;">(personnalisée)</span>':'')+'</div></div>'+
+        // Demande actuelle (étape 1 du cas)
+        '<div style="background:#fff7ed;border:2px solid #fb923c;border-radius:10px;padding:14px;margin-bottom:6px;">'+
+          '<div style="font-size:.74rem;font-weight:700;color:#c2410c;margin-bottom:8px;">📨 DEMANDE ACTUELLE (étape 1 du cas)</div>'+
+          '<div style="font-size:.92rem;font-weight:600;background:#fff;border:1px solid #fed7aa;padding:10px 12px;border-radius:7px;white-space:pre-wrap;">'+esc(o.firstStep.description)+'</div>'+
+          (o.firstStep.deliveryDate?'<div style="font-size:.84rem;margin-top:8px;"><strong>📅 Livraison souhaitée :</strong> '+new Date(o.firstStep.deliveryDate+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})+'</div>':'')+
+          (o.firstStep.notes?'<div style="font-size:.84rem;margin-top:8px;"><strong>📝 Notes :</strong><div style="background:#fff;border:1px solid #fed7aa;padding:8px 10px;border-radius:6px;margin-top:4px;white-space:pre-wrap;">'+esc(o.firstStep.notes)+'</div></div>':'')+
+        '</div>'+
+      '</div>'+
+      '<div style="padding:14px 22px;border-top:1px solid #e2e8f0;display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;flex-shrink:0;background:#f8fafc;">'+
+        '<button onclick="document.getElementById(\'order-preview-overlay\').remove()" style="background:none;border:1px solid #e2e8f0;color:#64748b;border-radius:8px;padding:10px 16px;font-size:.85rem;cursor:pointer;">← Modifier</button>'+
+        '<button onclick="submitOrder()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:.88rem;font-weight:600;cursor:pointer;">✉️ Confirmer et envoyer</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+async function submitOrder(){
+  if(!_orderForm.patient.name.trim()){alert('Veuillez renseigner le code patient.');return;}
+  if(!_orderForm.firstStep.description.trim()){alert('Décrivez la demande actuelle (étape 4).');return;}
+  if(!Object.keys(_orderForm.teeth).length&&!_orderForm.finalGoal.trim()){
+    if(!confirm('Aucun objectif final ni dent sélectionnée. Continuer quand même ?'))return;
+  }
+  const caseId='case_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+  const stepId='step_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+  const now=new Date().toISOString();
+  const newCase={
+    id:caseId,
+    portalId:sessionPortalId,
+    cabId:portalData.cabId,
+    cabName:portalData.cabName,
+    cabPhone:portalData.cabPhone||'',
+    cabEmail:portalData.cabEmail||'',
+    patient:_orderForm.patient,
+    finalGoal:_orderForm.finalGoal,
+    teeth:Object.keys(_orderForm.teeth).map(Number).sort(function(a,b){return a-b;}),
+    links:Object.keys(_orderForm.links),
+    shadeType:_orderForm.shadeType,
+    shadeValue:_orderForm.shadeValue,
+    steps:[{
+      id:stepId,
+      description:_orderForm.firstStep.description,
+      deliveryDate:_orderForm.firstStep.deliveryDate||'',
+      notes:_orderForm.firstStep.notes||'',
+      status:'pending',
+      jobId:null,
+      blId:null,
+      requestedAt:now,
+      acceptedAt:null,
+      deliveredAt:null,
+      rejectedAt:null
+    }],
+    createdAt:now,
+    updatedAt:now
+  };
+  try{
+    const sb=supabase.createClient(SB_URL,SB_ANON);
+    const{data:rows}=await sb.from('labo_data').select('data').eq('id','orders_'+sessionPortalId);
+    const existing=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
+    existing.unshift(newCase);
+    await sb.from('labo_data').upsert({id:'orders_'+sessionPortalId,data:{list:existing,portalId:sessionPortalId,cabId:portalData.cabId},updated_at:now});
+    _clearDraft();
+    _portalOrdersCache=null;
+    _orderForm={patient:{name:'',sexe:'',age:''},finalGoal:'',teeth:{},links:{},shadeType:'vita',shadeValue:'',firstStep:{description:'',deliveryDate:'',notes:''}};
+    _orderStep=1;
+    var pv=document.getElementById('order-preview-overlay');if(pv)pv.remove();
+    alert('✅ Fiche de commande envoyée au laboratoire !');
+    document.querySelector('[data-ptab="orders"]').click();
+  }catch(e){
+    console.error(e);
+    alert('❌ Erreur lors de l\'envoi : '+e.message);
+  }
+}
+
+// Ajouter une étape à un cas existant
+async function addStepToCase(caseId){
+  const list=await _loadCabinetOrders();
+  const c=list.find(function(x){return x.id===caseId;});
+  if(!c){alert('Cas introuvable');return;}
+  // Dernière teinte connue (étape ou cas) à proposer comme défaut
+  const lastShadeStep=(c.steps||[]).slice().reverse().find(function(s){return s.shadeValue;});
+  const lastShade=lastShadeStep?lastShadeStep.shadeValue:(c.shadeValue||'');
+  const overlay=document.createElement('div');
+  overlay.id='add-step-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
+  // Carnet des fiches précédentes (chronologique — comme une feuille papier)
+  const stepsSorted=(c.steps||[]).slice().sort(function(a,b){return (a.requestedAt||'').localeCompare(b.requestedAt||'');});
+  const previousHtml=stepsSorted.map(function(s,i){return _renderFicheBlockCabHTML(s,i);}).join('');
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;width:100%;max-width:640px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 22px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0;">'+
+      '<div>'+
+        '<div style="font-size:1.1rem;font-weight:700;">+ Nouvelle fiche pour ce cas</div>'+
+        '<div style="font-size:.78rem;color:#64748b;margin-top:2px;">🎯 <strong>'+esc(c.finalGoal||'(sans objectif)')+'</strong> · 👤 '+esc(c.patient.name)+'</div>'+
+      '</div>'+
+      '<button onclick="document.getElementById(\'add-step-overlay\').remove()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#64748b;">×</button>'+
+    '</div>'+
+    '<div style="flex:1;overflow-y:auto;padding:18px 22px;">'+
+      '<details style="background:#f8fafc;border-radius:8px;padding:0;margin-bottom:14px;border:1px solid var(--border);overflow:hidden;">'+
+        '<summary style="list-style:none;cursor:pointer;padding:10px 14px;font-size:.74rem;font-weight:700;color:#64748b;">📜 Carnet des fiches précédentes ('+stepsSorted.length+') — cliquer pour déplier</summary>'+
+        '<div style="padding:10px 14px;background:#fff;border-top:1px solid var(--border);">'+previousHtml+'</div>'+
+      '</details>'+
+      '<div style="margin-bottom:14px;">'+
+        '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Que demandez-vous au labo cette fois-ci ? *</label>'+
+        '<textarea id="as-desc" placeholder="Ex: Châssis avec bourrelets · Montage des dents · Finition…" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:80px;resize:vertical;"></textarea>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">'+
+        '<div>'+
+          '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">📅 Date de livraison souhaitée</label>'+
+          '<input type="date" id="as-date" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;"/>'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">🎨 Teinte pour cette étape '+(lastShade?'<span style="font-weight:400;color:var(--ink-soft);font-size:.7rem;">(dernière : '+esc(lastShade)+')</span>':'<span style="font-weight:400;color:var(--ink-soft);font-size:.7rem;">(facultatif)</span>')+'</label>'+
+          '<input type="text" id="as-shade" placeholder="'+(lastShade?esc(lastShade)+' / autre…':'A2, BL3, ou laisser vide')+'" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;font-family:monospace;"/>'+
+          (lastShade?'<button type="button" onclick="document.getElementById(\'as-shade\').value=\''+esc(lastShade).replace(/'/g,"\\'")+'\'" style="margin-top:4px;background:none;border:1px dashed var(--border);color:var(--ink-soft);border-radius:5px;padding:3px 8px;font-size:.7rem;cursor:pointer;">↺ Réutiliser '+esc(lastShade)+'</button>':'')+
+        '</div>'+
+      '</div>'+
+      '<div style="margin-bottom:6px;">'+
+        '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">📝 Notes &amp; instructions</label>'+
+        '<textarea id="as-notes" placeholder="Précisions éventuelles…" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:70px;resize:vertical;"></textarea>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:14px 22px;border-top:1px solid #e2e8f0;display:flex;gap:10px;justify-content:flex-end;flex-shrink:0;background:#f8fafc;">'+
+      '<button onclick="document.getElementById(\'add-step-overlay\').remove()" style="background:none;border:1px solid #e2e8f0;color:#64748b;border-radius:8px;padding:10px 16px;font-size:.85rem;cursor:pointer;">Annuler</button>'+
+      '<button onclick="confirmAddStep(\''+esc(caseId)+'\')" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:.86rem;font-weight:600;cursor:pointer;">✉️ Envoyer la fiche</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(overlay);
+  setTimeout(function(){var d=document.getElementById('as-desc');if(d)d.focus();},80);
+}
+
+async function confirmAddStep(caseId){
+  const desc=(document.getElementById('as-desc').value||'').trim();
+  const date=(document.getElementById('as-date').value||'').trim();
+  const notes=(document.getElementById('as-notes').value||'').trim();
+  const shade=(document.getElementById('as-shade')?document.getElementById('as-shade').value||'':'').trim();
+  if(!desc){alert('Décrivez ce que vous demandez au labo.');return;}
+  try{
+    const sb=supabase.createClient(SB_URL,SB_ANON);
+    const{data:rows}=await sb.from('labo_data').select('data').eq('id','orders_'+sessionPortalId);
+    const list=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
+    const idx=list.findIndex(function(x){return x.id===caseId;});
+    if(idx<0){alert('Cas introuvable');return;}
+    _migrateOrderToCase(list[idx]);
+    const stepId='step_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+    const now=new Date().toISOString();
+    list[idx].steps.push({
+      id:stepId,
+      description:desc,
+      deliveryDate:date,
+      notes:notes,
+      shadeValue:shade,
+      shadeType:shade?'vita':'',
+      status:'pending',
+      jobId:null,blId:null,
+      requestedAt:now,
+      acceptedAt:null,deliveredAt:null,rejectedAt:null
+    });
+    list[idx].updatedAt=now;
+    await sb.from('labo_data').upsert({id:'orders_'+sessionPortalId,data:{list:list,portalId:sessionPortalId,cabId:portalData.cabId},updated_at:now});
+    _portalOrdersCache=null;
+    document.getElementById('add-step-overlay').remove();
+    showToast('✅ Nouvelle étape envoyée au laboratoire','#10b981');
+    renderOrdersList();
+  }catch(e){console.error(e);alert('❌ Erreur : '+e.message);}
+}
+
+async function requestRetouche(blId){
+  const bl=(portalData.bdl||[]).find(function(b){return b.id===blId;});
+  if(!bl){alert('BL introuvable');return;}
+  // Si le BL est lié à un cas existant → simplement ajouter une étape à ce cas
+  if(bl.orderId){
+    const list=await _loadCabinetOrders();
+    const c=list.find(function(x){return x.id===bl.orderId;});
+    if(c){
+      document.querySelector('[data-ptab="orders"]').click();
+      addStepToCase(bl.orderId);
+      return;
+    }
+  }
+  // Sinon (BL hors fiche) : créer un nouveau cas avec les infos du BL en pré-remplissage
+  const origOrder=bl.orderData||{};
+  _orderForm={
+    patient:{
+      name:bl.patient||(origOrder.patient&&origOrder.patient.name)||'',
+      sexe:(origOrder.patient&&origOrder.patient.sexe)||'',
+      age:(origOrder.patient&&origOrder.patient.age)||''
+    },
+    finalGoal:bl.typeLabel||origOrder.finalGoal||origOrder.prosthesis||'',
+    teeth:{},links:{},
+    shadeType:origOrder.shadeType||'vita',
+    shadeValue:origOrder.shadeValue||'',
+    firstStep:{description:'',deliveryDate:'',notes:'(retouche / ajout suite au BL '+(bl.num||'')+')'}
+  };
+  if(origOrder.teeth)origOrder.teeth.forEach(function(t){_orderForm.teeth[t]=true;});
+  if(origOrder.links)origOrder.links.forEach(function(l){_orderForm.links[l]=true;});
+  _orderStep=1;
+  _saveDraft();
+  document.querySelector('[data-ptab="neworder"]').click();
+}
+
+function viewBLOrder(blId){
+  const bl=(portalData.bdl||[]).find(function(b){return b.id===blId;});
+  if(!bl||!bl.orderData){alert('Aucune fiche associée à ce BL.');return;}
+  const o=bl.orderData;
+  _migrateOrderToCase(o);
+  const teethStr=(o.teeth||[]).join(', ')||'—';
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;max-width:680px;width:100%;max-height:90vh;overflow-y:auto;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:14px;">'+
+      '<div style="font-size:1.15rem;font-weight:700;">📝 Fiche de commande — '+esc(o.patient&&o.patient.name||bl.patient||'')+'</div>'+
+      '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:#64748b;">×</button>'+
+    '</div>'+
+    '<div style="font-size:.78rem;color:#64748b;margin-bottom:12px;">Envoyée le '+(o.createdAt?new Date(o.createdAt).toLocaleDateString('fr-FR'):'—')+' · BL associé : <strong>'+esc(bl.num)+'</strong></div>'+
+    '<div style="background:#f8fafc;padding:10px 12px;border-radius:7px;margin-bottom:10px;font-size:.84rem;">'+
+      (o.patient&&o.patient.age?'<div><strong>Âge :</strong> '+esc(o.patient.age)+' ans</div>':'')+
+      (o.deliveryDate?'<div><strong>Livraison demandée :</strong> '+new Date(o.deliveryDate+'T12:00:00').toLocaleDateString('fr-FR')+'</div>':'')+
+    '</div>'+
+    '<div style="margin-bottom:12px;"><strong style="font-size:.78rem;">Type :</strong><div style="font-size:.86rem;background:#f8fafc;padding:8px 12px;border-radius:7px;margin-top:4px;white-space:pre-wrap;">'+esc(o.prosthesis||'—')+'</div></div>'+
+    '<div style="margin-bottom:12px;"><strong style="font-size:.78rem;">Dents :</strong> <span style="font-family:monospace;">'+esc(teethStr)+'</span></div>'+
+    '<div style="margin-bottom:12px;"><strong style="font-size:.78rem;">Teinte :</strong> <span style="font-family:monospace;">'+esc(o.shadeValue||'—')+'</span></div>'+
+    (o.notes?'<div style="margin-bottom:12px;"><strong style="font-size:.78rem;">📝 Notes :</strong><div style="font-size:.84rem;background:#fff7ed;border:1px solid #fed7aa;padding:8px 12px;border-radius:7px;margin-top:4px;white-space:pre-wrap;">'+esc(o.notes)+'</div></div>':'')+
+  '</div>';
+  document.body.appendChild(overlay);
+}
+
+function _renderFicheBlockCabHTML(s,idx){
+  const stepStatusLbl={pending:'En attente',accepted:'Acceptée',in_progress:'En production',delivered:'Livrée',rejected:'Refusée'};
+  const stepStatusBg={pending:'#fef3c7',accepted:'#dbeafe',in_progress:'#dbeafe',delivered:'#d1fae5',rejected:'#fce7e7'};
+  const stepStatusFg={pending:'#a16207',accepted:'#1d4ed8',in_progress:'#1d4ed8',delivered:'#047857',rejected:'#991b1b'};
+  const dateStr=s.requestedAt?new Date(s.requestedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'—';
+  const lbl=stepStatusLbl[s.status]||s.status;
+  const bg=stepStatusBg[s.status]||'#f1f5f9';
+  const fg=stepStatusFg[s.status]||'#475569';
+  const title=idx===0?'Demande initiale':'Étape '+(idx+1);
+  return '<div style="padding:14px 4px;'+(idx>0?'border-top:1px dashed #cbd5e1;':'')+'">'+
+    '<div style="display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap;">'+
+      '<span style="background:#1e293b;color:#fff;font-weight:700;border-radius:99px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:.78rem;flex-shrink:0;">'+(idx+1)+'</span>'+
+      '<span style="font-weight:700;font-size:.92rem;color:var(--ink);">'+title+'</span>'+
+      '<span style="font-family:monospace;font-size:.76rem;color:var(--ink-soft);">— '+dateStr+'</span>'+
+      '<span style="background:'+bg+';color:'+fg+';font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:99px;margin-left:auto;">'+lbl+'</span>'+
+    '</div>'+
+    (s.description?'<div style="margin-bottom:8px;font-size:.86rem;line-height:1.5;background:#fff;border:1px solid var(--border);padding:9px 11px;border-radius:6px;white-space:pre-wrap;">'+esc(s.description)+'</div>':'')+
+    ((s.shadeValue||s.deliveryDate)?'<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:6px;font-size:.8rem;">'+
+      (s.shadeValue?'<div><strong>🎨 Teinte :</strong> <span style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px;border:1px solid var(--border);">'+esc(s.shadeValue)+'</span></div>':'')+
+      (s.deliveryDate?'<div><strong>📅 Livraison :</strong> '+new Date(s.deliveryDate+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})+'</div>':'')+
+    '</div>':'')+
+    (s.notes?'<div style="margin-bottom:6px;font-size:.82rem;"><strong>📝 Notes :</strong><div style="background:#fff7ed;border:1px solid #fed7aa;padding:8px 10px;border-radius:5px;margin-top:3px;white-space:pre-wrap;">'+esc(s.notes)+'</div></div>':'')+
+    ((s.acceptedAt||s.deliveredAt||s.rejectedAt||s.questionsAsked)?'<div style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--border);font-size:.72rem;color:var(--ink-soft);display:flex;flex-wrap:wrap;gap:10px;">'+
+      (s.acceptedAt?'<span>✓ Acceptée par le labo le '+new Date(s.acceptedAt).toLocaleDateString('fr-FR')+'</span>':'')+
+      (s.deliveredAt?'<span>✓ Livrée le '+new Date(s.deliveredAt).toLocaleDateString('fr-FR')+'</span>':'')+
+      (s.rejectedAt?'<span style="color:#c0392b;">✗ Refusée le '+new Date(s.rejectedAt).toLocaleDateString('fr-FR')+(s.rejectionReason?' — '+esc(s.rejectionReason):'')+'</span>':'')+
+      (s.questionsAsked?'<span style="color:#c2410c;">❓ Le labo a demandé des précisions'+(s.questionsAskedAt?' le '+new Date(s.questionsAskedAt).toLocaleDateString('fr-FR'):'')+'</span>':'')+
+    '</div>':'')+
+  '</div>';
+}
+
+function _caseHasActiveStep(c){
+  return (c.steps||[]).some(function(s){return s.status!=='delivered'&&s.status!=='rejected';});
+}
+function _caseMatchesSearch(c,q){
+  if(!q)return true;
+  const lower=q.toLowerCase();
+  const name=((c.patient&&c.patient.name)||'').toLowerCase();
+  const goal=(c.finalGoal||'').toLowerCase();
+  const stepDescs=(c.steps||[]).map(function(s){return ((s.description||'')+' '+(s.notes||'')).toLowerCase();}).join(' ');
+  const teeth=(c.teeth||[]).join(' ');
+  return name.includes(lower)||goal.includes(lower)||stepDescs.includes(lower)||teeth.includes(lower);
+}
+async function renderOrdersList(useCache){
+  const el=document.getElementById('orders-list');if(!el)return;
+  let list=useCache?_portalOrdersCache:null;
+  if(!list){
+    el.innerHTML='<div style="text-align:center;padding:30px;color:var(--ink-soft);font-size:.82rem;">Chargement…</div>';
+    try{
+      const sb=supabase.createClient(SB_URL,SB_ANON);
+      const{data:rows}=await sb.from('labo_data').select('data').eq('id','orders_'+sessionPortalId);
+      list=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
+      list.forEach(_migrateOrderToCase);
+      _portalOrdersCache=list;
+    }catch(e){el.innerHTML='<div class="empty-state">Erreur de chargement : '+esc(e.message)+'</div>';return;}
+  }
+  try{
+    // Filtrer : seulement les cas qui ont au moins une étape active (pas livrée ni refusée)
+    const enCours=list.filter(_caseHasActiveStep);
+    // Filtre de recherche
+    const searchInput=document.getElementById('orders-search');
+    const q=searchInput?searchInput.value.trim():'';
+    const filtered=enCours.filter(function(c){return _caseMatchesSearch(c,q);});
+
+    if(!filtered.length){
+      if(q){
+        el.innerHTML='<div class="empty-state"><div class="empty-icon">🔍</div>Aucune commande ne correspond à « '+esc(q)+' ».<br/><button onclick="document.getElementById(\'orders-search\').value=\'\';renderOrdersList(true);" style="margin-top:10px;background:transparent;border:none;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:.86rem;">Effacer la recherche</button></div>';
+      }else if(!list.length){
+        el.innerHTML='<div class="empty-state"><div class="empty-icon">📝</div>Aucune commande envoyée.<br/>Cliquez sur « + Nouvelle commande » pour en créer une.</div>';
+      }else{
+        el.innerHTML='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:1rem;font-weight:600;color:var(--ink);margin-bottom:6px;">Toutes vos commandes ont été livrées !</div><div style="font-size:.9rem;color:var(--ink-soft);">Vous les retrouvez dans l\'onglet « Mes bons de livraison ».</div></div>';
+      }
+      return;
+    }
+
+    el.innerHTML=filtered.map(function(c){
+      const teethStr=(c.teeth||[]).join(', ')||'—';
+      const sexeIcon=c.patient.sexe==='F'?' ♀':c.patient.sexe==='M'?' ♂':'';
+      // Tri chronologique (du plus ancien au plus récent — comme une feuille papier)
+      const stepsSorted=(c.steps||[]).slice().sort(function(a,b){return (a.requestedAt||'').localeCompare(b.requestedAt||'');});
+      const stepsHtml=stepsSorted.map(function(s,i){return _renderFicheBlockCabHTML(s,i);}).join('');
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:14px;">'+
+        // En-tête patient/cas (style papier)
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">'+
+            '<div style="flex:1;min-width:0;font-size:.86rem;line-height:1.6;">'+
+              '<div><strong>👤 Code patient :</strong> '+esc(c.patient.name)+sexeIcon+(c.patient.age?' · '+esc(c.patient.age)+' ans':'')+'</div>'+
+              '<div><strong>🎯 Objectif final :</strong> '+esc(c.finalGoal||'—')+'</div>'+
+              '<div><strong>🦷 Dents :</strong> <span style="font-family:monospace;color:var(--accent);">'+esc(teethStr)+'</span></div>'+
+            '</div>'+
+            '<div style="text-align:right;flex-shrink:0;font-size:.7rem;color:var(--ink-soft);">Cas créé le '+new Date(c.createdAt).toLocaleDateString('fr-FR')+'</div>'+
+          '</div>'+
+        '</div>'+
+        '<div style="font-size:.68rem;font-weight:700;text-transform:uppercase;color:var(--ink-soft);margin-bottom:4px;letter-spacing:.06em;">📜 Carnet de demandes ('+(c.steps||[]).length+')</div>'+
+        stepsHtml+
+        '<button onclick="addStepToCase(\''+esc(c.id)+'\')" style="margin-top:14px;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:.86rem;font-weight:600;cursor:pointer;width:100%;">+ Ajouter une fiche à ce cas</button>'+
+      '</div>';
+    }).join('');
+  }catch(e){el.innerHTML='<div class="empty-state">Erreur de chargement : '+esc(e.message)+'</div>';}
+}
+
+function setupTabs(){
+  document.querySelectorAll('[data-ptab]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      document.querySelectorAll('[data-ptab]').forEach(function(b){b.classList.remove('on');});
+      btn.classList.add('on');
+      const id=btn.dataset.ptab;
+      if(sessionPortalId){
+        try{localStorage.setItem('cab_last_tab_'+sessionPortalId,id);}catch(e){}
+      }
+      document.getElementById('ptab-bls').style.display=id==='bls'?'block':'none';
+      document.getElementById('ptab-orders').style.display=id==='orders'?'block':'none';
+      document.getElementById('ptab-neworder').style.display=id==='neworder'?'block':'none';
+      document.getElementById('ptab-factures').style.display=id==='factures'?'block':'none';
+      document.getElementById('ptab-messages').style.display=id==='messages'?'block':'none';
+      if(id==='neworder')renderOrderForm();
+      if(id==='orders')renderOrdersList();
+      if(id==='messages'){
+        // Mark as read
+        document.getElementById('chat-notif').style.display='none';
+        if(sessionPortalId) localStorage.setItem('chat_seen_cab_'+sessionPortalId, new Date().toISOString());
+        loadPortalChat(true);
+        startPortalChatPoll();
+      }
+    });
+  });
+}
+
+function setupFilters(){
+  document.getElementById('bl-search').addEventListener('input',function(){renderBLs();});
+  document.getElementById('bl-filter-status').addEventListener('change',function(){renderBLs();});
+
+  // Print button delegation
+  document.getElementById('bl-list').addEventListener('click',function(e){
+    const btn=e.target.closest('[data-print-bl-id]');
+    if(btn) printBLPortal(btn.dataset.printBlId);
+  });
+}
+
+function printBLPortal(blId){
+  const bl = (portalData.bdl||[]).find(function(b){return b.id===blId;});
+  if(!bl){alert('Bon introuvable.');return;}
+  const cab = {name:portalData.cabName, phone:portalData.cabPhone||'', email:portalData.cabEmail||''};
+  const labo = portalData.laboLegal||{raisonSociale:portalData.laboName||'', siret:'',adresse:'',tel:'',email:'',directeur:'',ceNum:''};
+
+  const dateFormatted = bl.date ? new Date(bl.date+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}) : '';
+  const blDateShort = bl.date ? new Date(bl.date+'T12:00:00').toLocaleDateString('fr-FR') : '';
+  const patient = bl.patient||'—';
+  const typeLabel = bl.typeLabel||'Prothèse dentaire';
+  const nb = bl.nb||1;
+  const materiaux = bl.materiaux||'—';
+  const ref = bl.prothesisId||bl.trackCode||bl.num;
+
+  const html=`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"/><title>BL ${esc(bl.num)} — ${esc(patient)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:10pt;color:#0f172a;background:#fff;}
+.page{width:210mm;min-height:297mm;margin:0 auto;padding:18mm 18mm 16mm;}
+@media print{.page{padding:15mm 16mm 12mm;}.no-print{display:none;}body{background:#fff;}}
+@page{size:A4;margin:0;}
+h1{font-size:16pt;font-weight:700;}
+h2{font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2.5px solid #0f172a;}
+.labo-name{font-size:13pt;font-weight:800;}
+.labo-info{font-size:8pt;color:#666;line-height:1.6;margin-top:4px;}
+.doc-title{text-align:right;}
+.doc-title h1{color:#2563eb;}
+.doc-num,.doc-date{font-size:9pt;color:#475569;margin-top:4px;}
+.parties{display:flex;gap:24px;margin-bottom:20px;}
+.party-box{flex:1;background:#f1f5f9;border-radius:8px;padding:12px 14px;border:1px solid #e2e8f0;}
+.party-label{font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#475569;margin-bottom:6px;}
+.party-name{font-size:10pt;font-weight:700;}
+.party-detail{font-size:8.5pt;color:#555;line-height:1.55;margin-top:3px;}
+table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+thead tr{background:#0f172a;color:#fff;}
+thead th{padding:8px 10px;text-align:left;font-size:8.5pt;font-weight:600;letter-spacing:.04em;}
+tbody tr{border-bottom:1px solid #e2e8f0;}
+tbody td{padding:8px 10px;font-size:9pt;}
+tbody tr:nth-child(even){background:#f8fafc;}
+.total-row td{font-weight:700;font-size:10pt;border-top:2px solid #0f172a;padding-top:10px;}
+.amount{text-align:right;color:#2563eb;font-size:11pt;font-weight:800;}
+hr{border:none;border-top:1.5px solid #e2e8f0;margin:22px 0;}
+.ce-section{background:#eff6ff;border:1.5px solid #3b82f6;border-radius:8px;padding:14px 16px;margin-top:20px;}
+.ce-title{font-size:10pt;font-weight:700;color:#1d4ed8;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.ce-mark{font-size:14pt;font-weight:900;color:#1d4ed8;border:2.5px solid #1d4ed8;border-radius:3px;padding:0 4px;line-height:1.2;display:inline-block;}
+.ce-body{font-size:8.5pt;color:#333;line-height:1.65;}
+.ce-table{width:100%;margin-top:10px;border-collapse:collapse;}
+.ce-table td{font-size:8.5pt;padding:4px 8px;border:1px solid #bfdbfe;background:#fff;}
+.ce-table td:first-child{font-weight:600;background:#dbeafe;width:42%;color:#1d4ed8;}
+.sig-area{display:flex;justify-content:space-between;margin-top:24px;gap:16px;}
+.sig-box{flex:1;border-top:1.5px solid #0f172a;padding-top:10px;}
+.sig-label{font-size:8pt;color:#475569;font-weight:600;text-transform:uppercase;letter-spacing:.06em;}
+.sig-detail{font-size:8pt;color:#555;margin-top:4px;line-height:1.5;}
+.footer{margin-top:28px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:7.5pt;color:#aaa;text-align:center;}
+.print-btn{position:fixed;bottom:24px;right:24px;background:#2563eb;color:#fff;border:none;border-radius:10px;padding:12px 20px;font-size:10pt;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25);}
+</style></head><body>
+<button class="print-btn no-print" onclick="window.print()">🖨️ Imprimer</button>
+<div class="page">
+<div class="header">
+  <div><div class="labo-name">${esc(labo.raisonSociale||portalData.laboName||'')}</div>
+    <div class="labo-info">${labo.siret?'SIRET : '+esc(labo.siret)+'<br/>':''}${labo.adresse?esc(labo.adresse)+'<br/>':''}${labo.tel?'Tél : '+esc(labo.tel)+'   ':''}${labo.email?esc(labo.email):''}</div>
+  </div>
+  <div class="doc-title"><h1>Bon de Livraison</h1><div class="doc-num">${esc(bl.num)}</div><div class="doc-date">Émis le ${dateFormatted}</div></div>
+</div>
+<div class="parties">
+  <div class="party-box"><div class="party-label">Laboratoire — Expéditeur</div>
+    <div class="party-name">${esc(labo.raisonSociale||portalData.laboName||'')}</div>
+    <div class="party-detail">${labo.siret?'SIRET : '+esc(labo.siret)+'<br/>':''}${labo.adresse?esc(labo.adresse)+'<br/>':''}${labo.directeur?'Resp. : '+esc(labo.directeur):''}</div>
+  </div>
+  <div class="party-box"><div class="party-label">Cabinet dentaire — Destinataire</div>
+    <div class="party-name">${esc(cab.name)}</div>
+    <div class="party-detail">${cab.phone?'Tél : '+esc(cab.phone)+'<br/>':''}${cab.email?esc(cab.email):''}</div>
+  </div>
+</div>
+<h2>Détail des travaux</h2>
+<table>
+  <thead><tr><th>Code patient</th><th>Description</th><th>Matériaux</th><th style="text-align:center;">Qté</th><th style="text-align:right;">Prix u.</th><th style="text-align:right;">Montant</th></tr></thead>
+  <tbody>${(function(){
+    const lignes=bl.lignes&&bl.lignes.length?bl.lignes:[{typeLabel:typeLabel,nb:nb,prix:bl.prix!=null?bl.prix:null,total:bl.total!=null?bl.total:null}];
+    return lignes.map(function(l,i){
+      const prixStr=l.prix!=null?l.prix.toFixed(2).replace('.',',')+'\u00a0€':'—';
+      const totalStr=l.total!=null?l.total.toFixed(2).replace('.',',')+'\u00a0€':'—';
+      return '<tr>'
+        +(i===0?'<td rowspan="'+lignes.length+'" style="vertical-align:top;">'+esc(patient)+(bl.prothesisId?'<br/><span style="font-size:7.5pt;color:#475569;">Réf. : '+esc(bl.prothesisId)+'</span>':'')+(bl.deliveryDate?'<br/><span style="font-size:7.5pt;color:#059669;">Livraison : '+new Date(bl.deliveryDate+'T12:00:00').toLocaleDateString('fr-FR')+'</span>':'')+'</td>':'')
+        +'<td>'+esc(l.typeLabel)+'</td>'
+        +(i===0?'<td rowspan="'+lignes.length+'">'+esc(materiaux)+'</td>':'')
+        +'<td style="text-align:center;">'+l.nb+'</td>'
+        +'<td style="text-align:right;">'+prixStr+'</td>'
+        +'<td class="amount">'+totalStr+'</td>'
+        +'</tr>';
+    }).join('');
+  })()}</tbody>
+  ${bl.total!=null?'<tfoot><tr class="total-row"><td colspan="4"></td><td style="text-align:right;font-size:9pt;color:#666;">Total</td><td class="amount">'+bl.total.toFixed(2).replace('.',',')+'\u00a0\u20ac</td></tr></tfoot>':''}
+</table>
+${bl.note?'<div style="background:#fff8f5;border:1px solid #f0cfc0;border-radius:7px;padding:10px 12px;font-size:8.5pt;color:#555;margin-bottom:16px;"><strong>Note :</strong> '+esc(bl.note)+'</div>':''}
+<hr/>
+<div class="ce-section">
+  <div class="ce-title"><span class="ce-mark">CE</span> Déclaration de Conformité — Dispositif Médical sur Mesure</div>
+  <div class="ce-body">Conformément au <strong>Règlement (UE) 2017/745 du Parlement européen et du Conseil</strong> relatif aux dispositifs médicaux (MDR), Annexe XIII, le laboratoire soussigné déclare que le dispositif médical sur mesure livré a été fabriqué conformément à la prescription médicale du praticien et aux bonnes pratiques de fabrication en vigueur.</div>
+  <table class="ce-table" style="margin-top:12px;">
+    <tr><td>Fabricant</td><td>${esc(labo.raisonSociale||portalData.laboName||'')}${labo.siret?' — SIRET : '+esc(labo.siret):''}</td></tr>
+    <tr><td>Adresse du fabricant</td><td>${labo.adresse?esc(labo.adresse):'—'}</td></tr>
+    ${labo.ceNum?'<tr><td>N° fabricant CE</td><td>'+esc(labo.ceNum)+'</td></tr>':''}
+    <tr><td>Responsable technique</td><td>${labo.directeur?esc(labo.directeur):'—'}</td></tr>
+    <tr><td>Destinataire</td><td>${esc(cab.name)}</td></tr>
+    <tr><td>Code patient</td><td>${esc(patient)}</td></tr>
+    <tr><td>Description du dispositif</td><td>${esc(typeLabel)}</td></tr>
+    <tr><td>Matériaux utilisés</td><td>${esc(materiaux)}</td></tr>
+    ${bl.lot?'<tr><td>N° de lot (traçabilité)</td><td><strong>'+esc(bl.lot)+'</strong></td></tr>':''}
+    <tr><td>Référence du dispositif</td><td>${esc(ref)}</td></tr>
+    <tr><td>Date de fabrication</td><td>${blDateShort}</td></tr>
+    <tr><td>Référence BL</td><td>${esc(bl.num)}</td></tr>
+  </table>
+  <div class="ce-body" style="margin-top:12px;font-size:8pt;color:#555;">Ce dispositif médical sur mesure est destiné exclusivement au patient mentionné ci-dessus sur prescription du praticien, et n'est pas destiné à la vente au public.</div>
+</div>
+<div class="sig-area">
+  <div class="sig-box"><div class="sig-label">Laboratoire — Signature & Cachet</div><div class="sig-detail">${esc(labo.raisonSociale||portalData.laboName||'')}<br/>${labo.directeur?esc(labo.directeur):''}</div></div>
+  <div class="sig-box"><div class="sig-label">Cabinet — Signature à la réception</div><div class="sig-detail">${esc(cab.name)}<br/>Date de réception : _______________</div></div>
+</div>
+<div class="footer">${esc(labo.raisonSociale||portalData.laboName||'')} ${labo.siret?'— SIRET : '+esc(labo.siret):''} ${labo.adresse?'— '+esc(labo.adresse):''} — EU MDR 2017/745</div>
+</div></body></html>`;
+
+  const w = window.open('','_blank','width=900,height=900');
+  if(!w){alert('Popup bloqué — autorisez les popups pour ce site.');return;}
+  w.document.write(html);
+  w.document.close();
+}
+
+function printFacturePortal(facId){
+  const fac=(portalData.factures||[]).find(function(f){return f.id===facId;});
+  if(!fac){alert('Facture introuvable.');return;}
+  const labo=portalData.laboLegal||{raisonSociale:portalData.laboName||'',siret:'',adresse:'',tel:'',email:''};
+  const cab={name:portalData.cabName||'',phone:portalData.cabPhone||'',email:portalData.cabEmail||''};
+  const isPaid=fac.status==='paye'||fac.status==='paid'||fac.status==='payé';
+  const dateDoc=new Date(fac.date+'T12:00:00');
+  const dateFormatted=dateDoc.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+  const ech=new Date(dateDoc);ech.setDate(ech.getDate()+30);
+  const echFormatted=ech.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+  function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function fmtC(v){return (parseFloat(v)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+'\u00a0€';}
+  const linesHTML=(fac.lines||[]).map(function(l){
+    const pu=parseFloat(l.prix)||0;const qty=parseFloat(l.qty)||1;
+    return '<tr>'+
+      '<td>'+e(l.label||'')+(l.patient?'<br/><span style="font-size:7.5pt;color:#475569;font-style:italic;">'+e(l.patient)+'</span>':'')+(l.ref?'<br/><span style="font-size:7.5pt;color:#475569;">Réf. '+e(l.ref)+'</span>':'')+'</td>'+
+      '<td style="text-align:center;">'+qty+'</td>'+
+      (pu?'<td style="text-align:right;">'+fmtC(pu)+'</td><td style="text-align:right;font-weight:700;">'+fmtC(qty*pu)+'</td>':'<td colspan="2" style="text-align:right;font-weight:700;">'+fmtC(qty*(pu||fac.total/(fac.lines.length||1)))+'</td>')+
+    '</tr>';
+  }).join('');
+  const bdlRefsHtml=(fac.bdlRefs&&fac.bdlRefs.length)?'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:8px 12px;margin-bottom:14px;font-size:8.5pt;color:#1d4ed8;"><strong>Bons de livraison associés :</strong> '+e(fac.bdlRefs.join(', '))+'</div>':'';
+  const w=window.open('','_blank','width=900,height=900');
+  if(!w){alert('Popup bloqué — autorisez les popups pour ce site.');return;}
+  w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/>
+<title>FACTURE ${e(fac.num)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:10pt;color:#0f172a;background:#fff;}
+.page{width:210mm;min-height:297mm;margin:0 auto;padding:18mm 18mm 16mm;}
+@media print{.page{padding:15mm 16mm 12mm;}.no-print{display:none;}body{background:#fff;}}
+@page{size:A4;margin:0;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;padding-bottom:14px;border-bottom:2.5px solid #0f172a;}
+.labo-name{font-size:14pt;font-weight:800;}.labo-info{font-size:8pt;color:#555;line-height:1.65;margin-top:5px;}
+.doc-side{text-align:right;}.doc-type{font-size:22pt;font-weight:900;color:#2563eb;letter-spacing:-.5px;}
+.doc-num{font-size:10pt;color:#475569;margin-top:5px;}.doc-date{font-size:8.5pt;color:#475569;margin-top:2px;}
+.doc-ech{font-size:8.5pt;font-weight:700;color:#2563eb;margin-top:2px;}
+.parties{display:flex;gap:18px;margin-bottom:18px;}
+.party-box{flex:1;background:#f1f5f9;border-radius:8px;padding:11px 13px;border:1px solid #e2e8f0;}
+.party-label{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#475569;margin-bottom:5px;}
+.party-name{font-size:10pt;font-weight:700;}.party-detail{font-size:8pt;color:#555;line-height:1.55;margin-top:3px;}
+table{width:100%;border-collapse:collapse;margin-bottom:14px;}
+thead tr{background:#0f172a;color:#fff;}thead th{padding:7px 10px;text-align:left;font-size:8pt;font-weight:600;letter-spacing:.04em;}
+tbody tr{border-bottom:1px solid #e2e8f0;}tbody td{padding:7px 10px;font-size:9pt;}
+tbody tr:nth-child(even){background:#f8fafc;}
+.total-section{background:#f1f5f9;border-radius:8px;padding:11px 14px;margin-bottom:18px;}
+.trow{display:flex;justify-content:space-between;padding:3px 0;font-size:8.5pt;}
+.trow.final{font-size:13pt;font-weight:800;color:#2563eb;border-top:2px solid #0f172a;margin-top:7px;padding-top:8px;}
+.paid-badge{display:inline-block;background:#d1fae5;color:#059669;padding:3px 12px;border-radius:99px;font-size:8pt;font-weight:700;margin-left:8px;}
+.footer{margin-top:20px;padding-top:8px;border-top:1px solid #e2e8f0;font-size:7pt;color:#aaa;text-align:center;line-height:1.6;}
+.print-btn{position:fixed;bottom:20px;right:20px;background:#2563eb;color:#fff;border:none;border-radius:10px;padding:11px 18px;font-size:10pt;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25);}
+</style></head><body>
+<button class="print-btn no-print" onclick="window.print()">🖨️ Imprimer / PDF</button>
+<div class="page">
+<div class="header">
+  <div><div class="labo-name">${e(labo.raisonSociale||portalData.laboName||'')}</div>
+    <div class="labo-info">${labo.siret?'SIRET : '+e(labo.siret)+'<br/>':''}${labo.adresse?e(labo.adresse)+'<br/>':''}${labo.tel?'Tél : '+e(labo.tel)+(labo.email?' &nbsp;·&nbsp; ':''):''}${labo.email?e(labo.email):''}</div>
+  </div>
+  <div class="doc-side"><div class="doc-type">FACTURE${isPaid?'<span class="paid-badge">✅ Réglée</span>':''}</div>
+    <div class="doc-num">N° ${e(fac.num)}</div><div class="doc-date">Émis le ${dateFormatted}</div>
+    ${!isPaid?'<div class="doc-ech">Échéance : '+echFormatted+'</div>':''}
+  </div>
+</div>
+<div class="parties">
+  <div class="party-box"><div class="party-label">Émetteur</div>
+    <div class="party-name">${e(labo.raisonSociale||portalData.laboName||'')}</div>
+    <div class="party-detail">${labo.siret?'SIRET : '+e(labo.siret)+'<br/>':''}${labo.adresse?e(labo.adresse):''}${labo.directeur?'<br/>Resp. : '+e(labo.directeur):''}</div>
+  </div>
+  <div class="party-box"><div class="party-label">Destinataire</div>
+    <div class="party-name">${e(cab.name)}</div>
+    <div class="party-detail">${cab.phone?'Tél : '+e(cab.phone)+'<br/>':''}${cab.email?e(cab.email):''}</div>
+  </div>
+</div>
+${bdlRefsHtml}
+<table>
+  <thead><tr><th>Prestation</th><th style="text-align:center;width:50px;">Qté</th><th style="text-align:right;width:80px;">P.U.</th><th style="text-align:right;width:90px;">Montant</th></tr></thead>
+  <tbody>${linesHTML}</tbody>
+</table>
+<div class="total-section">
+  <div class="trow final"><span>Total TTC</span><span>${fmtC(fac.total)}</span></div>
+</div>
+${fac.note?'<div style="background:#fff8f5;border:1px solid #f0cfc0;border-radius:7px;padding:9px 12px;font-size:8.5pt;color:#555;margin-bottom:14px;"><strong>Note :</strong> '+e(fac.note)+'</div>':''}
+<div class="footer">${e(labo.raisonSociale||portalData.laboName||'')}${labo.siret?' — SIRET : '+e(labo.siret):''} ${labo.adresse?'— '+e(labo.adresse):''}</div>
+</div></body></html>`);
+  w.document.close();
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+/* ── HELP TIPS : <button class="help-tip" data-help-title="…" data-help="…">?</button> ── */
+document.addEventListener('click',function(e){
+  var tip=e.target.closest('.help-tip');
+  if(tip){
+    e.preventDefault();e.stopPropagation();
+    showHelpPopover(tip,tip.getAttribute('data-help-title')||'Aide',tip.getAttribute('data-help')||'');
+  }
+});
+function showHelpPopover(anchor,title,text){
+  var existing=document.getElementById('help-popover');if(existing)existing.remove();
+  var pop=document.createElement('div');
+  pop.id='help-popover';
+  pop.style.cssText='position:absolute;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;box-shadow:0 12px 36px rgba(15,23,42,.18);z-index:1100;max-width:340px;font-size:.92rem;line-height:1.55;color:#1e293b;';
+  pop.innerHTML='<div style="font-weight:700;margin-bottom:8px;color:#0f172a;font-size:.96rem;">'+esc(title)+'</div>'+
+    '<div style="color:#475569;">'+esc(text)+'</div>'+
+    '<button id="help-pop-close" style="margin-top:12px;background:#f1f5f9;color:#475569;border:none;border-radius:6px;padding:7px 14px;font-size:.86rem;font-weight:600;cursor:pointer;">Fermer</button>';
+  document.body.appendChild(pop);
+  var rect=anchor.getBoundingClientRect();
+  var popRect=pop.getBoundingClientRect();
+  var left=rect.left+(rect.width/2)-(popRect.width/2);
+  var top=rect.bottom+window.scrollY+8;
+  if(left<12)left=12;
+  if(left+popRect.width>window.innerWidth-12)left=window.innerWidth-popRect.width-12;
+  pop.style.left=left+'px';pop.style.top=top+'px';
+  pop.querySelector('#help-pop-close').onclick=function(){pop.remove();};
+  setTimeout(function(){
+    function onOutside(e){if(!pop.contains(e.target)){pop.remove();document.removeEventListener('click',onOutside);}}
+    document.addEventListener('click',onOutside);
+  },50);
+}
+function fmtEur(v){return (parseFloat(v)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
+function fmtCur(v){return (parseFloat(v)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
+
+/* ══ CHAT CABINET ══ */
+var _portalChatInterval = null;
+
+async function loadPortalChat(scrollToBottom){
+  if(!sessionPortalId) return;
+  try{
+    const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId));
+    if(!r.ok) return;
+    const rows = await r.json();
+    const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
+    renderPortalChat(msgs, scrollToBottom);
+    // Update last seen
+    if(msgs.length){
+      const lastLaboMsg = [...msgs].reverse().find(function(m){return m.sender==='labo';});
+      if(lastLaboMsg) localStorage.setItem('chat_seen_cab_'+sessionPortalId, lastLaboMsg.createdAt);
+    }
+  }catch(e){ console.warn('Portal chat error',e); }
+}
+
+function renderPortalChat(msgs, scrollToBottom){
+  const el = document.getElementById('chat-portal-msgs');
+  const cabName = portalData&&portalData.cabName ? portalData.cabName : 'Cabinet';
+  if(!msgs.length){
+    el.innerHTML = '<div style="text-align:center;color:var(--ink-soft);font-size:.78rem;padding:30px 0;">Aucun message. Démarrez la conversation avec votre laboratoire !</div>';
+    return;
+  }
+  el.innerHTML = msgs.map(function(m){
+    const isCab = m.sender==='cabinet';
+    const time = m.createdAt ? new Date(m.createdAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+    const date = m.createdAt ? new Date(m.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}) : '';
+    let attachHtml = '';
+    if(m.image){
+      attachHtml = '<img src="'+esc(m.image)+'" style="max-width:220px;max-height:180px;border-radius:8px;display:block;cursor:pointer;" onclick="chatViewImg(this.src)"/>';
+    } else if(m.attachment){
+      const a = m.attachment;
+      if(a.type==='image'){
+        attachHtml = '<img src="'+esc(a.url)+'" style="max-width:220px;max-height:180px;border-radius:8px;display:block;cursor:pointer;" onclick="chatViewImg(this.src)"/>';
+      } else {
+        const ic = a.type==='stl'?'🦷':a.type==='pdf'?'📄':'📎';
+        const sz = a.size?_humanFileSizeCab(a.size):'';
+        attachHtml = '<a href="'+esc(a.url)+'" target="_blank" rel="noopener" download="'+esc(a.name||'fichier')+'" style="display:flex;align-items:center;gap:10px;background:'+(isCab?'rgba(255,255,255,.18)':'var(--bg)')+';border:1px solid '+(isCab?'rgba(255,255,255,.3)':'var(--border)')+';border-radius:8px;padding:8px 10px;text-decoration:none;color:inherit;max-width:240px;">'+
+          '<span style="font-size:1.5rem;line-height:1;flex-shrink:0;">'+ic+'</span>'+
+          '<span style="flex:1;min-width:0;"><span style="display:block;font-weight:600;font-size:.84rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(a.name||'fichier')+'</span><span style="display:block;font-size:.7rem;opacity:.85;">'+esc((a.type||'').toUpperCase())+(sz?' · '+sz:'')+' · cliquer pour ouvrir</span></span>'+
+        '</a>';
+      }
+    }
+    const bubbleContent = attachHtml
+      ? attachHtml + (m.content?'<div style="margin-top:5px;font-size:.82rem;">'+chatRenderContent(m.content,isCab)+'</div>':'')
+      : chatRenderContent(m.content,isCab);
+    return '<div style="display:flex;flex-direction:column;align-items:'+(isCab?'flex-end':'flex-start')+';gap:2px;">'
+      +'<div style="max-width:78%;background:'+(isCab?'var(--accent)':'var(--bg)')+';color:'+(isCab?'#fff':'var(--ink)')+';border-radius:'+(isCab?'12px 12px 3px 12px':'12px 12px 12px 3px')+';padding:'+(m.image?'6px':'8px 12px')+';font-size:.82rem;border:1px solid '+(isCab?'transparent':'var(--border)')+';word-break:break-word;">'+bubbleContent+'</div>'
+      +'<div style="font-size:.62rem;color:var(--ink-soft);padding:0 3px;">'+esc(m.senderName||m.sender)+' · '+date+' '+time+'</div>'
+      +'</div>';
+  }).join('');
+  if(scrollToBottom) el.scrollTop = el.scrollHeight;
+}
+
+var _portalPendingPhoto = null;
+
+async function sendPortalMsg(){
+  if(!sessionPortalId) return;
+  const input = document.getElementById('chat-portal-input');
+  const content = input.value.trim();
+  if(!content && !_portalPendingPhoto && !_portalPendingAttachment) return;
+  const cabName = portalData&&portalData.cabName ? portalData.cabName : 'Cabinet';
+  const sendBtn = document.querySelector('#ptab-messages button[onclick="sendPortalMsg()"]');
+  input.disabled = true;
+  if(sendBtn){sendBtn.disabled=true;sendBtn.textContent='Envoi…';}
+  // Upload du fichier non-image (STL, PDF…) si présent
+  let attachment = null;
+  if(_portalPendingAttachment){
+    try{
+      const url = await _uploadPortalChatFile(_portalPendingAttachment.file, sessionPortalId);
+      attachment = {url:url, name:_portalPendingAttachment.name, size:_portalPendingAttachment.size, type:_portalPendingAttachment.type};
+    }catch(e){
+      console.error('Upload échoué', e);
+      showToast('❌ Erreur d\'envoi du fichier','#c0392b');
+      input.disabled = false;
+      if(sendBtn){sendBtn.disabled=false;sendBtn.textContent='Envoyer';}
+      return;
+    }
+  }
+  input.value = '';
+  const photo = _portalPendingPhoto;
+  portalClearPhoto();
+  try{
+    const body = {action:'chat',portalId:sessionPortalId,sender:'cabinet',senderName:cabName,content:content};
+    if(photo) body.image = photo;
+    if(attachment) body.attachment = attachment;
+    const r = await fetch('/.netlify/functions/portal',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if(r.ok){
+      await loadPortalChat(true);
+      showToast('✅ Message envoyé','#16a34a');
+    } else {
+      showToast('❌ Envoi impossible','#c0392b');
+    }
+  }catch(e){
+    showToast('❌ Erreur réseau','#c0392b');
+  }
+  input.disabled = false;
+  if(sendBtn){sendBtn.disabled=false;sendBtn.textContent='Envoyer';}
+  input.focus();
+}
+
+var _portalPendingAttachment = null;
+function _humanFileSizeCab(bytes){
+  if(bytes<1024)return bytes+' o';
+  if(bytes<1024*1024)return (bytes/1024).toFixed(0)+' Ko';
+  return (bytes/(1024*1024)).toFixed(1)+' Mo';
+}
+function portalFileSelected(input){
+  const file = input.files[0];
+  if(!file) return;
+  input.value = '';
+  // Limite de taille : 50 Mo
+  if(file.size > 50*1024*1024){
+    showToast('⚠️ Fichier trop lourd (max 50 Mo)','#d97706');
+    return;
+  }
+  const isImage = file.type && file.type.indexOf('image/') === 0;
+  if(isImage){
+    // Photos : compressées et envoyées en base64 (compatibilité)
+    chatCompressImage(file, function(base64){
+      _portalPendingPhoto = base64;
+      document.getElementById('portal-photo-img').src = base64;
+      document.getElementById('portal-photo-img').style.display = 'block';
+      document.getElementById('portal-file-card').style.display = 'none';
+      document.getElementById('portal-photo-preview').style.display = 'block';
+    });
+  } else {
+    // Fichiers (STL, PDF, OBJ…) : Supabase Storage
+    const ext = (file.name.split('.').pop()||'').toLowerCase();
+    const fileType = ext==='stl'?'stl':ext==='obj'?'obj':ext==='ply'?'ply':ext==='pdf'?'pdf':'file';
+    _portalPendingAttachment = {file:file, name:file.name, size:file.size, type:fileType};
+    const icon = fileType==='stl'?'🦷':fileType==='pdf'?'📄':'📎';
+    document.getElementById('portal-file-icon').textContent = icon;
+    document.getElementById('portal-file-name').textContent = file.name;
+    document.getElementById('portal-file-size').textContent = _humanFileSizeCab(file.size);
+    document.getElementById('portal-photo-img').style.display = 'none';
+    document.getElementById('portal-file-card').style.display = 'flex';
+    document.getElementById('portal-photo-preview').style.display = 'block';
+  }
+}
+
+function portalClearPhoto(){
+  _portalPendingPhoto = null;
+  _portalPendingAttachment = null;
+  document.getElementById('portal-photo-preview').style.display = 'none';
+  const img=document.getElementById('portal-photo-img');if(img){img.src='';img.style.display='none';}
+  const card=document.getElementById('portal-file-card');if(card)card.style.display='none';
+}
+
+async function _uploadPortalChatFile(file, portalId){
+  const sb = supabase.createClient(SB_URL, SB_ANON);
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  const path = portalId+'/'+Date.now()+'_'+safeName;
+  const {data, error} = await sb.storage.from('chat-files').upload(path, file, {cacheControl:'3600', upsert:false});
+  if(error) throw error;
+  const {data:pub} = sb.storage.from('chat-files').getPublicUrl(path);
+  return pub.publicUrl;
+}
+
+function chatCompressImage(file, cb){
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const img = new Image();
+    img.onload = function(){
+      const MAX = 900;
+      let w = img.width, h = img.height;
+      if(w > MAX || h > MAX){
+        if(w > h){ h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      cb(canvas.toDataURL('image/jpeg', 0.72));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function chatViewImg(src){
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+  overlay.innerHTML = '<img src="'+src+'" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5);"/>';
+  overlay.onclick = function(){ document.body.removeChild(overlay); };
+  document.body.appendChild(overlay);
+}
+
+function chatPortalKeyDown(e){
+  const dd = document.getElementById('portal-mention-dd');
+  if(dd && dd.style.display!=='none'){
+    const items = dd.querySelectorAll('.mention-item');
+    const active = dd.querySelector('.mention-item.active');
+    if(e.key==='ArrowDown'){
+      e.preventDefault();
+      const next = active ? active.nextElementSibling : items[0];
+      if(active) active.classList.remove('active');
+      if(next){next.classList.add('active');next.scrollIntoView({block:'nearest'});}
+      return;
+    }
+    if(e.key==='ArrowUp'){
+      e.preventDefault();
+      const prev = active ? active.previousElementSibling : items[items.length-1];
+      if(active) active.classList.remove('active');
+      if(prev){prev.classList.add('active');prev.scrollIntoView({block:'nearest'});}
+      return;
+    }
+    if(e.key==='Enter'||e.key==='Tab'){
+      const sel = dd.querySelector('.mention-item.active')||items[0];
+      if(sel){e.preventDefault();sel.click();return;}
+    }
+    if(e.key==='Escape'){chatHideMention('portal-mention-dd');return;}
+  }
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendPortalMsg();}
+}
+
+function chatRenderContent(text, darkBg){
+  const escaped = esc(text);
+  const mentionColor = darkBg ? '#ffffffcc' : 'var(--accent)';
+  const mentionBg = darkBg ? 'rgba(255,255,255,.18)' : 'rgba(90,52,114,.10)';
+  const withMentions = escaped.replace(/@([\w\u00C0-\u017E]+(?:_[\w\u00C0-\u017E]+)*)/g, function(match, name){
+    const display = name.replace(/_/g,' ');
+    return '<span style="font-weight:700;color:'+mentionColor+';background:'+mentionBg+';border-radius:3px;padding:0 3px;">@'+display+'</span>';
+  });
+  return withMentions.replace(/\n/g,'<br/>');
+}
+
+function chatMentionInput(textarea, ddId, side){
+  const query = chatGetMentionQuery(textarea);
+  if(query===null){chatHideMention(ddId);return;}
+  const patients = chatGetPortalPatients();
+  const q = query.toLowerCase().replace(/_/g,' ');
+  const filtered = patients.filter(function(p){return !q||p.toLowerCase().includes(q);}).slice(0,8);
+  if(!filtered.length){chatHideMention(ddId);return;}
+  const dd = document.getElementById(ddId);
+  dd.innerHTML = filtered.map(function(p,i){
+    const slug = p.replace(/\s+/g,'_');
+    return '<div class="mention-item" style="padding:8px 12px;cursor:pointer;font-size:.82rem;display:flex;align-items:center;gap:6px;" onmousedown="chatInsertMention(\''+ddId+'\',\''+slug.replace(/'/g,"\\'")+'\',event)" onmouseover="chatHoverItem(this,\''+ddId+'\')">'
+      +'<span style="color:var(--accent);font-weight:700;font-size:.9rem;">@</span>'
+      +'<span>'+esc(p)+'</span>'
+      +'</div>';
+  }).join('');
+  dd.style.display='block';
+}
+
+function chatGetMentionQuery(textarea){
+  const val = textarea.value;
+  const pos = textarea.selectionStart;
+  const before = val.slice(0,pos);
+  const m = before.match(/@([\w\u00C0-\u017E_]*)$/);
+  return m ? m[1] : null;
+}
+
+function chatGetPortalPatients(){
+  const seen = new Set();
+  const patients = [];
+  // Source principale : liste patients publiée par le labo
+  ((portalData&&portalData.patients)||[]).forEach(function(p){if(p&&!seen.has(p)){seen.add(p);patients.push(p);}});
+  // Fallback : patients dans les BLs et travaux
+  ((portalData&&portalData.bdl)||[]).forEach(function(b){if(b.patient&&!seen.has(b.patient)){seen.add(b.patient);patients.push(b.patient);}});
+  ((portalData&&portalData.travaux)||[]).forEach(function(t){if(t.patient&&!seen.has(t.patient)){seen.add(t.patient);patients.push(t.patient);}});
+  return patients;
+}
+
+function chatInsertMention(ddId, slug, e){
+  if(e) e.preventDefault();
+  const inputId = ddId==='portal-mention-dd' ? 'chat-portal-input' : 'chat-input';
+  const input = document.getElementById(inputId);
+  const val = input.value;
+  const pos = input.selectionStart;
+  const before = val.slice(0,pos).replace(/@([\w\u00C0-\u017E_]*)$/,'@'+slug+' ');
+  input.value = before + val.slice(pos);
+  input.focus();
+  input.selectionStart = input.selectionEnd = before.length;
+  chatHideMention(ddId);
+}
+
+function chatHideMention(ddId){
+  const dd = document.getElementById(ddId);
+  if(dd) dd.style.display='none';
+}
+
+function chatHoverItem(el, ddId){
+  const dd = document.getElementById(ddId);
+  if(dd) dd.querySelectorAll('.mention-item').forEach(function(i){i.classList.remove('active');});
+  el.classList.add('active');
+}
+
+function startPortalChatPoll(){
+  if(_portalChatInterval) return;
+  _portalChatInterval = setInterval(function(){
+    const tab = document.querySelector('[data-ptab="messages"].on');
+    if(tab) loadPortalChat(false);
+  }, 8000);
+}
+
+// Check for new labo messages while on other tabs
+function checkPortalChatNotif(){
+  if(!sessionPortalId) return;
+  fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId))
+    .then(function(r){return r.ok?r.json():[];})
+    .then(function(rows){
+      const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
+      const laboMsgs = msgs.filter(function(m){return m.sender==='labo';});
+      if(!laboMsgs.length) return;
+      const lastSeen = localStorage.getItem('chat_seen_cab_'+sessionPortalId)||'';
+      const unseen = laboMsgs.filter(function(m){return m.createdAt>lastSeen;});
+      const notif = document.getElementById('chat-notif');
+      if(notif) notif.style.display = unseen.length>0 ? 'inline' : 'none';
+    }).catch(function(){});
+}
+// Poll notif every 30s
+setInterval(checkPortalChatNotif, 30000);
+</script>
+</body>
+</html>

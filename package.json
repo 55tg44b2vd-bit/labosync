@@ -1,0 +1,10 @@
+{
+  "name": "labosync",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Labosync quality tooling",
+  "scripts": {
+    "test": "node tests/smoke-functions.cjs",
+    "test:smoke": "node tests/smoke-functions.cjs"
+  }
+}
