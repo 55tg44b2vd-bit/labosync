@@ -230,8 +230,8 @@
     try {
       var ua = global.navigator && global.navigator.userAgent ? global.navigator.userAgent : '';
       if (/firefox|fxios/i.test(ua)) return 'FirefoxPush';
-      /* iOS 16.4+ PWA : Web Push standard (type WebPush pour OneSignal). */
-      if (isIos() && isStandalone()) return 'WebPush';
+      /* iOS 16.4+ PWA : Push API standard (ChromePush côté OneSignal). */
+      if (isIos() && isStandalone()) return 'ChromePush';
       if (/safari/i.test(ua) && !/chrome|crios|crmo|edg/i.test(ua)) return 'SafariPush';
     } catch (e) {}
     return 'ChromePush';
@@ -599,6 +599,10 @@
     return 'lb_os_player_' + String(_externalId || '');
   }
 
+  function storageKeySubscriptionId() {
+    return 'lb_os_sub_' + String(_externalId || '');
+  }
+
   function savePlayerId(playerId) {
     if (!playerId || !_externalId) return;
     try {
@@ -606,9 +610,24 @@
     } catch (e) {}
   }
 
+  function saveSubscriptionId(subscriptionId) {
+    if (!subscriptionId || !_externalId) return;
+    try {
+      global.localStorage.setItem(storageKeySubscriptionId(), String(subscriptionId));
+    } catch (e) {}
+  }
+
   function getStoredPlayerId() {
     try {
       return global.localStorage.getItem(storageKeyPlayerId()) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function getStoredSubscriptionId() {
+    try {
+      return global.localStorage.getItem(storageKeySubscriptionId()) || '';
     } catch (e) {
       return '';
     }
@@ -705,6 +724,13 @@
           throw new Error(formatApiResponseError(j, 'Enregistrement serveur refusé (HTTP ' + r.status + ')'));
         }
         if (j.playerId) savePlayerId(j.playerId);
+        if (j.subscriptionId) saveSubscriptionId(j.subscriptionId);
+        if (!j.ok || !(j.deliverable > 0)) {
+          throw new Error(
+            j.message ||
+              'OneSignal ne voit pas cet iPhone — supprimez l\'icône Labosync, réajoutez-la à l\'écran d\'accueil, rouvrez depuis l\'icône, puis Finaliser.'
+          );
+        }
         return j;
       });
     });
@@ -713,7 +739,7 @@
   function getStoredPushIds() {
     return {
       playerId: getStoredPlayerId(),
-      subscriptionId: '',
+      subscriptionId: getStoredSubscriptionId(),
     };
   }
 
@@ -762,20 +788,15 @@
       .then(function (sub) {
         return sendSubscriptionToServer(sub);
       })
-      .then(function () {
-        return checkServerRegistration();
-      })
-      .then(function (st) {
-        if (st && st.registered) {
-          return {
-            ok: true,
-            message:
-              'Cet appareil est enregistré pour les messages même app fermée. Répétez sur chaque autre téléphone/PC.',
-          };
-        }
-        throw new Error(
-          'Autorisation OK mais serveur OneSignal ne voit pas cet appareil — réessayez depuis l\'icône écran d\'accueil (iPhone).'
-        );
+      .then(function (j) {
+        return {
+          ok: true,
+          deliverable: j.deliverable || 0,
+          message:
+            'Cet iPhone est enregistré (' +
+            (j.deliverable || 1) +
+            ' appareil). Fermez l\'app et testez « notification cloud ».',
+        };
       });
   }
 
@@ -851,16 +872,16 @@
     var tries = 0;
     function attempt() {
       return checkServerRegistration().then(function (st) {
-        if (st && st.registered) {
+        if (st && st.registered && (st.deliverable > 0 || st.activeWebPushCount > 0)) {
           return {
             ok: true,
             registered: true,
-            deviceCount: st.activeWebPushCount || st.activeDeviceCount || 1,
+            deviceCount: st.deliverable || st.activeWebPushCount || st.activeDeviceCount || 1,
           };
         }
         return nativeRegister().then(function (res) {
-          if (res && res.ok !== false) {
-            return { ok: true, registered: true, message: res.message || '' };
+          if (res && res.ok !== false && (res.deliverable > 0 || res.ok)) {
+            return { ok: true, registered: true, deviceCount: res.deliverable || 1, message: res.message || '' };
           }
           tries += 1;
           if (tries < 3) {

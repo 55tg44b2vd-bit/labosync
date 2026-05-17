@@ -66,7 +66,7 @@ exports.handler = async (event) => {
       result.ok = false;
       result.reason = 'zero_recipients';
       result.message =
-        'OneSignal n\'a joint aucun appareil. Menu ⚙️ → Finaliser l\'enregistrement, puis réessayez.';
+        'OneSignal n\'a joint aucun appareil. Supprimez l\'icône Labosync, réajoutez-la (Safari → Partager), ouvrez depuis l\'icône, Profil → Finaliser, puis réessayez.';
     } else {
       result.message = 'Notification envoyée à ' + n + ' appareil(s).';
     }

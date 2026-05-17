@@ -3,7 +3,7 @@
  * GET ?externalId=lab:uuid ou cabinet:portalId
  */
 const { buildCors } = require('./_labosync-auth');
-const { hasLegacyWebPlayer } = require('./_onesignal');
+const { getWebPushTargets, countDeliverableTargets } = require('./_onesignal');
 
 const WEB_PUSH_TYPES = new Set([
   'web_push',
@@ -60,52 +60,21 @@ exports.handler = async (event) => {
     };
   }
 
-  const url =
-    'https://api.onesignal.com/apps/' +
-    encodeURIComponent(appId) +
-    '/users/by/external_id/' +
-    encodeURIComponent(externalId);
-
   try {
-    const resp = await fetch(url, {
-      headers: { Authorization: 'Key ' + apiKey, Accept: 'application/json' },
-    });
-    const txt = await resp.text();
-    let json = null;
-    try {
-      json = txt ? JSON.parse(txt) : null;
-    } catch (_) {
-      json = { raw: txt };
-    }
-
-    if (!resp.ok) {
-      const legacyOk = resp.status === 404 ? await hasLegacyWebPlayer(externalId) : false;
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          configured: true,
-          registered: legacyOk,
-          externalId,
-          reason: legacyOk ? 'legacy_player' : resp.status === 404 ? 'user_not_found' : 'api_error',
-          status: resp.status,
-        }),
-      };
-    }
-
-    const subs = json?.subscriptions || json?.properties?.subscriptions || [];
-    const webSubs = (Array.isArray(subs) ? subs : []).filter(isWebPushSub);
-    const active = webSubs.filter(isSubscribed);
+    const targets = await getWebPushTargets(externalId);
+    const deliverable = countDeliverableTargets(targets);
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         configured: true,
-        registered: active.length > 0,
+        registered: deliverable > 0,
         externalId,
-        webPushCount: webSubs.length,
-        activeWebPushCount: active.length,
+        deliverable,
+        subscriptionIds: targets.subscriptionIds,
+        playerIds: targets.playerIds,
+        activeWebPushCount: deliverable,
       }),
     };
   } catch (err) {

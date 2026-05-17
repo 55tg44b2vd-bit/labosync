@@ -85,18 +85,22 @@ exports.handler = async (event) => {
       p256dh,
       pushType,
     });
+    const deliverable = result.deliverable || 0;
+    const ok = !!(result.ok && deliverable > 0);
     return {
-      statusCode: result.ok ? 200 : 502,
+      statusCode: ok ? 200 : 502,
       headers,
       body: JSON.stringify({
-        ok: result.ok,
+        ok,
+        deliverable,
         playerId: result.playerId || result.result?.id || null,
         subscriptionId: result.subscriptionId || null,
         method: result.method || null,
-        message: result.ok
-          ? 'Enregistré' + (result.playerId ? ' (player ' + result.playerId + ')' : '')
-          : result.message,
-        error: result.ok ? undefined : result.error,
+        message: ok
+          ? 'Enregistré — ' + deliverable + ' appareil(s) joignable(s) chez OneSignal'
+          : result.message ||
+            'OneSignal n\'a pas reconnu cet appareil. iPhone : ouvrez depuis l\'icône écran d\'accueil puis réessayez.',
+        error: ok ? undefined : result.error,
       }),
     };
   } catch (err) {

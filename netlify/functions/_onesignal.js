@@ -31,7 +31,12 @@ function isWebPushSub(sub) {
   const type = String(sub.type || sub.device_type || '').trim();
   if (type && WEB_PUSH_TYPES.has(type)) return true;
   if (type && /push/i.test(type) && !/mobile|ios|android|email|sms/i.test(type)) return true;
-  return !!(sub.token || sub.web_auth || sub.web_p256dh || sub.web_p256);
+  const token = String(sub.token || sub.identifier || '');
+  if (/push\.apple\.com|web\.push|mozilla\.com|fcm\.googleapis|updates\.push\.services/i.test(token)) {
+    return true;
+  }
+  if (/^https?:\/\//i.test(token) && (sub.web_auth || sub.web_p256dh || sub.web_p256)) return true;
+  return !!(sub.web_auth || sub.web_p256dh || sub.web_p256);
 }
 
 function isSubscribed(sub) {
@@ -161,6 +166,40 @@ async function getWebPushTargets(externalId) {
   return out;
 }
 
+function countDeliverableTargets(targets) {
+  const t = targets || { subscriptionIds: [], playerIds: [] };
+  return (t.subscriptionIds?.length || 0) + (t.playerIds?.length || 0);
+}
+
+/** OneSignal indexe parfois l'abonnement quelques secondes après l'API register. */
+async function waitForWebPushTargets(externalId, attempts) {
+  const max = Math.min(Math.max(attempts || 8, 1), 12);
+  let last = { subscriptionIds: [], playerIds: [] };
+  for (let i = 0; i < max; i++) {
+    last = await getWebPushTargets(externalId);
+    if (countDeliverableTargets(last) > 0) return last;
+    if (i < max - 1) {
+      await new Promise(function (r) {
+        setTimeout(r, 600 + i * 500);
+      });
+    }
+  }
+  return last;
+}
+
+function notificationDelivered(result, targeting, targets) {
+  if (!result || !result.ok) return false;
+  const n = result.recipients;
+  if (typeof n === 'number' && n > 0) return true;
+  if (targeting.include_subscription_ids && targets.subscriptionIds.length && result.result?.id) {
+    return true;
+  }
+  if (targeting.include_player_ids && targets.playerIds.length && result.result?.id) {
+    return true;
+  }
+  return false;
+}
+
 async function sendToExternalUsers({ externalUserIds, heading, body, url, data, playerIds, subscriptionIds }) {
   if (!isConfigured()) return { ok: false, skipped: true, reason: 'not_configured' };
   const ids = [...new Set((externalUserIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
@@ -205,11 +244,7 @@ async function sendToExternalUsers({ externalUserIds, heading, body, url, data, 
     const via = Object.keys(targeting)[0];
     const result = await postOneSignalNotification({ ...base, ...targeting });
     last = result;
-    const fansOut =
-      targeting.include_subscription_ids ||
-      targeting.include_aliases ||
-      targeting.include_external_user_ids;
-    if (result.ok && (fansOut || (result.recipients && result.recipients > 0))) {
+    if (notificationDelivered(result, targeting, targets)) {
       console.log(
         '[onesignal] sent',
         ids.join(','),
@@ -464,13 +499,18 @@ async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, p
   let json = parseJson(await resp.text());
 
   if (resp.ok || resp.status === 202) {
-    const targets = await getWebPushTargets(eid);
-    return {
-      ok: true,
-      result: json,
-      playerId: targets.playerIds[0] || null,
-      subscriptionId: targets.subscriptionIds[0] || null,
-    };
+    const targets = await waitForWebPushTargets(eid, 8);
+    const n = countDeliverableTargets(targets);
+    if (n > 0) {
+      return {
+        ok: true,
+        result: json,
+        deliverable: n,
+        playerId: targets.playerIds[0] || null,
+        subscriptionId: targets.subscriptionIds[0] || null,
+        targets,
+      };
+    }
   }
 
   const userMissing =
@@ -492,13 +532,43 @@ async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, p
     });
     json = parseJson(await resp.text());
     if (resp.ok || resp.status === 202) {
-      const targets = await getWebPushTargets(eid);
-      return {
-        ok: true,
-        result: json,
-        playerId: targets.playerIds[0] || null,
-        subscriptionId: targets.subscriptionIds[0] || null,
-      };
+      const targets = await waitForWebPushTargets(eid, 8);
+      const n = countDeliverableTargets(targets);
+      if (n > 0) {
+        return {
+          ok: true,
+          result: json,
+          deliverable: n,
+          playerId: targets.playerIds[0] || null,
+          subscriptionId: targets.subscriptionIds[0] || null,
+          targets,
+        };
+      }
+    }
+  }
+
+  const typesToTry = [...new Set([type, 'ChromePush', 'WebPush', 'SafariPush'])];
+  for (const tryType of typesToTry) {
+    if (tryType === type) continue;
+    const retry = await registerLegacyWebPlayer({
+      externalId: eid,
+      endpoint: token,
+      auth,
+      p256dh,
+      pushType: tryType,
+    });
+    if (retry.ok) {
+      const targets = await waitForWebPushTargets(eid, 6);
+      const n = countDeliverableTargets(targets);
+      if (n > 0) {
+        return {
+          ...retry,
+          deliverable: n,
+          playerId: retry.result?.id || targets.playerIds[0] || null,
+          subscriptionId: targets.subscriptionIds[0] || null,
+          targets,
+        };
+      }
     }
   }
 
@@ -519,12 +589,17 @@ async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, p
     });
   }
   if (legacy.ok) {
-    const targets = await getWebPushTargets(eid);
-    return {
-      ...legacy,
-      playerId: legacy.result?.id || targets.playerIds[0] || null,
-      subscriptionId: targets.subscriptionIds[0] || null,
-    };
+    const targets = await waitForWebPushTargets(eid, 8);
+    const n = countDeliverableTargets(targets);
+    if (n > 0) {
+      return {
+        ...legacy,
+        deliverable: n,
+        playerId: legacy.result?.id || targets.playerIds[0] || null,
+        subscriptionId: targets.subscriptionIds[0] || null,
+        targets,
+      };
+    }
   }
 
   const message = formatOnesignalApiError(json, 'OneSignal a refusé l\'enregistrement');
@@ -567,6 +642,8 @@ module.exports = {
   isConfigured,
   sendToExternalUsers,
   getWebPushTargets,
+  waitForWebPushTargets,
+  countDeliverableTargets,
   upsertWebPushSubscription,
   hasLegacyWebPlayer,
   formatOnesignalApiError,
