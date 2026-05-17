@@ -55,6 +55,18 @@
     Content-Security-Policy = "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' https://cdn.onesignal.com 'unsafe-inline'; script-src-attr 'unsafe-inline'; connect-src 'self' https: wss:; worker-src 'self' https://cdn.onesignal.com https://cdnjs.cloudflare.com blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
 
 [[headers]]
+  for = "/OneSignalSDKWorker.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=300"
+
+[[headers]]
+  for = "/OneSignalSDKUpdaterWorker.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=300"
+
+[[headers]]
   for = "/manifest.json"
   [headers.values]
     Cache-Control = "public, max-age=3600"

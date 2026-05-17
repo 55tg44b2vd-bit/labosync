@@ -1,6 +1,5 @@
 /**
  * Notifications push Labosync (OneSignal Web v16, PWA).
- * SDK local : /vendor/onesignal-sdk.js (bundle ES6 complet).
  */
 (function (global) {
   var SDK_URL = '/vendor/onesignal-sdk.js';
@@ -36,7 +35,6 @@
     }
   }
 
-  /** localStorage indisponible = souvent navigation privée */
   function isPrivateBrowsingSync() {
     try {
       var k = '__lb_pm_test';
@@ -51,20 +49,19 @@
   function privateModeMessage() {
     return (
       'Les notifications Web ne fonctionnent pas en navigation privée (InPrivate). ' +
-      'Fermez la fenêtre privée, ouvrez https://labosync.app dans une fenêtre normale, puis réessayez.'
+      'Ouvrez https://labosync.app dans une fenêtre normale.'
     );
   }
 
   function deniedMessage() {
     return (
-      'Notifications bloquées pour ce site. ' +
-      'Cliquez sur le cadenas ou l’icône 🔔 à gauche de l’adresse → Notifications → Autoriser pour labosync.app, puis Ctrl+F5.'
+      'Notifications bloquées. Cadenas ou icône 🔔 → Autoriser pour labosync.app, puis Ctrl+F5.'
     );
   }
 
   function edgeQuietMessage() {
     return (
-      'Edge peut masquer la demande : cherchez « Notifications bloquées » ou une icône 🔔 dans la barre d’adresse (à côté de l’URL) et cliquez Autoriser.'
+      'Cherchez « Notifications bloquées » ou 🔔 à gauche de l\'adresse, puis Autoriser.'
     );
   }
 
@@ -92,7 +89,7 @@
 
   function raceTimeout(promise, ms, label) {
     return Promise.race([
-      promise,
+      Promise.resolve(promise),
       new Promise(function (_, reject) {
         setTimeout(function () {
           reject(new Error(label || 'Délai dépassé'));
@@ -127,7 +124,7 @@
         existing.addEventListener(
           'error',
           function () {
-            reject(new Error('Impossible de charger le module notifications (fichier /vendor/onesignal-sdk.js).'));
+            reject(new Error('Module notifications introuvable (/vendor/onesignal-sdk.js).'));
           },
           { once: true }
         );
@@ -147,6 +144,44 @@
       global.document.head.appendChild(s);
     });
     return _sdkLoadPromise;
+  }
+
+  /** Nettoie les anciens service workers bloqués (cause fréquente d'init infinie). */
+  function resetServiceWorkers() {
+    if (!global.navigator.serviceWorker || !global.navigator.serviceWorker.getRegistrations) {
+      return Promise.resolve();
+    }
+    return global.navigator.serviceWorker.getRegistrations().then(function (regs) {
+      return Promise.all(
+        regs.map(function (reg) {
+          return reg.unregister().catch(function () {
+            return false;
+          });
+        })
+      );
+    });
+  }
+
+  function buildInitOptions(cfg) {
+    return {
+      appId: cfg.appId,
+      path: '/',
+      serviceWorkerPath: 'OneSignalSDKWorker.js',
+      serviceWorkerParam: { scope: '/' },
+      allowLocalhostAsSecureOrigin: true,
+      promptOptions: {
+        native: { enabled: false, autoPrompt: false },
+        slidedown: {
+          prompts: [
+            {
+              type: 'push',
+              autoPrompt: false,
+              delay: { pageViews: 999, timeDelay: 0 },
+            },
+          ],
+        },
+      },
+    };
   }
 
   function onNotificationClick(event) {
@@ -180,18 +215,41 @@
     } catch (e) {}
   }
 
+  function waitForSdkInstance(ms) {
+    return new Promise(function (resolve, reject) {
+      if (global.OneSignal && global.OneSignal.init) {
+        resolve(global.OneSignal);
+        return;
+      }
+      var settled = false;
+      function done(os) {
+        if (settled) return;
+        settled = true;
+        resolve(os);
+      }
+      global.OneSignalDeferred = global.OneSignalDeferred || [];
+      global.OneSignalDeferred.push(function (OneSignal) {
+        done(OneSignal);
+      });
+      setTimeout(function () {
+        if (!settled) {
+          settled = true;
+          reject(new Error('SDK OneSignal non chargé. Ctrl+F5.'));
+        }
+      }, ms || 20000);
+    });
+  }
+
   function initOneSignal(OneSignal, cfg) {
-    return raceTimeout(
-      OneSignal.init({
-        appId: cfg.appId,
-        serviceWorkerPath: '/OneSignalSDKWorker.js',
-        allowLocalhostAsSecureOrigin: true,
-      }),
-      30000,
-      'Initialisation OneSignal trop longue (vérifiez la connexion).'
-    )
+    if (_sdkReady) return Promise.resolve(OneSignal);
+
+    var opts = buildInitOptions(cfg);
+    return resetServiceWorkers()
       .then(function () {
-        return raceTimeout(OneSignal.login(_externalId), 15000, 'Connexion au compte notifications trop longue.');
+        return raceTimeout(OneSignal.init(opts), 60000, 'Init OneSignal bloquée (service worker). Rechargez la page.');
+      })
+      .then(function () {
+        return raceTimeout(OneSignal.login(_externalId), 20000, 'Liaison compte OneSignal trop longue.');
       })
       .then(function () {
         bindClickHandler(OneSignal);
@@ -202,13 +260,15 @@
         var msg = String((err && err.message) || err || '');
         if (/already initialized|init.*already/i.test(msg)) {
           _sdkReady = true;
-          return OneSignal;
+          return OneSignal.login(_externalId).then(function () {
+            bindClickHandler(OneSignal);
+            return OneSignal;
+          });
         }
         throw err;
       });
   }
 
-  /** Initialise OneSignal dès la connexion (pattern officiel v16). */
   function startInit() {
     if (!_externalId || _initStarted) return _initPromise || Promise.resolve(null);
     _initStarted = true;
@@ -219,32 +279,15 @@
           throw new Error('Notifications non configurées côté serveur.');
         }
         if (!supportsWebPush()) {
-          throw new Error('Navigateur incompatible avec les notifications Web.');
+          throw new Error('Navigateur incompatible.');
         }
-        return loadSdk().then(function () {
-          global.OneSignalDeferred = global.OneSignalDeferred || [];
-          return new Promise(function (resolve, reject) {
-            var settled = false;
-            function finish(err, os) {
-              if (settled) return;
-              settled = true;
-              if (err) reject(err);
-              else resolve(os);
-            }
-            global.OneSignalDeferred.push(function (OneSignal) {
-              initOneSignal(OneSignal, cfg)
-                .then(function (os) {
-                  finish(null, os);
-                })
-                .catch(finish);
-            });
-            setTimeout(function () {
-              if (!settled && !_sdkReady) {
-                finish(new Error('OneSignal ne démarre pas. Rechargez avec Ctrl+F5.'));
-              }
-            }, 35000);
+        return loadSdk()
+          .then(function () {
+            return waitForSdkInstance(25000);
+          })
+          .then(function (OneSignal) {
+            return initOneSignal(OneSignal, cfg);
           });
-        });
       })
       .catch(function (err) {
         _initStarted = false;
@@ -280,7 +323,6 @@
       });
   }
 
-  /** Si le navigateur autorise déjà, enregistre l'appareil chez OneSignal (cadenas seul ≠ abonnement). */
   function syncIfPermissionGranted() {
     if (!_externalId || isPrivateBrowsingSync()) return Promise.resolve();
     if (nativePermission() !== 'granted') return Promise.resolve();
@@ -288,12 +330,12 @@
       .then(function (OneSignal) {
         var sub = OneSignal.User && OneSignal.User.PushSubscription;
         if (sub && typeof sub.optIn === 'function') {
-          return raceTimeout(sub.optIn(), 20000, 'Enregistrement OneSignal trop long');
+          return raceTimeout(sub.optIn(), 25000, 'Enregistrement push trop long');
         }
         return Promise.resolve();
       })
       .catch(function (e) {
-        console.warn('[push] sync granted', e);
+        console.warn('[push] sync', e);
       });
   }
 
@@ -324,14 +366,14 @@
     if (isIos() && !isStandalone()) {
       return Promise.resolve({
         ok: false,
-        message: 'Sur iPhone : Safari → Partager → Sur l\'écran d\'accueil, puis ouvrez Labosync via l\'icône.',
+        message: 'iPhone : ajoutez Labosync à l\'écran d\'accueil (Safari → Partager).',
       });
     }
     if (!_externalId) {
       return Promise.resolve({ ok: false, message: 'Connectez-vous d\'abord.' });
     }
     if (!supportsWebPush()) {
-      return Promise.resolve({ ok: false, message: 'Notifications non supportées sur ce navigateur.' });
+      return Promise.resolve({ ok: false, message: 'Notifications non supportées.' });
     }
     if (nativePermission() === 'denied') {
       return Promise.resolve({ ok: false, message: deniedMessage() });
@@ -341,19 +383,12 @@
       .then(function (OneSignal) {
         var sub = OneSignal.User && OneSignal.User.PushSubscription;
         if (sub && typeof sub.optIn === 'function') {
-          return raceTimeout(sub.optIn(), 20000, 'Activation des notifications trop longue.');
+          return raceTimeout(sub.optIn(), 25000, 'Activation trop longue — rechargez la page.');
         }
         if (OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
-          return raceTimeout(
-            OneSignal.Notifications.requestPermission(),
-            20000,
-            'Demande de permission trop longue.'
-          );
+          return raceTimeout(OneSignal.Notifications.requestPermission(), 25000, 'Permission trop longue.');
         }
         return Promise.resolve();
-      })
-      .then(function () {
-        return syncIfPermissionGranted();
       })
       .then(function () {
         return checkServerRegistration();
@@ -362,29 +397,23 @@
         if (st && st.registered) {
           return {
             ok: true,
-            message:
-              'Notifications activées sur cet appareil. Vous recevrez les alertes même application fermée.',
+            message: 'Notifications activées. Testez via ⚙️ → Tester une notification.',
           };
         }
-        var p = nativePermission();
-        if (p === 'granted') {
+        if (nativePermission() === 'granted') {
           return {
             ok: false,
             message:
-              'Le navigateur autorise les notifications, mais l\'enregistrement Labosync n\'est pas terminé. Rechargez (Ctrl+F5), puis recliquez « Activer les notifications ».',
+              'Autorisation navigateur OK, mais OneSignal n\'a pas enregistré cet appareil. Ctrl+F5 puis réessayez.',
           };
         }
-        if (p === 'denied') {
+        if (nativePermission() === 'denied') {
           return { ok: false, message: deniedMessage() };
         }
         return { ok: false, message: edgeQuietMessage() };
       })
       .catch(function (err) {
-        var msg = (err && err.message) || 'Erreur activation notifications.';
-        if (/private|incognito|inprivate/i.test(msg)) {
-          msg = privateModeMessage();
-        }
-        return { ok: false, message: msg };
+        return { ok: false, message: (err && err.message) || 'Erreur activation.' };
       });
   }
 
@@ -396,8 +425,8 @@
     if (isPrivateBrowsingSync()) {
       targetEl.style.display = 'block';
       targetEl.innerHTML =
-        '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:14px;padding:14px 18px;margin-bottom:16px;font-size:.84rem;color:#991b1b;line-height:1.45;">' +
-        '<strong>Navigation privée détectée</strong> — ' +
+        '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:14px;padding:14px 18px;margin-bottom:16px;font-size:.84rem;color:#991b1b;">' +
+        '<strong>Navigation privée</strong> — ' +
         privateModeMessage() +
         '</div>';
       return;
@@ -408,11 +437,6 @@
     } catch (e) {}
 
     var title = opts.title || 'Recevoir les alertes sur votre téléphone';
-    var hint =
-      isIos() && !isStandalone()
-        ? 'iPhone : Safari → Partager → Sur l\'écran d\'accueil, puis ouvrez via l\'icône.'
-        : 'Au clic, autorisez les notifications (barre en haut ou icône 🔔 à côté de l\'adresse).';
-
     targetEl.style.display = 'block';
     targetEl.innerHTML =
       '<div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #93c5fd;border-radius:14px;padding:16px 18px;margin-bottom:16px;">' +
@@ -421,10 +445,7 @@
       '</div>' +
       '<div style="font-size:.82rem;color:#475569;line-height:1.45;margin-bottom:10px;">' +
       (opts.subtitle || 'Messages et factures même application fermée.') +
-      ' ' +
-      hint +
-      '</div>' +
-      '<div style="font-size:.76rem;color:#64748b;margin-bottom:12px;">Utilisez une fenêtre normale (pas InPrivate). Chaque appareil (PC, téléphone) s\'active séparément.</div>' +
+      ' Cliquez le bouton ci-dessous (pas seulement le cadenas du navigateur).</div>' +
       '<button type="button" data-lb-push-enable style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:.84rem;font-weight:700;cursor:pointer;margin-right:8px;">🔔 Activer les notifications</button>' +
       '<button type="button" data-lb-push-dismiss style="background:#fff;border:1px solid #93c5fd;color:#1d4ed8;border-radius:8px;padding:10px 14px;font-size:.8rem;cursor:pointer;">Plus tard</button>' +
       '<div data-lb-push-status style="margin-top:10px;font-size:.78rem;min-height:1.2em;font-weight:600;"></div></div>';
@@ -441,7 +462,7 @@
         enableBtn.disabled = true;
         if (statusEl) {
           statusEl.style.color = '#1d4ed8';
-          statusEl.textContent = 'Activation en cours…';
+          statusEl.textContent = 'Activation…';
         }
         promptForNotifications()
           .then(function (res) {
@@ -450,11 +471,7 @@
               statusEl.textContent = res.message || '';
             }
             if (typeof global.showToast === 'function') {
-              global.showToast(
-                res.message || (res.ok ? 'Notifications activées' : 'Impossible d\'activer'),
-                res.ok ? '#2563eb' : '#c0392b',
-                8000
-              );
+              global.showToast(res.message || '', res.ok ? '#2563eb' : '#c0392b', 8000);
             }
             if (res.ok) {
               try {
