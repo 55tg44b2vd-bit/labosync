@@ -134,7 +134,12 @@
     }
     if (/Cannot read properties of undefined|reading 'Qe'/i.test(msg)) {
       return (
-        'OneSignal n\'est pas prêt (rechargez avec Ctrl+F5, attendez 10 s, puis menu ⚙️ → Finaliser l\'enregistrement).'
+        'OneSignal n\'est pas prêt. Attendez 15 s après le chargement, puis menu ⚙️ → Finaliser l\'enregistrement.'
+      );
+    }
+    if (/SDK OneSignal non chargé|Module notifications/i.test(msg)) {
+      return (
+        'Module notifications non chargé. Ctrl+F5, attendez que la page soit entièrement chargée (15 s), puis réessayez.'
       );
     }
     return msg;
@@ -151,48 +156,76 @@
     ]);
   }
 
+  function waitForOneSignalGlobal(maxMs) {
+    return new Promise(function (resolve, reject) {
+      var start = Date.now();
+      function tick() {
+        try {
+          if (global.OneSignal && typeof global.OneSignal.init === 'function') {
+            resolve(global.OneSignal);
+            return;
+          }
+        } catch (e) {}
+        if (Date.now() - start > (maxMs || 90000)) {
+          reject(
+            new Error(
+              'Module notifications indisponible. Vérifiez votre connexion, désactivez les bloqueurs pour labosync.app, puis Ctrl+F5.'
+            )
+          );
+          return;
+        }
+        setTimeout(tick, 80);
+      }
+      tick();
+    });
+  }
+
   function loadSdk() {
     if (_sdkLoadPromise) return _sdkLoadPromise;
     _sdkLoadPromise = new Promise(function (resolve, reject) {
+      function afterScriptTag() {
+        waitForOneSignalGlobal(90000).then(resolve).catch(reject);
+      }
+
+      if (global.OneSignal && typeof global.OneSignal.init === 'function') {
+        resolve();
+        return;
+      }
+
       var existing = global.document.getElementById('onesignal-sdk');
       if (existing) {
-        if (
-          existing.getAttribute('data-lb-loaded') === '1' ||
-          existing.readyState === 'complete' ||
-          existing.readyState === 'loaded' ||
-          global.OneSignal
-        ) {
-          existing.setAttribute('data-lb-loaded', '1');
-          resolve();
+        if (existing.getAttribute('data-lb-loaded') === '1') {
+          afterScriptTag();
           return;
         }
         existing.addEventListener(
           'load',
           function () {
             existing.setAttribute('data-lb-loaded', '1');
-            resolve();
+            afterScriptTag();
           },
           { once: true }
         );
         existing.addEventListener(
           'error',
           function () {
-            reject(new Error('Module notifications introuvable (/vendor/onesignal-sdk.js).'));
+            reject(new Error('Fichier /vendor/onesignal-sdk.js inaccessible.'));
           },
           { once: true }
         );
         return;
       }
+
       var s = global.document.createElement('script');
       s.id = 'onesignal-sdk';
       s.src = SDK_URL;
-      s.defer = true;
+      s.async = false;
       s.onload = function () {
         s.setAttribute('data-lb-loaded', '1');
-        resolve();
+        afterScriptTag();
       };
       s.onerror = function () {
-        reject(new Error('Impossible de charger le module notifications.'));
+        reject(new Error('Impossible de charger /vendor/onesignal-sdk.js'));
       };
       global.document.head.appendChild(s);
     });
@@ -272,74 +305,58 @@
     options = options || {};
     var opts = buildInitOptions(cfg);
 
-    return loadSdk().then(function () {
-      return new Promise(function (resolve, reject) {
-        var settled = false;
-        function finish(err, os) {
-          if (settled) return;
-          settled = true;
-          if (err) reject(err);
-          else resolve(os);
+    return loadSdk()
+      .then(function () {
+        return waitForOneSignalGlobal(90000);
+      })
+      .then(function (OneSignal) {
+        var chain = Promise.resolve();
+
+        if (!options.skipSwReset && nativePermission() !== 'granted') {
+          chain = chain.then(function () {
+            return resetServiceWorkers();
+          });
         }
 
-        global.OneSignalDeferred = global.OneSignalDeferred || [];
-        global.OneSignalDeferred.push(function (OneSignal) {
-          var chain = Promise.resolve();
+        if (!isOneSignalInitialized()) {
+          chain = chain.then(function () {
+            return raceTimeout(
+              OneSignal.init(opts),
+              120000,
+              'Initialisation notifications trop longue — rechargez la page (Ctrl+F5).'
+            );
+          });
+        }
 
-          if (!options.skipSwReset && nativePermission() !== 'granted') {
-            chain = chain.then(function () {
-              return resetServiceWorkers();
-            });
-          }
-
-          if (!isOneSignalInitialized()) {
-            chain = chain.then(function () {
-              return raceTimeout(
-                OneSignal.init(opts),
-                90000,
-                'Init OneSignal bloquée. Ctrl+F5 puis réessayez.'
-              );
-            });
-          }
-
-          chain
+        return chain
+          .then(function () {
+            return waitForUserModule(OneSignal, 60000);
+          })
+          .then(function () {
+            return OneSignal.login(_externalId);
+          })
+          .then(function () {
+            bindClickHandler(OneSignal);
+            _sdkReady = true;
+            return OneSignal;
+          });
+      })
+      .catch(function (err) {
+        var msg = String((err && err.message) || err || '');
+        if (/already initialized|init.*already/i.test(msg)) {
+          var OS = global.OneSignal;
+          return waitForUserModule(OS, 30000)
             .then(function () {
-              return waitForUserModule(OneSignal, 45000);
+              return OS.login(_externalId);
             })
             .then(function () {
-              return OneSignal.login(_externalId);
-            })
-            .then(function () {
-              bindClickHandler(OneSignal);
+              bindClickHandler(OS);
               _sdkReady = true;
-              finish(null, OneSignal);
-            })
-            .catch(function (err) {
-              var msg = String((err && err.message) || err || '');
-              if (/already initialized|init.*already/i.test(msg)) {
-                waitForUserModule(OneSignal, 30000)
-                  .then(function () {
-                    return OneSignal.login(_externalId);
-                  })
-                  .then(function () {
-                    bindClickHandler(OneSignal);
-                    _sdkReady = true;
-                    finish(null, OneSignal);
-                  })
-                  .catch(finish);
-                return;
-              }
-              finish(err);
+              return OS;
             });
-        });
-
-        setTimeout(function () {
-          if (!settled) {
-            finish(new Error('SDK OneSignal non chargé. Ctrl+F5.'));
-          }
-        }, 25000);
+        }
+        throw err;
       });
-    });
   }
 
   function startInit(options) {
