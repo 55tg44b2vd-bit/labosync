@@ -619,7 +619,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
       <div id="account-menu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);min-width:220px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 28px rgba(15,23,42,.12);z-index:1000;overflow:hidden;">
         <button class="account-item" onclick="toggleLang();closeAccountMenu();">🌐 <span>Changer de langue</span></button>
         <button class="account-item" onclick="localStorage.setItem('lb_env','mobile');window.location.href='labo-mobile.html';">📱 <span>Passer en vue mobile</span></button>
-        <button class="account-item" onclick="closeAccountMenu();if(typeof LabosyncPush!=='undefined'){LabosyncPush.promptForNotifications().then(function(r){showToast(r.message||(r.ok?'Notifications activées':'Impossible d\'activer'),r.ok?'#2563eb':'#c0392b',8000);});}">🔔 <span>Activer les notifications</span></button>
+        <button class="account-item" onclick="closeAccountMenu();lbActivatePush();">🔔 <span id="lb-push-menu-label">Activer les notifications</span></button>
         <button class="account-item" onclick="closeAccountMenu();testLabPushNotification();">📣 <span>Tester une notification</span></button>
         <button class="account-item" onclick="goSettings();closeAccountMenu();">⚙️ <span>Paramètres</span></button>
         <button class="account-item" id="btn-quick-admin" style="display:none;" onclick="switchToAdminRole(true);closeAccountMenu();">🔓 <span>Revenir en mode admin</span></button>
@@ -2709,6 +2709,7 @@ function toggleAccountMenu(e){
   if(e)e.stopPropagation();
   const m=document.getElementById('account-menu');if(!m)return;
   m.style.display=(m.style.display==='block')?'none':'block';
+  if(m.style.display==='block')lbUpdatePushMenuLabel();
 }
 function closeAccountMenu(){
   const m=document.getElementById('account-menu');if(m)m.style.display='none';
@@ -12004,23 +12005,52 @@ function _portalApiHeaders(extra){
   if(_cachedAccessToken)h.Authorization='Bearer '+_cachedAccessToken;
   return Object.assign(h,extra||{});
 }
+function lbUpdatePushMenuLabel(){
+  var el=document.getElementById('lb-push-menu-label');
+  if(!el)return;
+  try{
+    if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+      el.textContent='Finaliser l\'enregistrement';
+    }else{
+      el.textContent='Activer les notifications';
+    }
+  }catch(e){}
+}
+async function lbActivatePush(){
+  if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
+  try{
+    var fn=(typeof Notification!=='undefined'&&Notification.permission==='granted'&&LabosyncPush.finalizeRegistration)
+      ? LabosyncPush.finalizeRegistration : LabosyncPush.promptForNotifications;
+    var r=await fn();
+    showToast(r.message||(r.ok?'OK':'Échec'),r.ok?'#2563eb':'#c0392b',8000);
+  }catch(e){
+    showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);
+  }
+}
 async function testLabPushNotification(){
   if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
-  var st=await LabosyncPush.getStatus();
-  if(!st.serverRegistered){
-    var reg=await LabosyncPush.promptForNotifications();
-    showToast(reg.message||'Enregistrement requis',reg.ok?'#2563eb':'#c0392b',8000);
-    if(!reg.ok)return;
-    st=await LabosyncPush.getStatus();
-    if(!st.serverRegistered){showToast('Enregistrement incomplet — rechargez la page (Ctrl+F5) puis réessayez','#c0392b',8000);return;}
-  }
-  var ext=LabosyncPush.getExternalId();
   try{
+    var st=await LabosyncPush.getStatus();
+    if(!st.serverRegistered){
+      var reg=(typeof Notification!=='undefined'&&Notification.permission==='granted'&&LabosyncPush.finalizeRegistration)
+        ? await LabosyncPush.finalizeRegistration()
+        : await LabosyncPush.promptForNotifications();
+      showToast(reg.message||'Enregistrement requis',reg.ok?'#2563eb':'#c0392b',8000);
+      if(!reg.ok)return;
+      st=await LabosyncPush.getStatus();
+      if(!st.serverRegistered){
+        showToast('Enregistrement incomplet — Ctrl+F5, attendez 10 s, menu ⚙️ → Finaliser l\'enregistrement','#c0392b',9000);
+        return;
+      }
+    }
+    var ext=LabosyncPush.getExternalId();
     var r=await fetch('/.netlify/functions/onesignal-test-push',{method:'POST',headers:_portalApiHeaders(),body:JSON.stringify({externalId:ext})});
     var j=await r.json();
     if(j.ok)showToast('Notification test envoyée — vérifiez la bannière Windows','#2563eb',8000);
-    else showToast((j.hint||j.reason||'Échec envoi test')+(j.error?' — voir console':'') ,'#c0392b',8000);
-  }catch(e){showToast('Erreur réseau test push','#c0392b',6000);}
+    else showToast((j.hint||j.reason||j.error?.errors?.[0]||'Échec envoi test').toString().slice(0,120),'#c0392b',9000);
+  }catch(e){
+    showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);
+  }
 }
 function _aiApiHeaders(extra){
   return _portalApiHeaders(extra);
@@ -12107,6 +12137,7 @@ async function completeLabBoot(session){
     try{
       if(typeof LabosyncPush!=='undefined'&&session&&session.user){
         LabosyncPush.prepare({role:'lab',externalId:'lab:'+session.user.id});
+        lbUpdatePushMenuLabel();
         var pushBanner=document.getElementById('lb-push-banner');
         if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab'});
       }
