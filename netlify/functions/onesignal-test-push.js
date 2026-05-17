@@ -36,8 +36,19 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'externalId invalide' }) };
   }
 
+  const playerIds = []
+    .concat(body.playerId || body.playerIds || [])
+    .filter(Boolean)
+    .map(String);
+  const subscriptionIds = []
+    .concat(body.subscriptionId || body.subscriptionIds || [])
+    .filter(Boolean)
+    .map(String);
+
   const result = await sendToExternalUsers({
     externalUserIds: [externalId],
+    playerIds,
+    subscriptionIds,
     heading: 'Test Labosync',
     body: 'Si vous voyez ceci, les notifications push fonctionnent.',
     url: (process.env.URL || 'https://labosync.app').replace(/\/$/, '') + '/app.html',
@@ -46,11 +57,11 @@ exports.handler = async (event) => {
 
   if (result.ok) {
     const n = result.recipients;
-    if (n === 0) {
+    if (n == null || n === 0) {
       result.ok = false;
       result.reason = 'zero_recipients';
       result.message =
-        'OneSignal n\'a joint aucun appareil (0 destinataire). Refaites Finaliser l\'enregistrement, puis testez.';
+        'OneSignal n\'a joint aucun appareil. Menu ⚙️ → Finaliser l\'enregistrement, puis réessayez.';
     } else {
       result.message = 'Notification envoyée à ' + n + ' appareil(s).';
     }

@@ -88,7 +88,16 @@ exports.handler = async (event) => {
     return {
       statusCode: result.ok ? 200 : 502,
       headers,
-      body: JSON.stringify(result),
+      body: JSON.stringify({
+        ok: result.ok,
+        playerId: result.playerId || result.result?.id || null,
+        subscriptionId: result.subscriptionId || null,
+        method: result.method || null,
+        message: result.ok
+          ? 'Enregistré' + (result.playerId ? ' (player ' + result.playerId + ')' : '')
+          : result.message,
+        error: result.ok ? undefined : result.error,
+      }),
     };
   } catch (err) {
     console.error('[onesignal-register]', err);

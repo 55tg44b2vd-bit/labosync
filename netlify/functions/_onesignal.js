@@ -63,18 +63,22 @@ async function postOneSignalNotification(payload) {
     json.invalid_aliases.external_id.length > 0;
   const invalidExternal =
     Array.isArray(json?.invalid_external_user_ids) && json.invalid_external_user_ids.length > 0;
+  const usedPlayerIds = Array.isArray(payload.include_player_ids) && payload.include_player_ids.length > 0;
+  const usedSubIds =
+    Array.isArray(payload.include_subscription_ids) && payload.include_subscription_ids.length > 0;
   const delivered =
     resp.ok &&
     !hasErrors &&
     !invalidAliases &&
     !invalidExternal &&
-    (recipients === null || recipients > 0);
+    (recipients > 0 ||
+      (recipients === null && json?.id && (usedPlayerIds || usedSubIds)));
 
   return {
     ok: delivered,
     status: resp.status,
     result: json,
-    recipients,
+    recipients: recipients == null ? (delivered && usedPlayerIds ? 1 : 0) : recipients,
     error: delivered ? null : json,
   };
 }
@@ -132,12 +136,32 @@ async function getWebPushTargets(externalId) {
     } catch (_) {}
   }
 
+  if (!out.playerIds.length) {
+    for (const authorization of ['Key ' + apiKey, 'Basic ' + apiKey]) {
+      try {
+        const scanUrl =
+          'https://onesignal.com/api/v1/players?app_id=' +
+          encodeURIComponent(appId) +
+          '&limit=100';
+        const resp = await fetch(scanUrl, { headers: { Authorization: authorization } });
+        if (!resp.ok) continue;
+        const json = parseJson(await resp.text());
+        (json?.players || []).forEach((p) => {
+          if (String(p?.external_user_id || '') === eid && p?.id) {
+            out.playerIds.push(String(p.id));
+          }
+        });
+        if (out.playerIds.length) break;
+      } catch (_) {}
+    }
+  }
+
   out.subscriptionIds = [...new Set(out.subscriptionIds)];
   out.playerIds = [...new Set(out.playerIds)];
   return out;
 }
 
-async function sendToExternalUsers({ externalUserIds, heading, body, url, data }) {
+async function sendToExternalUsers({ externalUserIds, heading, body, url, data, playerIds, subscriptionIds }) {
   if (!isConfigured()) return { ok: false, skipped: true, reason: 'not_configured' };
   const ids = [...new Set((externalUserIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
   if (!ids.length) return { ok: false, skipped: true, reason: 'no_targets' };
@@ -152,13 +176,23 @@ async function sendToExternalUsers({ externalUserIds, heading, body, url, data }
   if (url) base.url = url;
 
   const targets = await getWebPushTargets(ids[0]);
-  const attempts = [{ include_aliases: { external_id: ids } }];
-  if (targets.subscriptionIds.length) {
-    attempts.push({ include_subscription_ids: targets.subscriptionIds });
+  if (Array.isArray(playerIds)) {
+    targets.playerIds = [...new Set([...targets.playerIds, ...playerIds.map(String).filter(Boolean)])];
   }
+  if (Array.isArray(subscriptionIds)) {
+    targets.subscriptionIds = [
+      ...new Set([...targets.subscriptionIds, ...subscriptionIds.map(String).filter(Boolean)]),
+    ];
+  }
+
+  const attempts = [];
   if (targets.playerIds.length) {
     attempts.push({ include_player_ids: targets.playerIds });
   }
+  if (targets.subscriptionIds.length) {
+    attempts.push({ include_subscription_ids: targets.subscriptionIds });
+  }
+  attempts.push({ include_aliases: { external_id: ids } });
   attempts.push({ include_external_user_ids: ids });
 
   let last = null;
@@ -342,7 +376,7 @@ async function registerLegacyWebPlayer({ externalId, endpoint, auth, p256dh, pus
       });
       const putJson = parseJson(await putResp.text());
       if (putResp.ok) {
-        return { ok: true, result: putJson, method: 'legacy_players_update' };
+        return { ok: true, result: { id: playerId }, method: 'legacy_players_update' };
       }
     }
   }
@@ -394,7 +428,13 @@ async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, p
   let json = parseJson(await resp.text());
 
   if (resp.ok || resp.status === 202) {
-    return { ok: true, result: json };
+    const targets = await getWebPushTargets(eid);
+    return {
+      ok: true,
+      result: json,
+      playerId: targets.playerIds[0] || null,
+      subscriptionId: targets.subscriptionIds[0] || null,
+    };
   }
 
   const userMissing =
@@ -416,7 +456,13 @@ async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, p
     });
     json = parseJson(await resp.text());
     if (resp.ok || resp.status === 202) {
-      return { ok: true, result: json };
+      const targets = await getWebPushTargets(eid);
+      return {
+        ok: true,
+        result: json,
+        playerId: targets.playerIds[0] || null,
+        subscriptionId: targets.subscriptionIds[0] || null,
+      };
     }
   }
 
@@ -428,9 +474,11 @@ async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, p
     pushType: type,
   });
   if (legacy.ok) {
+    const targets = await getWebPushTargets(eid);
     return {
       ...legacy,
-      playerId: legacy.result?.id || null,
+      playerId: legacy.result?.id || targets.playerIds[0] || null,
+      subscriptionId: targets.subscriptionIds[0] || null,
     };
   }
 

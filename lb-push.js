@@ -593,6 +593,25 @@
       });
   }
 
+  function storageKeyPlayerId() {
+    return 'lb_os_player_' + String(_externalId || '');
+  }
+
+  function savePlayerId(playerId) {
+    if (!playerId || !_externalId) return;
+    try {
+      global.localStorage.setItem(storageKeyPlayerId(), String(playerId));
+    } catch (e) {}
+  }
+
+  function getStoredPlayerId() {
+    try {
+      return global.localStorage.getItem(storageKeyPlayerId()) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
   function getApiHeaders() {
     var h = { 'Content-Type': 'application/json' };
     if (typeof _authHeadersFn === 'function') {
@@ -683,9 +702,17 @@
         if (!r.ok || !j.ok) {
           throw new Error(formatApiResponseError(j, 'Enregistrement serveur refusé (HTTP ' + r.status + ')'));
         }
+        if (j.playerId) savePlayerId(j.playerId);
         return j;
       });
     });
+  }
+
+  function getStoredPushIds() {
+    return {
+      playerId: getStoredPlayerId(),
+      subscriptionId: '',
+    };
   }
 
   /** Chemin fiable : SW + Push API + API REST OneSignal (sans SDK page). */
@@ -931,6 +958,7 @@
   global.LabosyncPush = {
     prepare: prepare,
     init: init,
+    getStoredPushIds: getStoredPushIds,
     loadSdk: loadSdk,
     isStandalone: isStandalone,
     isIos: isIos,
