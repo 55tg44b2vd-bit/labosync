@@ -619,7 +619,8 @@ body.has-sidebar #drawer{transform:translateX(0);}
       <div id="account-menu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);min-width:220px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 28px rgba(15,23,42,.12);z-index:1000;overflow:hidden;">
         <button class="account-item" onclick="toggleLang();closeAccountMenu();">🌐 <span>Changer de langue</span></button>
         <button class="account-item" onclick="localStorage.setItem('lb_env','mobile');window.location.href='labo-mobile.html';">📱 <span>Passer en vue mobile</span></button>
-        <button class="account-item" onclick="closeAccountMenu();if(typeof LabosyncPush!=='undefined'){LabosyncPush.promptForNotifications().then(function(r){showToast(r.message||(r.ok?'Notifications activées':'Impossible d\'activer'),r.ok?'#2563eb':'#c0392b',5000);});}">🔔 <span>Activer les notifications</span></button>
+        <button class="account-item" onclick="closeAccountMenu();if(typeof LabosyncPush!=='undefined'){LabosyncPush.promptForNotifications().then(function(r){showToast(r.message||(r.ok?'Notifications activées':'Impossible d\'activer'),r.ok?'#2563eb':'#c0392b',8000);});}">🔔 <span>Activer les notifications</span></button>
+        <button class="account-item" onclick="closeAccountMenu();testLabPushNotification();">📣 <span>Tester une notification</span></button>
         <button class="account-item" onclick="goSettings();closeAccountMenu();">⚙️ <span>Paramètres</span></button>
         <button class="account-item" id="btn-quick-admin" style="display:none;" onclick="switchToAdminRole(true);closeAccountMenu();">🔓 <span>Revenir en mode admin</span></button>
         <button class="account-item" onclick="closeAccountMenu();replayOnboardingTour();">🧭 <span>Refaire le tour guidé</span></button>
@@ -5036,13 +5037,13 @@ async function sendOrderQuestions(portalId,caseId,stepId){
   const text=ta?ta.value.trim():'';
   if(!text){alert('Le message est vide.');return;}
   try{
-    const sbAnon=supabase.createClient(SB_URL,SB_KEY);
-    const{data:rows}=await sbAnon.from('labo_data').select('data').eq('id','chat_'+cab.portalId);
-    const existing=(rows&&rows[0]&&rows[0].data)?rows[0].data:{messages:[]};
-    const msgs=existing.messages||[];
     const laboName=localStorage.getItem('lb_name')||'Laboratoire';
-    msgs.push({sender:'labo',senderName:laboName,content:text,createdAt:new Date().toISOString(),_orderQuestion:true,_caseId:caseId,_stepId:stepId});
-    await sbAnon.from('labo_data').upsert({id:'chat_'+cab.portalId,data:{messages:msgs},updated_at:new Date().toISOString()});
+    const r=await fetch('/.netlify/functions/portal',{
+      method:'POST',
+      headers:_portalApiHeaders(),
+      body:JSON.stringify({action:'chat',portalId:cab.portalId,sender:'labo',senderName:laboName,content:text})
+    });
+    if(!r.ok){showToast('❌ Erreur d\'envoi','#c0392b');return;}
     // Marquer l'étape comme "questions envoyées"
     const list=_pendingOrdersCache[portalId]||await _fetchOrdersForCab(portalId);
     const cIdx=list.findIndex(function(x){return x.id===caseId;});
@@ -5267,14 +5268,14 @@ async function sendMissingInfoMessage(cabId){
 
   if(cab.portalId){
     try{
-      const sbAnon=supabase.createClient(SB_URL,SB_KEY);
-      const{data:rows}=await sbAnon.from('labo_data').select('data').eq('id','chat_'+cab.portalId);
-      const existing=(rows&&rows[0]&&rows[0].data)?rows[0].data:{messages:[]};
-      const msgs=existing.messages||[];
       const laboName=localStorage.getItem('lb_name')||'Laboratoire';
       const sentAt=new Date().toISOString();
-      msgs.push({sender:'labo',senderName:laboName,content:text,createdAt:sentAt,_missingMsg:true});
-      await sbAnon.from('labo_data').upsert({id:'chat_'+cab.portalId,data:{messages:msgs},updated_at:sentAt});
+      const r=await fetch('/.netlify/functions/portal',{
+        method:'POST',
+        headers:_portalApiHeaders(),
+        body:JSON.stringify({action:'chat',portalId:cab.portalId,sender:'labo',senderName:laboName,content:text})
+      });
+      if(!r.ok){throw new Error('portal chat');}
       // Mémoriser timestamp d'envoi pour détecter les réponses ultérieures
       _missingJobsForCab(cabId).forEach(function(j){j._missingSentAt=sentAt;});
       saveJobs();saveQueue();
@@ -12002,6 +12003,24 @@ function _portalApiHeaders(extra){
   const h={'Content-Type':'application/json'};
   if(_cachedAccessToken)h.Authorization='Bearer '+_cachedAccessToken;
   return Object.assign(h,extra||{});
+}
+async function testLabPushNotification(){
+  if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
+  var st=await LabosyncPush.getStatus();
+  if(!st.serverRegistered){
+    var reg=await LabosyncPush.promptForNotifications();
+    showToast(reg.message||'Enregistrement requis',reg.ok?'#2563eb':'#c0392b',8000);
+    if(!reg.ok)return;
+    st=await LabosyncPush.getStatus();
+    if(!st.serverRegistered){showToast('Enregistrement incomplet — rechargez la page (Ctrl+F5) puis réessayez','#c0392b',8000);return;}
+  }
+  var ext=LabosyncPush.getExternalId();
+  try{
+    var r=await fetch('/.netlify/functions/onesignal-test-push',{method:'POST',headers:_portalApiHeaders(),body:JSON.stringify({externalId:ext})});
+    var j=await r.json();
+    if(j.ok)showToast('Notification test envoyée — vérifiez la bannière Windows','#2563eb',8000);
+    else showToast((j.hint||j.reason||'Échec envoi test')+(j.error?' — voir console':'') ,'#c0392b',8000);
+  }catch(e){showToast('Erreur réseau test push','#c0392b',6000);}
 }
 function _aiApiHeaders(extra){
   return _portalApiHeaders(extra);

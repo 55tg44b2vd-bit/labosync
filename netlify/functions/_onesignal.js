@@ -49,9 +49,28 @@ async function sendToExternalUsers({ externalUserIds, heading, body, url, data }
   }
 
   if (!resp.ok) {
-    console.warn('[onesignal] send failed', resp.status, json);
+    console.warn('[onesignal] send failed', resp.status, JSON.stringify(json));
     return { ok: false, status: resp.status, error: json };
   }
+  const noDelivery =
+    json &&
+    ((Array.isArray(json.errors) && json.errors.length > 0) ||
+      (Array.isArray(json.invalid_external_user_ids) && json.invalid_external_user_ids.length > 0) ||
+      (json.invalid_aliases &&
+        Array.isArray(json.invalid_aliases.external_id) &&
+        json.invalid_aliases.external_id.length > 0));
+  if (noDelivery) {
+    console.warn('[onesignal] no recipients', JSON.stringify(json));
+    return {
+      ok: false,
+      status: resp.status,
+      error: json,
+      reason: 'no_subscribed_devices',
+      hint:
+        'Aucun appareil abonné pour cet identifiant. Ouvrez Labosync, cliquez « Activer les notifications » (pas seulement le cadenas du navigateur).',
+    };
+  }
+  console.log('[onesignal] sent', ids.join(','), json?.id || '');
   return { ok: true, result: json };
 }
 

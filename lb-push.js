@@ -267,15 +267,49 @@
     });
   }
 
+  function checkServerRegistration() {
+    if (!_externalId) return Promise.resolve({ registered: false });
+    return fetch(
+      '/.netlify/functions/onesignal-status?externalId=' + encodeURIComponent(_externalId)
+    )
+      .then(function (r) {
+        return r.ok ? r.json() : { registered: false };
+      })
+      .catch(function () {
+        return { registered: false };
+      });
+  }
+
+  /** Si le navigateur autorise déjà, enregistre l'appareil chez OneSignal (cadenas seul ≠ abonnement). */
+  function syncIfPermissionGranted() {
+    if (!_externalId || isPrivateBrowsingSync()) return Promise.resolve();
+    if (nativePermission() !== 'granted') return Promise.resolve();
+    return ensureSdkReady()
+      .then(function (OneSignal) {
+        var sub = OneSignal.User && OneSignal.User.PushSubscription;
+        if (sub && typeof sub.optIn === 'function') {
+          return raceTimeout(sub.optIn(), 20000, 'Enregistrement OneSignal trop long');
+        }
+        return Promise.resolve();
+      })
+      .catch(function (e) {
+        console.warn('[push] sync granted', e);
+      });
+  }
+
   function prepare(opts) {
     if (!opts || !opts.externalId) return;
     if (_externalId && _externalId !== opts.externalId) resetSdkState();
     _role = opts.role || null;
     _externalId = opts.externalId;
     global.OneSignalDeferred = global.OneSignalDeferred || [];
-    startInit().catch(function (e) {
-      console.warn('[push] init', e);
-    });
+    startInit()
+      .then(function () {
+        return syncIfPermissionGranted();
+      })
+      .catch(function (e) {
+        console.warn('[push] init', e);
+      });
   }
 
   function init(opts) {
@@ -319,9 +353,26 @@
         return Promise.resolve();
       })
       .then(function () {
+        return syncIfPermissionGranted();
+      })
+      .then(function () {
+        return checkServerRegistration();
+      })
+      .then(function (st) {
+        if (st && st.registered) {
+          return {
+            ok: true,
+            message:
+              'Notifications activées sur cet appareil. Vous recevrez les alertes même application fermée.',
+          };
+        }
         var p = nativePermission();
         if (p === 'granted') {
-          return { ok: true, message: 'Notifications activées sur cet appareil.' };
+          return {
+            ok: false,
+            message:
+              'Le navigateur autorise les notifications, mais l\'enregistrement Labosync n\'est pas terminé. Rechargez (Ctrl+F5), puis recliquez « Activer les notifications ».',
+          };
         }
         if (p === 'denied') {
           return { ok: false, message: deniedMessage() };
@@ -428,6 +479,21 @@
     }
   }
 
+  function getExternalId() {
+    return _externalId;
+  }
+
+  function getStatus() {
+    return checkServerRegistration().then(function (server) {
+      return {
+        externalId: _externalId,
+        browserPermission: nativePermission(),
+        serverRegistered: !!(server && server.registered),
+        sdkReady: _sdkReady,
+      };
+    });
+  }
+
   global.LabosyncPush = {
     prepare: prepare,
     init: init,
@@ -437,5 +503,9 @@
     isPrivateBrowsing: isPrivateBrowsingSync,
     showInstallBanner: showInstallBanner,
     promptForNotifications: promptForNotifications,
+    syncIfPermissionGranted: syncIfPermissionGranted,
+    checkServerRegistration: checkServerRegistration,
+    getStatus: getStatus,
+    getExternalId: getExternalId,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

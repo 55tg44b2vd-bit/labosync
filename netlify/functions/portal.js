@@ -278,14 +278,23 @@ exports.handler = async (event) => {
         }
       }
 
-      notifyChatMessage({
-        sender,
-        portalId: normalizedId,
-        labUserId: chatLabUserId,
-        senderName: clampStr(senderName || '', 80),
-        content: clampStr(content || '', 5000),
-        laboName,
-      }).catch((err) => console.warn('[push] chat', err));
+      try {
+        const pushResult = await notifyChatMessage({
+          sender,
+          portalId: normalizedId,
+          labUserId: chatLabUserId,
+          senderName: clampStr(senderName || '', 80),
+          content: clampStr(content || '', 5000),
+          laboName,
+        });
+        if (pushResult && !pushResult.ok && !pushResult.skipped) {
+          console.warn('[push] chat failed', JSON.stringify(pushResult));
+        } else if (pushResult?.reason === 'no_recipient') {
+          console.warn('[push] chat no recipient', { sender, portalId: normalizedId, chatLabUserId });
+        }
+      } catch (err) {
+        console.warn('[push] chat', err);
+      }
 
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true, message: newMsg }) };
     }
