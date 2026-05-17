@@ -12019,9 +12019,7 @@ function lbUpdatePushMenuLabel(){
 async function lbActivatePush(){
   if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
   try{
-    var fn=(typeof Notification!=='undefined'&&Notification.permission==='granted'&&LabosyncPush.finalizeRegistration)
-      ? LabosyncPush.finalizeRegistration : LabosyncPush.promptForNotifications;
-    var r=await fn();
+    var r=await LabosyncPush.activateOrFinalize();
     showToast(r.message||(r.ok?'OK':'Échec'),r.ok?'#2563eb':'#c0392b',8000);
   }catch(e){
     showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);
@@ -12032,9 +12030,7 @@ async function testLabPushNotification(){
   try{
     var st=await LabosyncPush.getStatus();
     if(!st.serverRegistered){
-      var reg=(typeof Notification!=='undefined'&&Notification.permission==='granted'&&LabosyncPush.finalizeRegistration)
-        ? await LabosyncPush.finalizeRegistration()
-        : await LabosyncPush.promptForNotifications();
+      var reg=await LabosyncPush.activateOrFinalize();
       showToast(reg.message||'Enregistrement requis',reg.ok?'#2563eb':'#c0392b',8000);
       if(!reg.ok)return;
       st=await LabosyncPush.getStatus();

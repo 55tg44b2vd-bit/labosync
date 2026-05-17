@@ -412,7 +412,9 @@
       .then(function (st) {
         if (st && st.registered) return null;
         return ensureSdkReady({ skipSwReset: true })
-          .then(runOptIn)
+          .then(function (OS) {
+            return runOptIn(OS);
+          })
           .catch(function (e) {
             console.warn('[push] sync', e);
           });
@@ -468,6 +470,14 @@
       .catch(function (err) {
         return { ok: false, message: formatPushError(err) };
       });
+  }
+
+  /** Menu ⚙️ ou bannière : autoriser OU finaliser si le cadenas est déjà vert. */
+  function activateOrFinalize() {
+    if (nativePermission() === 'granted') {
+      return finalizeRegistration();
+    }
+    return promptForNotifications();
   }
 
   function promptForNotifications() {
@@ -561,7 +571,7 @@
           statusEl.style.color = '#1d4ed8';
           statusEl.textContent = 'Activation…';
         }
-        promptForNotifications()
+        activateOrFinalize()
           .then(function (res) {
             if (statusEl) {
               statusEl.style.color = res.ok ? '#059669' : '#c2410c';
@@ -574,6 +584,16 @@
               try {
                 global.localStorage.setItem(key, '1');
               } catch (e) {}
+            }
+          })
+          .catch(function (err) {
+            var msg = formatPushError(err);
+            if (statusEl) {
+              statusEl.style.color = '#c2410c';
+              statusEl.textContent = msg;
+            }
+            if (typeof global.showToast === 'function') {
+              global.showToast(msg, '#c0392b', 8000);
             }
           })
           .finally(function () {
@@ -617,6 +637,7 @@
     isPrivateBrowsing: isPrivateBrowsingSync,
     showInstallBanner: showInstallBanner,
     promptForNotifications: promptForNotifications,
+    activateOrFinalize: activateOrFinalize,
     finalizeRegistration: finalizeRegistration,
     syncIfPermissionGranted: syncIfPermissionGranted,
     checkServerRegistration: checkServerRegistration,
