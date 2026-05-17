@@ -1,4 +1,5 @@
 const SB_URL = 'https://ljnfpslgwgagdisixuxz.supabase.co';
+const { signPortalToken } = require('./_labosync-auth');
 
 const normPortalId = (portalId) => String(portalId || '').trim().toLowerCase();
 
@@ -167,11 +168,14 @@ exports.handler = async (event) => {
     const sanitized = Object.assign({}, found.row.data || {});
     delete sanitized.cabPwd;
 
+    const portalToken = signPortalToken(found.portalId);
+
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         portalId: found.portalId,
+        portalToken,
         updatedAt: found.row.updated_at || null,
         portalData: sanitized,
       }),

@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/vendor/supabase.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 html{font-size:17px;} /* +6% pour lisibilité utilisateurs 60+ */
@@ -343,6 +343,7 @@ const _clientTraceId='tr_'+Date.now().toString(36)+'_'+Math.random().toString(36
 
 let portalData = null;
 let sessionPortalId = null;
+let sessionPortalToken = null;
 
 function reportClientError(payload){
   const body=JSON.stringify(Object.assign({
@@ -360,8 +361,32 @@ function reportClientError(payload){
   }catch(e){}
   fetch('/.netlify/functions/log-client-error',{method:'POST',headers:{'Content-Type':'application/json'},body:body}).catch(function(){});
 }
-function _debugAuditLogCab(hypothesisId,message,data){
-  // debug instrumentation removed
+function _portalCabHeaders(extra){
+  const h={'Content-Type':'application/json'};
+  if(sessionPortalToken)h['X-Portal-Token']=sessionPortalToken;
+  return Object.assign(h,extra||{});
+}
+function _debugAuditLogCab(){}
+
+async function _fetchPortalOrders(){
+  if(!sessionPortalId) return [];
+  const r = await fetch('/.netlify/functions/portal?type=orders&portalId='+encodeURIComponent(sessionPortalId),{headers:_portalCabHeaders()});
+  if(!r.ok) throw new Error('Chargement commandes impossible');
+  const rows = await r.json();
+  return (rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
+}
+
+async function _savePortalOrders(list){
+  if(!sessionPortalId) throw new Error('Session expirée');
+  const r = await fetch('/.netlify/functions/portal',{
+    method:'POST',
+    headers:_portalCabHeaders(),
+    body:JSON.stringify({action:'orders',portalId:sessionPortalId,list:list,cabId:portalData&&portalData.cabId?portalData.cabId:null})
+  });
+  if(!r.ok){
+    const err = await r.json().catch(function(){return {};});
+    throw new Error(err.error||'Enregistrement impossible');
+  }
 }
 window.addEventListener('error',function(ev){
   reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:ev&&ev.error&&ev.error.stack?ev.error.stack:''});
@@ -382,10 +407,16 @@ window.addEventListener('unhandledrejection',function(ev){
         portalData = s.portalData;
         portalData._updatedAt = s.updatedAt || null;
         sessionPortalId = s.portalId;
-        showPortal();
-        return;
+        sessionPortalToken = s.portalToken || null;
+        if(!sessionPortalToken){
+          sessionStorage.removeItem('ls_portal_session');
+        }else{
+          showPortal();
+          return;
+        }
       }
     }catch(e){}
+    sessionPortalToken=null;
     sessionStorage.removeItem('ls_portal_session');
   }
 
@@ -475,10 +506,10 @@ async function loadPortal(portalId, code, pwd, fromSession){
     }
     portalData._updatedAt = payload.updatedAt || null;
     sessionPortalId = payload.portalId || portalId;
-    _debugAuditLogCab('H5','Cabinet loadPortal success',{portalId:sessionPortalId,hasPortalData:!!portalData});
-    // Save session (4h expiry) avec snapshot sanitizé
+    sessionPortalToken = payload.portalToken || null;
     sessionStorage.setItem('ls_portal_session', JSON.stringify({
       portalId: sessionPortalId,
+      portalToken: sessionPortalToken,
       portalData: portalData,
       updatedAt: payload.updatedAt || null,
       expiry: Date.now() + 4*3600*1000
@@ -559,6 +590,7 @@ function showPortal(){
   }
 
   document.getElementById('btn-logout').addEventListener('click', function(){
+    sessionPortalToken=null;
     sessionStorage.removeItem('ls_portal_session');
     location.reload();
   });
@@ -603,8 +635,9 @@ function showPortalWelcomeHint(){
 async function refreshPortalDataOnce(force){
   if(!sessionPortalId) return;
   try{
-    const sbPortal = supabase.createClient(SB_URL, SB_ANON);
-    const { data: rows } = await sbPortal.from('labo_data').select('data,updated_at').eq('id','portal_'+sessionPortalId);
+    const r = await fetch('/.netlify/functions/portal?portalId='+encodeURIComponent(sessionPortalId),{headers:_portalCabHeaders()});
+    if(!r.ok) return;
+    const rows = await r.json();
     if(!rows||!rows.length) return;
     const newUpdatedAt = rows[0].updated_at;
     const toMs = function(v){
@@ -622,6 +655,7 @@ async function refreshPortalDataOnce(force){
     try{
       sessionStorage.setItem('ls_portal_session', JSON.stringify({
         portalId: sessionPortalId,
+        portalToken: sessionPortalToken,
         portalData: portalData,
         updatedAt: portalData._updatedAt || null,
         expiry: Date.now() + 4*3600*1000
@@ -1162,9 +1196,7 @@ let _portalOrdersCache=null;
 async function _loadCabinetOrders(){
   if(_portalOrdersCache)return _portalOrdersCache;
   try{
-    const sb=supabase.createClient(SB_URL,SB_ANON);
-    const{data:rows}=await sb.from('labo_data').select('data').eq('id','orders_'+sessionPortalId);
-    _portalOrdersCache=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
+    _portalOrdersCache=await _fetchPortalOrders();
   }catch(e){_portalOrdersCache=[];}
   return _portalOrdersCache;
 }
@@ -1412,11 +1444,9 @@ async function submitOrder(){
     updatedAt:now
   };
   try{
-    const sb=supabase.createClient(SB_URL,SB_ANON);
-    const{data:rows}=await sb.from('labo_data').select('data').eq('id','orders_'+sessionPortalId);
-    const existing=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
+    const existing=await _fetchPortalOrders();
     existing.unshift(newCase);
-    await sb.from('labo_data').upsert({id:'orders_'+sessionPortalId,data:{list:existing,portalId:sessionPortalId,cabId:portalData.cabId},updated_at:now});
+    await _savePortalOrders(existing);
     _clearDraft();
     _portalOrdersCache=null;
     _orderValMsgs=[];
@@ -1494,9 +1524,7 @@ async function confirmAddStep(caseId){
   const shade=(document.getElementById('as-shade')?document.getElementById('as-shade').value||'':'').trim();
   if(!desc){showToast('Décrivez ce que vous demandez au labo.','#c2410c');return;}
   try{
-    const sb=supabase.createClient(SB_URL,SB_ANON);
-    const{data:rows}=await sb.from('labo_data').select('data').eq('id','orders_'+sessionPortalId);
-    const list=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
+    const list=await _fetchPortalOrders();
     const idx=list.findIndex(function(x){return x.id===caseId;});
     if(idx<0){showToast('Cas introuvable','#c2410c');return;}
     _migrateOrderToCase(list[idx]);
@@ -1515,7 +1543,7 @@ async function confirmAddStep(caseId){
       acceptedAt:null,deliveredAt:null,rejectedAt:null
     });
     list[idx].updatedAt=now;
-    await sb.from('labo_data').upsert({id:'orders_'+sessionPortalId,data:{list:list,portalId:sessionPortalId,cabId:portalData.cabId},updated_at:now});
+    await _savePortalOrders(list);
     _portalOrdersCache=null;
     document.getElementById('add-step-overlay').remove();
     showToast('✅ Nouvelle étape envoyée au laboratoire','#10b981');
@@ -2037,7 +2065,7 @@ var _portalChatInterval = null;
 async function loadPortalChat(scrollToBottom){
   if(!sessionPortalId) return;
   try{
-    const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId));
+    const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId),{headers:_portalCabHeaders()});
     if(!r.ok) return;
     const rows = await r.json();
     const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
@@ -2122,7 +2150,7 @@ async function sendPortalMsg(){
     if(attachment) body.attachment = attachment;
     const r = await fetch('/.netlify/functions/portal',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:_portalCabHeaders(),
       body:JSON.stringify(body)
     });
     if(r.ok){
@@ -2337,7 +2365,7 @@ function startPortalChatPoll(){
 // Check for new labo messages while on other tabs
 function checkPortalChatNotif(){
   if(!sessionPortalId) return;
-  fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId))
+  fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId),{headers:_portalCabHeaders()})
     .then(function(r){return r.ok?r.json():[];})
     .then(function(rows){
       const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];

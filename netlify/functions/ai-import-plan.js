@@ -1,4 +1,6 @@
 // Analyse d'exports (CSV, texte collé, etc.) pour migration — retourne un plan JSON structuré (Claude via même clé que ai-chat).
+const { buildCors, verifySupabaseUser } = require('./_labosync-auth');
+
 exports.handler = async function (event) {
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
     .split(',')
@@ -9,11 +11,8 @@ exports.handler = async function (event) {
     ? (allowedOrigins.includes(reqOrigin) ? reqOrigin : allowedOrigins[0])
     : '*';
 
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  const corsHeaders = buildCors(event);
+  corsHeaders['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: corsHeaders, body: '' };
@@ -44,8 +43,17 @@ exports.handler = async function (event) {
   if (ent.n > 120) {
     return {
       statusCode: 429,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: corsHeaders,
       body: JSON.stringify({ error: { message: 'Trop de requêtes import (max 120 / minute / IP) — réessayez dans une minute.' } }),
+    };
+  }
+
+  const user = await verifySupabaseUser(event);
+  if (!user) {
+    return {
+      statusCode: 401,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: { message: 'Connexion requise pour l\'import assisté.' } }),
     };
   }
 

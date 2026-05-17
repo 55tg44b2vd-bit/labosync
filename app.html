@@ -411,10 +411,14 @@ body.has-sidebar #drawer{transform:translateX(0);}
 .help-tip:hover{background:#2563eb;color:#fff;}
 /* Drawer nav */
 .drawer-nav-label{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;padding:8px 12px 4px;}
-.drawer-tab-wrap .tab{flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;height:auto;min-height:44px;}
+.drawer-tab-wrap .tab{flex-direction:row;align-items:center;gap:10px;padding:10px 12px;height:auto;min-height:44px;}
+.drawer-tab-icon{font-size:1.12rem;width:28px;text-align:center;flex-shrink:0;line-height:1;opacity:.92;}
+.drawer-tab-wrap .tab.on .drawer-tab-icon{opacity:1;}
+.drawer-tab-text{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;}
 .drawer-tab-title{font-size:.84rem;font-weight:600;}
 .drawer-tab-sub{font-size:.68rem;color:#94a3b8;}
 .drawer-tab-wrap .tab.on .drawer-tab-sub{color:rgba(255,255,255,.82);}
+.drawer-more-grid .tab{flex-direction:row;align-items:center;gap:10px;}
 .drawer-footer{margin-top:auto;padding:10px 8px 12px;border-top:1px solid #f1f5f9;}
 .drawer-btn-more,.drawer-btn-settings{width:100%;text-align:left;padding:10px 12px;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px;}
 .drawer-btn-more{border:1px dashed #cbd5e1;background:#f8fafc;color:#475569;margin-bottom:6px;}
@@ -497,7 +501,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
 @keyframes slideUp{from{transform:translateY(100%);opacity:0;}to{transform:translateY(0);opacity:1;}}
 </style>
 </head>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/vendor/supabase.min.js"></script>
 <body>
 
 <!-- ÉCRAN DE CHARGEMENT -->
@@ -539,6 +543,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
 
 <!-- PAYWALL -->
 <div id="paywall-overlay" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);z-index:9998;overflow-y:auto;padding:40px 20px;">
+  <button type="button" id="paywall-close" onclick="closePaywall()" aria-label="Fermer" title="Fermer" style="position:fixed;top:16px;right:16px;z-index:9999;width:44px;height:44px;border:none;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font-size:1.5rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);">×</button>
   <div style="max-width:760px;margin:0 auto;">
     <div style="text-align:center;color:#fff;margin-bottom:32px;">
       <div style="font-family:'Inter',sans-serif;font-weight:800;font-size:2rem;letter-spacing:-.02em;">Labo<span style="color:#60a5fa;">sync</span></div>
@@ -633,21 +638,22 @@ body.has-sidebar #drawer{transform:translateX(0);}
     <button class="mode-btn on" data-mode="labo" style="display:none;"><span class="mode-icon">🔬</span> <span data-i18n="mode.labo">Laboratoire</span></button>
     <div class="drawer-nav-label">Principal</div>
     <div id="tabs-labo" class="drawer-nav-main">
-      <div class="drawer-tab-wrap"><button type="button" class="tab on" data-pane="dashboard"><span class="drawer-tab-title">Accueil</span><span class="drawer-tab-sub">À faire aujourd'hui</span></button></div>
-      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="saisie"><span class="drawer-tab-title">Travaux</span><span class="drawer-tab-sub">En cours · <span class="queue-badge" id="queue-badge-tab">0</span></span></button></div>
-      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="livraisons"><span class="drawer-tab-title">Livraisons</span><span class="drawer-tab-sub">Bons de livraison</span></button></div>
-      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="facturation"><span class="drawer-tab-title">Factures</span><span class="drawer-tab-sub">Facturation cabinets</span></button></div>
-      <div class="drawer-tab-wrap"><button type="button" class="tab drawer-tab-messages" data-drawer-messages="1"><span class="drawer-tab-title">Messages</span><span class="drawer-tab-sub">Discussions <span id="msg-mode-badge" style="display:none;background:#e53935;color:#fff;border-radius:99px;padding:1px 6px;font-size:.6rem;">●</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab on" data-pane="dashboard"><span class="drawer-tab-icon" aria-hidden="true">🏠</span><span class="drawer-tab-text"><span class="drawer-tab-title">Accueil</span><span class="drawer-tab-sub">À faire aujourd'hui</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="saisie"><span class="drawer-tab-icon" aria-hidden="true">🔧</span><span class="drawer-tab-text"><span class="drawer-tab-title">Travaux</span><span class="drawer-tab-sub">En cours · <span class="queue-badge" id="queue-badge-tab">0</span></span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="livraisons"><span class="drawer-tab-icon" aria-hidden="true">📦</span><span class="drawer-tab-text"><span class="drawer-tab-title">Livraisons</span><span class="drawer-tab-sub">Bons de livraison</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="facturation"><span class="drawer-tab-icon" aria-hidden="true">💰</span><span class="drawer-tab-text"><span class="drawer-tab-title">Factures</span><span class="drawer-tab-sub">Facturation cabinets</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="cabinets"><span class="drawer-tab-icon" aria-hidden="true">🦷</span><span class="drawer-tab-text"><span class="drawer-tab-title">Dentistes</span><span class="drawer-tab-sub">Cabinets et portails</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="coursiers"><span class="drawer-tab-icon" aria-hidden="true">🛵</span><span class="drawer-tab-text"><span class="drawer-tab-title">Coursiers <span id="courier-tab-badge" style="display:none;background:#e53935;color:#fff;border-radius:99px;padding:1px 7px;font-size:.62rem;font-weight:700;margin-left:4px;vertical-align:middle;">0</span></span><span class="drawer-tab-sub" id="courier-tab-status">Missions &amp; dispatch</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab drawer-tab-messages" data-drawer-messages="1"><span class="drawer-tab-icon" aria-hidden="true">💬</span><span class="drawer-tab-text"><span class="drawer-tab-title">Messages</span><span class="drawer-tab-sub">Discussions <span id="msg-mode-badge" style="display:none;background:#e53935;color:#fff;border-radius:99px;padding:1px 6px;font-size:.6rem;">●</span></span></span></button></div>
     </div>
     <div id="tabs-fact" style="display:none !important;">
       <button class="tab" data-pane="cabinets">Dentistes</button>
       <button class="tab" data-pane="calendrier">Planning</button>
     </div>
     <div id="drawer-nav-secondary" style="display:none;">
-      <button type="button" class="tab" data-pane="cabinets" data-drawer-more="1"><span class="drawer-tab-title">Dentistes</span><span class="drawer-tab-sub">Cabinets et portails</span></button>
-      <button type="button" class="tab" data-pane="calendrier" data-drawer-more="1"><span class="drawer-tab-title">Planning</span><span class="drawer-tab-sub">Calendrier</span></button>
-      <button type="button" class="tab" data-pane="stats" data-drawer-more="1"><span class="drawer-tab-title">Statistiques</span><span class="drawer-tab-sub">Chiffres</span></button>
-      <button type="button" class="tab" data-pane="historique" data-drawer-more="1"><span class="drawer-tab-title">Historique</span><span class="drawer-tab-sub">Archives</span></button>
+      <button type="button" class="tab" data-pane="calendrier" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📅</span><span class="drawer-tab-text"><span class="drawer-tab-title">Planning</span><span class="drawer-tab-sub">Calendrier</span></span></button>
+      <button type="button" class="tab" data-pane="stats" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📊</span><span class="drawer-tab-text"><span class="drawer-tab-title">Statistiques</span><span class="drawer-tab-sub">Chiffres</span></span></button>
+      <button type="button" class="tab" data-pane="historique" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📁</span><span class="drawer-tab-text"><span class="drawer-tab-title">Historique</span><span class="drawer-tab-sub">Archives</span></span></button>
       <button type="button" class="tab prog-tab" data-pane="impression" data-drawer-more="1" style="display:none;">Impression</button>
       <button type="button" class="tab prog-tab" data-pane="attente" id="tab-attente" data-drawer-more="1" style="display:none;">En attente <span id="attente-badge" style="display:none;background:#e67e22;color:#fff;border-radius:99px;padding:1px 7px;font-size:.65rem;">0</span></button>
       <button type="button" class="tab prog-tab" data-pane="equipe" data-drawer-more="1" style="display:none;">Équipe</button>
@@ -665,11 +671,11 @@ body.has-sidebar #drawer{transform:translateX(0);}
 <div id="drawer-more-overlay" onclick="if(event.target===this)closeDrawerMore()">
   <div id="drawer-more-sheet" onclick="event.stopPropagation()">
     <div class="drawer-more-title">Plus</div>
-    <div class="drawer-more-sub">Planning, dentistes, statistiques…</div>
+    <div class="drawer-more-sub">Planning, statistiques, historique…</div>
     <div class="drawer-more-grid" id="drawer-more-grid"></div>
     <button type="button" class="btn btn-b" style="width:100%;margin-top:14px;" onclick="closeDrawerMore()">Fermer</button>
   </div>
-</div></aside>
+</div>
 <div class="wrap">
 
 <!-- DASHBOARD -->
@@ -1104,6 +1110,11 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <span class="settings-row-body"><span class="settings-row-title">Équipe et planning</span><span class="settings-row-desc">Mode programmation, absences et fermetures</span></span>
           <span class="settings-row-chevron">›</span>
         </button>
+        <button type="button" class="settings-row" onclick="openSettingsSection('coursiers')">
+          <span class="settings-row-icon">🛵</span>
+          <span class="settings-row-body"><span class="settings-row-title">Coursiers</span><span class="settings-row-desc">Rattacher des coursiers à votre laboratoire</span></span>
+          <span class="settings-row-chevron">›</span>
+        </button>
       </div>
       <div class="settings-group" data-settings-group="donnees">
         <div class="settings-group-label">Données</div>
@@ -1333,6 +1344,24 @@ body.has-sidebar #drawer{transform:translateX(0);}
           </div>
           <div id="abs-list"></div>
         </div>
+      </div>
+    </div>
+
+    <div id="settings-sec-coursiers" class="settings-section">
+      <div class="settings-topbar">
+        <button type="button" class="settings-back" onclick="closeSettingsSection()" aria-label="Retour">←</button>
+        <h2>Coursiers</h2>
+        <span class="settings-topbar-spacer"></span>
+      </div>
+      <div class="card">
+        <h2>🛵 Rattacher un coursier</h2>
+        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;">Le coursier doit d'abord créer son compte sur <a href="/courier.html" target="_blank" rel="noopener">l'app Coursier Labosync</a>. Ensuite, ajoutez-le avec l'email utilisé à l'inscription.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;max-width:520px;">
+          <div class="fl" style="flex:1;min-width:200px;"><label>Email du coursier</label><input type="email" id="courier-link-email" placeholder="coursier@email.fr"/></div>
+          <button type="button" class="btn btn-a" id="btn-courier-link">Ajouter</button>
+        </div>
+        <div id="courier-link-msg" style="font-size:.74rem;margin-top:10px;min-height:16px;color:var(--ink-soft);"></div>
+        <div id="courier-links-list" style="margin-top:16px;"></div>
       </div>
     </div>
 
@@ -1611,9 +1640,60 @@ body.has-sidebar #drawer{transform:translateX(0);}
   <div id="messages-cab-list"></div>
 </div>
 
+<div class="pane" id="pane-coursiers">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+    <h2 style="font-family:serif;font-size:1.3rem;margin:0;">🛵 Coursiers</h2>
+    <button type="button" class="btn btn-b" onclick="goSettings();setTimeout(function(){openSettingsSection('coursiers');},200);">Gérer les coursiers</button>
+  </div>
+  <div class="card" style="margin-bottom:14px;padding:12px 14px;background:#f0f7f4;border:1px solid #c8e6d4;font-size:.76rem;color:#2a6049;line-height:1.45;">
+    <b>Comment envoyer une course ?</b> 1) Ajoutez un coursier · 2) Ajoutez un ou plusieurs <b>arrêts</b> (récup. / livr.) · 3) <b>Envoyer la demande</b>. Ex. récupérer chez Dr Dumont et livrer chez Dr Benhamou dans la même course.
+  </div>
+  <div class="card" style="margin-bottom:18px;padding:16px 18px;">
+    <h3 style="font-size:.92rem;font-weight:700;margin:0 0 12px;">Nouvelle course</h3>
+    <div class="frow" style="margin-bottom:10px;">
+      <div class="fl" style="flex:1;min-width:160px;"><label>Coursier</label><select id="cp-courier"></select></div>
+    </div>
+    <div style="font-size:.7rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin:8px 0;">Arrêts de la course <span style="font-weight:500;text-transform:none;">(⠿ glisser pour réordonner)</span></div>
+    <div id="cp-stops-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;"></div>
+    <button type="button" class="btn btn-b" id="btn-cp-maps-preview" style="width:100%;font-size:.78rem;padding:8px 12px;margin-bottom:8px;display:none;">🗺️ Aperçu itinéraire dans Maps</button>
+    <button type="button" class="btn btn-b" id="btn-cp-add-stop" style="width:100%;font-size:.78rem;padding:8px 12px;margin-bottom:12px;">+ Ajouter un arrêt</button>
+    <div class="fl" style="margin-bottom:12px;"><label>Note générale pour le coursier</label><textarea id="cp-notes" rows="2" style="width:100%;border:1.5px solid var(--border);border-radius:7px;padding:8px;font-family:inherit;font-size:.84rem;"></textarea></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-a" id="btn-cp-send" style="min-width:200px;">Envoyer la demande</button>
+      <span id="cp-msg" style="font-size:.74rem;color:var(--ink-soft);"></span>
+    </div>
+  </div>
+  <h3 style="font-size:.78rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin:0 0 10px;">Suivi des missions</h3>
+  <div id="courier-missions-board"></div>
+  <div class="card" style="margin-top:18px;padding:16px 18px;">
+    <h3 style="font-size:.92rem;font-weight:700;margin:0 0 10px;">Relevés coursier (facturation)</h3>
+    <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.4;">Vérifiez le nombre de courses effectuées par chaque coursier sur une période avant de le régler.</p>
+    <div class="frow" style="margin-bottom:10px;flex-wrap:wrap;gap:10px;">
+      <div class="fl" style="flex:1;min-width:160px;"><label>Coursier</label><select id="lab-courier-billing-courier"></select></div>
+      <div class="fl" style="flex:1;min-width:140px;"><label>Période</label><select id="lab-courier-billing-month"></select></div>
+    </div>
+    <div id="lab-courier-billing-result" style="font-size:.82rem;"></div>
+  </div>
+</div>
+
 </div><!-- /wrap -->
 <div id="print-area"></div>
 
+<div id="courier-dispatch-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3500;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--surface);border-radius:14px;width:100%;max-width:440px;padding:22px;box-shadow:0 12px 40px rgba(0,0,0,.2);">
+    <h3 id="cd-title" style="font-family:serif;font-size:1.1rem;margin-bottom:12px;">Mission coursier</h3>
+    <div class="fl" style="margin-bottom:10px;"><label>Coursier</label><select id="cd-courier"></select></div>
+    <div class="fl" style="margin-bottom:10px;"><label>Cabinet</label><input type="text" id="cd-cab-name" readonly style="background:var(--bg);"/></div>
+    <div class="fl" style="margin-bottom:10px;"><label>Adresse (optionnel)</label><input type="text" id="cd-cab-address" placeholder="Si le coursier ne connaît pas le lieu"/></div>
+    <div class="fl" style="margin-bottom:10px;"><label>Téléphone</label><input type="text" id="cd-cab-phone"/></div>
+    <div class="fl" style="margin-bottom:14px;"><label>Note</label><textarea id="cd-notes" rows="2" style="width:100%;border:1.5px solid var(--border);border-radius:7px;padding:8px;font-family:inherit;font-size:.84rem;"></textarea></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" class="btn btn-b" onclick="closeCourierDispatch()">Annuler</button>
+      <button type="button" class="btn btn-a" id="btn-cd-send">Envoyer la demande</button>
+    </div>
+    <div id="cd-msg" style="font-size:.74rem;margin-top:10px;min-height:16px;"></div>
+  </div>
+</div>
 
 <!-- MODAL TÂCHE -->
 <div id="task-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;align-items:flex-end;justify-content:center;">
@@ -2678,17 +2758,17 @@ function openDrawer(){
 function openDrawerMore(){
   var grid=document.getElementById('drawer-more-grid');
   var sec=document.getElementById('drawer-nav-secondary');
-  if(grid&&sec&&!grid.dataset.built){
+  if(grid&&sec){
+    grid.innerHTML='';
     sec.querySelectorAll('.tab[data-drawer-more]').forEach(function(btn){
       if(btn.style.display==='none')return;
       var wrap=document.createElement('div');
       wrap.className='drawer-tab-wrap';
       var b=btn.cloneNode(true);
-      b.onclick=function(){closeDrawerMore();closeDrawer();var p=b.dataset.pane;var t=document.querySelector('.tab[data-pane="'+p+'"]');if(t)t.click();};
+      b.onclick=function(){closeDrawerMore();closeDrawer();var p=b.dataset.pane;var t=document.querySelector('#tabs-labo .tab[data-pane="'+p+'"], .tab[data-pane="'+p+'"]');if(t)t.click();};
       wrap.appendChild(b);
       grid.appendChild(wrap);
     });
-    grid.dataset.built='1';
   }
   var o=document.getElementById('drawer-more-overlay');
   if(o)o.classList.add('on');
@@ -3698,7 +3778,8 @@ function renderDashboard(){
       qbtn(prog?'🔬 Programmation':'📋 Travaux','saisie')+
       qbtn('📦 Livraisons','livraisons')+
       qbtn('💰 Facturation','facturation')+
-      qbtn('🏥 Cabinets','cabinets')+
+      qbtn('🦷 Dentistes','cabinets')+
+      qbtn('🛵 Coursiers','coursiers')+
       qbtn('📅 Calendrier','calendrier')+
       qbtn('📊 Stats','stats')+
     '</div>';
@@ -3867,9 +3948,11 @@ async function _fetchWithTimeout(url,opts,timeoutMs){
 
 async function _fetchOrdersForCab(portalId){
   if(!portalId)return [];
+  const token=_cachedAccessToken;
+  if(!token)return [];
   try{
     const r=await _fetchWithTimeout(SB_URL+'/rest/v1/labo_data?id=eq.orders_'+portalId+'&select=data',{
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+      headers:_supabaseAuthHeaders()
     },15000);
     const rows=await r.json();
     let list=(rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
@@ -3883,12 +3966,12 @@ async function _fetchOrdersForCab(portalId){
 }
 
 async function _writeOrdersForCab(portalId,list){
-  if(!portalId)return;
+  if(!portalId||!_cachedAccessToken||!currentUser)return;
   try{
     await _fetchWithTimeout(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({id:'orders_'+portalId,data:{list:list,portalId:portalId},updated_at:new Date().toISOString()})
+      headers:_supabaseAuthHeaders({'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body:JSON.stringify({id:'orders_'+portalId,data:{list:list,portalId:portalId,labUserId:currentUser.id},updated_at:new Date().toISOString()})
     },20000);
   }catch(e){
     console.warn('_writeOrdersForCab',e);
@@ -4649,7 +4732,6 @@ async function confirmAcceptOrder(){
   }
   await _writeOrdersForCab(_acceptForm.portalId,list);
   // #region agent log
-  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-accept-billing',hypothesisId:'H14',location:'app.html:confirmAcceptOrder',message:'Accept workflow persisted to backend',data:{portalId:_acceptForm.portalId,caseId:_acceptForm.caseId,stepId:_acceptForm.stepId},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   _pendingOrdersCache[_acceptForm.portalId]=list;
 
@@ -4660,7 +4742,6 @@ async function confirmAcceptOrder(){
   render();renderDashboard();
   } catch(e) {
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-accept-billing',hypothesisId:'H14',location:'app.html:confirmAcceptOrder',message:'Accept workflow failed',data:{msg:e&&e.message?String(e.message):'unknown',portalId:_acceptForm.portalId,caseId:_acceptForm.caseId},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     // Erreur (timeout, réseau, etc.) — annuler proprement, retirer le job ajouté
     console.error('confirmAcceptOrder failed',e);
@@ -5139,9 +5220,7 @@ function _buildMissingMessageText(cabId){
 // Demande à l'IA de polir le message de base
 async function aiPolishMessage(rawText,cabName){
   try{
-    const resp=await fetch('/.netlify/functions/ai-chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+    const resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:_aiApiHeaders(),
       body:JSON.stringify({
         max_tokens:600,
         system:'Tu es un assistant pour un laboratoire de prothèse dentaire qui rédige des messages courts, professionnels et chaleureux à des cabinets dentaires. Réponds uniquement avec le texte du message, sans préambule, sans markdown, sans guillemets autour.',
@@ -5287,8 +5366,7 @@ async function aiSummarizeReply(cabId){
       allOpen.map(function(q,i){return (i+1)+'. ['+q.patient+'] '+_miCatLabel(q.category)+(q.text?' : '+q.text:'');}).join('\n')+
       '\n\nRéponse(s) du cabinet :\n'+repliesText+
       '\n\nPour chaque question, dis-moi si la réponse y répond. Réponds en JSON pur (pas de markdown) : [{"index":1,"answered":true,"summary":"A2 confirmée"}]. Mets answered=false si la réponse ne couvre pas la question.';
-    const resp=await fetch('/.netlify/functions/ai-chat',{
-      method:'POST',headers:{'Content-Type':'application/json'},
+    const resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:_aiApiHeaders(),
       body:JSON.stringify({
         max_tokens:800,
         system:'Tu es un assistant pour un laboratoire de prothèse dentaire. Tu analyses les réponses des dentistes pour identifier précisément à quelles questions elles répondent. Réponds UNIQUEMENT en JSON valide, sans markdown ni texte autour.',
@@ -6372,6 +6450,8 @@ function renderCabList(){
           <button onclick="resetCabPassword('${c.id}')" style="background:#8b4513;color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;">${t('btn.new_pwd')}</button>
           <button onclick="genFactureMensuelle('${c.id}')" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;">${t('btn.invoice_month')}</button>
           <button onclick="openChatModal('${c.id}')" style="background:#1a6a6a;color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;position:relative;" id="chat-btn-${c.id}">💬 Chat<span id="chat-badge-${c.id}" style="display:none;position:absolute;top:-5px;right:-5px;background:#e53935;color:#fff;border-radius:50%;width:16px;height:16px;font-size:.58rem;font-weight:700;align-items:center;justify-content:center;">!</span></button>
+          <button onclick="openCourierDispatch('${c.id}','pickup')" style="background:#2a6049;color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;" title="Demander une récupération">📥</button>
+          <button onclick="openCourierDispatch('${c.id}','delivery')" style="background:#d97706;color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;" title="Demander une livraison">📦</button>
           <button class="btn-del cab-del-btn" data-cid="${c.id}">✕</button>
         </div>
       </div>`).join('')
@@ -6536,6 +6616,7 @@ document.addEventListener('click',function(e){
     if(pane==='stats')renderStats();
     if(pane==='historique')renderHistorique();
     if(pane==='cabinets'){refreshCabSelects();renderCabList();renderCabJobs();}
+    if(pane==='coursiers'){initCourierPaneForm();renderCourierBoard();renderCourierLinks().catch(function(){});syncLabCourierBillingSelectors();loadLabCourierBilling().catch(function(){});}
     if(pane==='saisie'){syncSaisieCab();initSaisieTeethSection();renderQueueSaisie();loadAndRenderPendingOrders();}
     if(pane==='livraisons'){renderLivraisons();syncLivrFilterCab();}
     if(pane==='suivi'){renderSuiviAll();}
@@ -6800,16 +6881,19 @@ async function publishJob(job){
     publishedAt:new Date().toISOString()
   };
   const rowId='suivi_'+(job.trackCode||job.id);
-  // Try PATCH first, then POST if not found
+  const token=_cachedAccessToken;
+  if(!token)return rowId;
+  if(currentUser)payload.labUserId=currentUser.id;
+  const authH=_supabaseAuthHeaders({'Content-Type':'application/json','Prefer':'return=minimal'});
   const r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+rowId,{
     method:'PATCH',
-    headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'return=minimal'},
+    headers:authH,
     body:JSON.stringify({data:payload,updated_at:new Date().toISOString()})
   });
   if(r.status===404||!r.ok){
     await fetch(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'return=minimal'},
+      headers:authH,
       body:JSON.stringify({id:rowId,data:payload,updated_at:new Date().toISOString()})
     });
   }
@@ -7281,9 +7365,7 @@ async function sendAIMessage(){
   typing.textContent=t('btn.thinking');
   el.appendChild(typing);el.scrollTop=el.scrollHeight;
   try{
-    const resp=await fetch('/.netlify/functions/ai-chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+    const resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:_aiApiHeaders(),
       body:JSON.stringify({
         system:_buildAISystemPrompt(),
         messages:_aiMessages.filter(function(m){return m.role!=='assistant'||!m.content.startsWith('Bonjour');}),
@@ -8931,7 +9013,7 @@ async function checkStripePayments(){
   for(const doc of pending){
     try{
       const r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.stripe_sess_'+doc.stripeSessionId+'&select=data',{
-        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY},
+        headers:_supabaseAuthHeaders(),
       });
       const rows=await r.json();
       if(rows[0]&&rows[0].data&&rows[0].data.status==='paid'){
@@ -10043,6 +10125,7 @@ async function publishPortal(cab){
     cabCode:cab.code||'',
     cabPwd:cab.pwd||'',
     portalId:cab.portalId,
+    labUserId:currentUser?currentUser.id:null,
     laboName:localStorage.getItem('lb_name')||'Laboratoire Dentaire',
     laboLegal:legalForPortal,
     bdl:cabBdl,
@@ -10181,25 +10264,39 @@ function printBL(blId){
 <title>BL ${bl.num} — ${patient}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:10pt;color:#1c1714;background:#fff;padding:0;}
-  .page{width:210mm;min-height:297mm;margin:0 auto;padding:18mm 18mm 16mm;}
-  @media print{.page{padding:15mm 16mm 12mm;} .no-print{display:none;} body{background:#fff;}}
-  @page{size:A4;margin:0;}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:9.5pt;color:#1c1714;background:#fff;padding:0;}
+  .page.bl-print-doc{width:210mm;margin:0 auto;padding:14mm 14mm 12mm;}
+  @page{size:A4 portrait;margin:8mm;}
+  @media print{
+    html,body{background:#fff!important;margin:0;padding:0;}
+    .no-print{display:none!important;}
+    .page.bl-print-doc{
+      width:100%!important;min-height:0!important;max-height:none!important;
+      margin:0!important;padding:0!important;
+      page-break-after:avoid;page-break-inside:avoid;
+      break-inside:avoid;
+      zoom:0.9;
+    }
+    .header,.parties,.ce-section,.signature-area,table,.footer{page-break-inside:avoid;break-inside:avoid;}
+    h1{font-size:14pt;}
+    h2{font-size:8.5pt;margin-bottom:5px;}
+    thead th,tbody td{padding:5px 7px!important;font-size:7.75pt!important;}
+  }
   h1{font-size:16pt;font-weight:700;letter-spacing:-.3px;}
   h2{font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8a7968;margin-bottom:8px;border-bottom:1px solid #e5ddd2;padding-bottom:4px;}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2.5px solid #1c1714;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2.5px solid #1c1714;}
   .labo-name{font-size:13pt;font-weight:800;color:#1c1714;}
   .labo-info{font-size:8pt;color:#666;line-height:1.6;margin-top:4px;}
   .doc-title{text-align:right;}
   .doc-title h1{color:#c8410a;}
   .doc-num{font-size:9pt;color:#8a7968;margin-top:4px;}
   .doc-date{font-size:9pt;color:#8a7968;}
-  .parties{display:flex;gap:24px;margin-bottom:20px;}
-  .party-box{flex:1;background:#f6f1ea;border-radius:8px;padding:12px 14px;border:1px solid #e5ddd2;}
+  .parties{display:flex;gap:16px;margin-bottom:14px;}
+  .party-box{flex:1;background:#f6f1ea;border-radius:8px;padding:9px 11px;border:1px solid #e5ddd2;}
   .party-label{font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#8a7968;margin-bottom:6px;}
   .party-name{font-size:10pt;font-weight:700;color:#1c1714;}
   .party-detail{font-size:8.5pt;color:#555;line-height:1.55;margin-top:3px;}
-  table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+  table{width:100%;border-collapse:collapse;margin-bottom:12px;}
   thead tr{background:#1c1714;color:#fff;}
   thead th{padding:8px 10px;text-align:left;font-size:8.5pt;font-weight:600;letter-spacing:.04em;}
   tbody tr{border-bottom:1px solid #e5ddd2;}
@@ -10208,26 +10305,26 @@ function printBL(blId){
   tbody tr:nth-child(even){background:#faf7f4;}
   .total-row td{font-weight:700;font-size:10pt;border-top:2px solid #1c1714;padding-top:10px;}
   .amount{text-align:right;color:#c8410a;font-size:11pt;font-weight:800;}
-  .divider{border:none;border-top:1.5px solid #e5ddd2;margin:22px 0;}
-  .ce-section{background:#f0f5ff;border:1.5px solid #3a5fa0;border-radius:8px;padding:14px 16px;margin-top:20px;}
+  .divider{border:none;border-top:1.5px solid #e5ddd2;margin:12px 0;}
+  .ce-section{background:#f0f5ff;border:1.5px solid #3a5fa0;border-radius:8px;padding:10px 12px;margin-top:10px;}
   .ce-title{font-size:10pt;font-weight:700;color:#1a3a7a;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
   .ce-mark{font-size:14pt;font-weight:900;color:#1a3a7a;border:2.5px solid #1a3a7a;border-radius:3px;padding:0 4px;line-height:1.2;display:inline-block;}
-  .ce-body{font-size:8.5pt;color:#333;line-height:1.65;}
+  .ce-body{font-size:7.75pt;color:#333;line-height:1.45;}
   .ce-body strong{color:#1c1714;}
   .ce-table{width:100%;margin-top:10px;border-collapse:collapse;}
-  .ce-table td{font-size:8.5pt;padding:4px 8px;border:1px solid #c5d3f0;background:#fff;}
+  .ce-table td{font-size:7.75pt;padding:3px 6px;border:1px solid #c5d3f0;background:#fff;}
   .ce-table td:first-child{font-weight:600;background:#e8eef9;width:42%;color:#1a3a7a;}
-  .signature-area{display:flex;justify-content:space-between;margin-top:24px;gap:16px;}
+  .signature-area{display:flex;justify-content:space-between;margin-top:14px;gap:12px;}
   .sig-box{flex:1;border-top:1.5px solid #1c1714;padding-top:10px;}
   .sig-label{font-size:8pt;color:#8a7968;font-weight:600;text-transform:uppercase;letter-spacing:.06em;}
   .sig-detail{font-size:8pt;color:#555;margin-top:4px;line-height:1.5;}
-  .footer{margin-top:28px;padding-top:10px;border-top:1px solid #e5ddd2;font-size:7.5pt;color:#aaa;text-align:center;line-height:1.5;}
+  .footer{margin-top:12px;padding-top:8px;border-top:1px solid #e5ddd2;font-size:7pt;color:#aaa;text-align:center;line-height:1.4;}
   .print-btn{position:fixed;bottom:24px;right:24px;background:#c8410a;color:#fff;border:none;border-radius:10px;padding:12px 20px;font-size:10pt;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25);}
 </style>
 </head>
 <body>
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimer</button>
-<div class="page">
+<div class="page bl-print-doc">
 
   <!-- EN-TÊTE -->
   <div class="header">
@@ -10788,7 +10885,7 @@ const _clientTraceId = 'tr_' + Date.now().toString(36) + '_' + Math.random().toS
 let _userRole = localStorage.getItem('lb_user_role') || 'admin';
 const _ROLE_PERMS = {
   admin: ['*'],
-  production: ['pane:dashboard','pane:saisie','pane:calendrier','pane:livraisons','pane:historique','pane:stats','pane:attente','pane:impression','pane:messages'],
+  production: ['pane:dashboard','pane:saisie','pane:calendrier','pane:livraisons','pane:historique','pane:stats','pane:attente','pane:impression','pane:messages','pane:cabinets','pane:coursiers'],
   billing: ['pane:dashboard','pane:cabinets','pane:livraisons','pane:facturation','pane:historique','pane:stats','pane:messages','action:billing_generate','action:billing_credit'],
   support: ['pane:dashboard','pane:cabinets','pane:livraisons','pane:historique','pane:messages'],
 };
@@ -10867,14 +10964,24 @@ function reportClientError(payload){
     body: body
   }).catch(function(){});
 }
-function _debugAuditLog(hypothesisId, message, data){
-  // #region agent log
-  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-baseline',hypothesisId:hypothesisId,location:'app.html',message:message,data:data||{},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-}
+function _debugAuditLog(){}
+
 // Token d'accès mis en cache — évite d'appeler getSession() à chaque publishPortal
 // (les appels concurrents à getSession causent des erreurs de lock Supabase)
 let _cachedAccessToken = '';
+function _supabaseAuthHeaders(extra){
+  const h={apikey:SB_KEY};
+  if(_cachedAccessToken)h.Authorization='Bearer '+_cachedAccessToken;
+  return Object.assign(h,extra||{});
+}
+function _portalApiHeaders(extra){
+  const h={'Content-Type':'application/json'};
+  if(_cachedAccessToken)h.Authorization='Bearer '+_cachedAccessToken;
+  return Object.assign(h,extra||{});
+}
+function _aiApiHeaders(extra){
+  return _portalApiHeaders(extra);
+}
 // Identifiant unique de cet onglet/session — permet d'ignorer ses propres événements Realtime
 const _tabId = Math.random().toString(36).slice(2);
 // Timestamp du dernier état connu côté serveur — utilisé pour détecter les conflits
@@ -10882,36 +10989,135 @@ let _serverUpdatedAt = null;
 // Canal Realtime actif
 let _realtimeChannel = null;
 
+function hideAuthLoading(){
+  const el=document.getElementById('auth-loading');
+  if(el)el.style.display='none';
+}
+function redirectAway(url){
+  hideAuthLoading();
+  window.location.replace(url);
+}
+function isCourierAccount(user){
+  if(!user||!user.user_metadata)return false;
+  var m=user.user_metadata;
+  if(m.account_type==='courier')return true;
+  if(m.account_type==='lab'||m.labo_name)return false;
+  return !!m.courier_name;
+}
+let _labBootInProgress=false;
+
+async function checkLabAccessSoft(){
+  try{
+    const sub=await _withTimeout(ensureSubscriptionRow(),10000,'abonnement');
+    if(!hasAccess(sub))return{ok:false,reason:subReason(sub),sub:sub};
+    return{ok:true,sub:sub};
+  }catch(e){
+    console.warn('checkLabAccessSoft',e);
+    return{ok:true,sub:null,degraded:true};
+  }
+}
+
+async function completeLabBoot(session){
+  if(!session||!session.user)throw new Error('Session invalide');
+  if(isCourierAccount(session.user)){
+    await sbClient.auth.signOut();
+    throw new Error('Cet email est un compte coursier. Connectez-vous sur labosync.app/courier — ou utilisez un autre email pour le laboratoire.');
+  }
+  if(_labBootInProgress)return;
+  _labBootInProgress=true;
+  try{
+    currentUser=session.user;
+    _cachedAccessToken=session.access_token;
+    clearIfDifferentUser(session.user.id);
+    if(!localStorage.getItem('lb_types_seeded')){
+      if(!customTypes.length){customTypes=cloneDefaultTypes();saveCustomTypes();}
+      localStorage.setItem('lb_types_seeded','1');
+    }
+    showApp();
+    if(typeof render==='function')render();
+    refreshTechSelects();refreshTypeSelects();applyProgMode();
+
+    const access=await checkLabAccessSoft();
+    if(!access.ok){
+      showPaywall(access.reason);
+      return;
+    }
+    applyRoleUi();
+    if(access.sub)showTrialBanner(access.sub);
+    if(access.degraded){
+      showToast('Connexion lente au cloud — l\'app reste utilisable.','#d97706',4500);
+    }
+
+    _withTimeout(cloudRestore(true),18000,'cloudRestore').then(function(){
+      if(typeof render==='function')render();
+      refreshTechSelects();refreshTypeSelects();applyProgMode();
+    }).catch(function(e2){console.warn('cloudRestore',e2);});
+
+    try{startRealtime(session.user.id);}catch(e){}
+    try{startCourierLabRealtime();}catch(e3){console.warn('courier rt',e3);}
+    try{startCourierMissionPolling();}catch(e5){console.warn('courier poll',e5);}
+    try{_maybeRunOnboarding();}catch(e4){console.warn('onboarding',e4);}
+  }finally{
+    _labBootInProgress=false;
+  }
+}
 function showApp() {
-  document.getElementById('auth-loading').style.display = 'none';
+  hideAuthLoading();
   document.getElementById('auth-overlay').style.display = 'none';
   document.getElementById('paywall-overlay').style.display = 'none';
   document.getElementById('app-main').style.display = 'block';
 }
 function showLogin() {
-  document.getElementById('auth-loading').style.display = 'none';
+  hideAuthLoading();
   document.getElementById('auth-overlay').style.display = 'flex';
   document.getElementById('paywall-overlay').style.display = 'none';
   document.getElementById('app-main').style.display = 'none';
 }
+var _paywallReason='';
+var _paywallDismissed=false;
+
+function closePaywall(){
+  _paywallDismissed=true;
+  var overlay=document.getElementById('paywall-overlay');
+  if(overlay)overlay.style.display='none';
+  hideAuthLoading();
+  document.getElementById('auth-overlay').style.display='none';
+  document.getElementById('app-main').style.display='block';
+}
+
 function showPaywall(reason){
-  document.getElementById('auth-loading').style.display = 'none';
+  _paywallReason=reason||'trial_expired';
+  _paywallDismissed=false;
+  hideAuthLoading();
   document.getElementById('auth-overlay').style.display = 'none';
-  document.getElementById('app-main').style.display = 'none';
   var title=document.getElementById('paywall-title');
   var sub=document.getElementById('paywall-sub');
-  if(reason==='past_due'){
+  if(reason==='upgrade'){
+    if(title)title.textContent='Changer de formule';
+    if(sub)sub.textContent='Choisissez l\'offre mensuelle ou annuelle. Vous pouvez fermer cette fenêtre pour revenir à l\'application.';
+    document.getElementById('app-main').style.display='block';
+  } else if(reason==='past_due'){
     if(title)title.textContent='Paiement en échec';
     if(sub)sub.textContent='Le dernier paiement de votre abonnement a échoué. Mettez à jour votre moyen de paiement pour continuer.';
+    document.getElementById('app-main').style.display='none';
   } else if(reason==='canceled'){
     if(title)title.textContent='Abonnement annulé';
     if(sub)sub.textContent='Votre abonnement a été résilié. Réactivez-le pour retrouver l\'accès à Labosync.';
+    document.getElementById('app-main').style.display='none';
   } else {
     if(title)title.textContent='Votre essai gratuit est terminé';
     if(sub)sub.textContent='Souscrivez pour continuer à utiliser Labosync sans interruption.';
+    document.getElementById('app-main').style.display='none';
   }
   document.getElementById('paywall-overlay').style.display = 'block';
 }
+
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    var overlay=document.getElementById('paywall-overlay');
+    if(overlay&&overlay.style.display==='block')closePaywall();
+  }
+});
 
 function _safeBootToLogin(message){
   try{ showLogin(); }catch(e){}
@@ -10928,7 +11134,9 @@ window.addEventListener('error', function(ev){
     stack: ev && ev.error && ev.error.stack ? ev.error.stack : '',
   });
   try{
-    if(document.getElementById('auth-loading') && document.getElementById('auth-loading').style.display!=='none'){
+    var loading=document.getElementById('auth-loading');
+    var appMain=document.getElementById('app-main');
+    if(loading&&loading.style.display!=='none'&&(!appMain||appMain.style.display!=='block')){
       _safeBootToLogin('Erreur au chargement. Rechargez la page (Ctrl+F5).');
     }
   }catch(_){}
@@ -10943,7 +11151,9 @@ window.addEventListener('unhandledrejection', function(ev){
     stack: reason && reason.stack ? reason.stack : '',
   });
   try{
-    if(document.getElementById('auth-loading') && document.getElementById('auth-loading').style.display!=='none'){
+    var loading=document.getElementById('auth-loading');
+    var appMain=document.getElementById('app-main');
+    if(loading&&loading.style.display!=='none'&&(!appMain||appMain.style.display!=='block')){
       _safeBootToLogin('Initialisation interrompue. Vérifiez la connexion puis réessayez.');
     }
   }catch(_){}
@@ -10961,11 +11171,9 @@ async function fetchSubscriptionStatus(){
       headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_cachedAccessToken}
     });
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-reset-diagnosis',hypothesisId:'H19',location:'app.html:fetchSubscriptionStatus',message:'Subscription row fetch response',data:{ok:!!r.ok,status:r.status,hasToken:!!_cachedAccessToken},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     const rows=await r.json();
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-reset-diagnosis',hypothesisId:'H19',location:'app.html:fetchSubscriptionStatus',message:'Subscription row parsed',data:{hasRows:Array.isArray(rows)&&rows.length>0,hasData:!!(rows&&rows[0]&&rows[0].data),status:rows&&rows[0]&&rows[0].data&&rows[0].data.status?String(rows[0].data.status):''},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     return rows[0]&&rows[0].data?rows[0].data:null;
   }catch(e){console.warn('fetchSubscriptionStatus',e);return null;}
@@ -10976,7 +11184,6 @@ async function ensureSubscriptionRow(){
   const existing=await fetchSubscriptionStatus();
   if(existing){
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-reset-diagnosis',hypothesisId:'H20',location:'app.html:ensureSubscriptionRow',message:'Existing subscription row reused',data:{status:existing.status?String(existing.status):'',hasTrialEnd:!!(existing.trialEndsAt||existing.trialEnd)},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     return existing;
   }
@@ -10999,7 +11206,6 @@ async function ensureSubscriptionRow(){
       body:JSON.stringify({id:'sub_'+currentUser.id,data:data,updated_at:now.toISOString()})
     });
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-reset-diagnosis',hypothesisId:'H20',location:'app.html:ensureSubscriptionRow',message:'Created fallback trial row',data:{ok:!!wr.ok,status:wr.status,trialEndsAt:data.trialEndsAt},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
   }catch(e){console.warn('ensureSubscriptionRow',e);}
   return data;
@@ -11012,7 +11218,6 @@ function getTrialEnd(sub){
 function hasAccess(sub){
   if(!sub)return false;
   // #region agent log
-  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H21',location:'app.html:hasAccess',message:'Evaluate access decision',data:{status:sub.status?String(sub.status):'',trialEndsAt:sub.trialEndsAt||sub.trialEnd||'',hasStripeSubscriptionId:!!sub.stripeSubscriptionId,hasStripeCustomerId:!!sub.stripeCustomerId},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   // Abonnement Stripe actif
   if(sub.status==='active'||sub.status==='trialing')return true;
@@ -11032,7 +11237,6 @@ function subReason(sub){
 async function checkAccessOrPaywall(){
   const sub=await ensureSubscriptionRow();
   // #region agent log
-  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H22',location:'app.html:checkAccessOrPaywall',message:'Check access or paywall entry',data:{status:sub&&sub.status?String(sub.status):'',trialEndsAt:sub&&sub.trialEndsAt?sub.trialEndsAt:(sub&&sub.trialEnd?sub.trialEnd:''),hasAccessPreview:!!hasAccess(sub)},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   if(hasAccess(sub)){
     showApp();
@@ -11048,7 +11252,6 @@ async function checkAccessOrPaywall(){
     return true;
   }
   // #region agent log
-  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H22',location:'app.html:checkAccessOrPaywall',message:'Paywall shown',data:{reason:String(subReason(sub)||''),status:sub&&sub.status?String(sub.status):''},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   showPaywall(subReason(sub));
   return false;
@@ -11103,7 +11306,6 @@ async function startSubscription(plan){
   if(btn){btn.disabled=true;btn.textContent='⏳ Redirection vers Stripe…';}
   try{
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-subscription-routing',hypothesisId:'H18',location:'app.html:startSubscription',message:'Subscription checkout requested',data:{plan:plan||'monthly',hasButton:!!btn},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     const resp=await fetch('/.netlify/functions/stripe-create-subscription',{
       method:'POST',
@@ -11152,7 +11354,6 @@ async function openBillingPortal(){
     const sub=await fetchSubscriptionStatus();
     const hasStripeSub=!!(sub&&(sub.stripeSubscriptionId||sub.stripeCustomerId));
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-subscription-routing',hypothesisId:'H17',location:'app.html:openBillingPortal',message:'Manage subscription routing decision',data:{status:sub&&sub.status?String(sub.status):'none',hasStripeSubscriptionId:!!(sub&&sub.stripeSubscriptionId),hasStripeCustomerId:!!(sub&&sub.stripeCustomerId),route:hasStripeSub?'portal':'checkout'},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if(!hasStripeSub){
       // Pas encore d'abonnement Stripe: on envoie vers la souscription.
@@ -11165,7 +11366,6 @@ async function openBillingPortal(){
       body:JSON.stringify({userId:currentUser.id,returnUrl:window.location.href.split('?')[0]})
     });
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-accept-billing',hypothesisId:'H15',location:'app.html:openBillingPortal',message:'Billing portal HTTP response',data:{status:resp.status,ok:!!resp.ok},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     const data=await resp.json();
     if(!resp.ok||!data.url){
@@ -11187,7 +11387,6 @@ async function openBillingPortal(){
   var params=new URLSearchParams(window.location.search);
   if(params.get('sub_ok')==='1'){
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H23',location:'app.html:sub_ok_handler',message:'Subscription success callback detected',data:{path:window.location.pathname||''},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     setTimeout(function(){
       var clean=window.location.pathname;
@@ -11202,13 +11401,13 @@ async function openBillingPortal(){
 window.addEventListener('focus',function(){
   if(!currentUser)return;
   // #region agent log
-  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H24',location:'app.html:focus_refresh',message:'Window focus refresh subscription status',data:{},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   fetchSubscriptionStatus().then(function(sub){
     if(!sub)return;
     showTrialBanner(sub);
     var dashPane=document.getElementById('pane-parametres');
     if(dashPane&&dashPane.classList.contains('on'))renderSubInfo();
+    if(_paywallDismissed)return;
     if(!hasAccess(sub)){showPaywall(subReason(sub));}
   });
 });
@@ -11276,17 +11475,32 @@ document.getElementById('btn-login').addEventListener('click', async function() 
   const pass = document.getElementById('auth-pass').value;
   if (!email || !pass) { showAuthErr(t('auth.err.fields')); return; }
   this.textContent = t('common.loading'); this.disabled = true;
+  const loadingEl=document.getElementById('auth-loading');
+  const overlayEl=document.getElementById('auth-overlay');
+  if(loadingEl){loadingEl.style.display='flex';}
+  if(overlayEl){overlayEl.style.display='none';}
   try{
     localStorage.removeItem('lb_env');
     if(email){localStorage.setItem('lb_last_email',email);}
-    localStorage.setItem('lb_fresh_login','1');
-    const { error } = await sbClient.auth.signInWithPassword({ email, password: pass });
-    if (error) {
-      localStorage.removeItem('lb_fresh_login');
-      showAuthErr(t('common.error') + ' : ' + (error.message === 'Invalid login credentials' ? t('auth.err.badpass') : error.message));
-    }
-  }catch(e){
     localStorage.removeItem('lb_fresh_login');
+    const { data, error } = await sbClient.auth.signInWithPassword({ email, password: pass });
+    if (error) {
+      hideAuthLoading();
+      if(overlayEl)overlayEl.style.display='flex';
+      showAuthErr(t('common.error') + ' : ' + (error.message === 'Invalid login credentials' ? t('auth.err.badpass') : error.message));
+      return;
+    }
+    if(data.session&&isCourierAccount(data.session.user)){
+      await sbClient.auth.signOut();
+      hideAuthLoading();
+      if(overlayEl)overlayEl.style.display='flex';
+      showAuthErr('Cet email est un compte coursier. Ouvrez labosync.app/courier pour vous connecter.');
+      return;
+    }
+    await completeLabBoot(data.session);
+  }catch(e){
+    hideAuthLoading();
+    if(overlayEl)overlayEl.style.display='flex';
     showAuthErr(t('common.error') + ' : ' + ((e&&e.message)?e.message:'Erreur réseau'));
   }finally{
     this.textContent = t('auth.btn.login');
@@ -11303,18 +11517,36 @@ document.getElementById('btn-signup').addEventListener('click', async function()
   if (!laboName || !email || !pass) { showAuthErr(t('auth.err.fields')); return; }
   if (pass.length < 6) { showAuthErr(t('auth.err.shortpass')); return; }
   this.textContent = t('common.loading'); this.disabled = true;
-  const { error } = await sbClient.auth.signUp({ email, password: pass, options: { data: { labo_name: laboName } } });
-  this.disabled = false;
-  if (error) { this.textContent = 'Créer mon compte'; showAuthErr('Erreur : ' + error.message); }
-  else {
-    this.textContent = 'Connexion en cours…';
-    // Vider toutes les données du compte précédent
+  const loadingEl=document.getElementById('auth-loading');
+  if(loadingEl)loadingEl.style.display='flex';
+  document.getElementById('auth-overlay').style.display='none';
+  try{
+    const { data, error } = await sbClient.auth.signUp({ email, password: pass, options: { data: { labo_name: laboName, account_type: 'lab' } } });
+    if (error) {
+      hideAuthLoading();
+      document.getElementById('auth-overlay').style.display='flex';
+      this.textContent = 'Créer mon compte';
+      showAuthErr('Erreur : ' + error.message);
+      return;
+    }
     Object.keys(localStorage).forEach(function(k){ if(k.startsWith('lb_')) localStorage.removeItem(k); });
-    // Initialiser le nouveau compte vierge
     localStorage.setItem('lb_name', laboName);
     localStorage.setItem('lb_techs', '{}');
     localStorage.setItem('lb_prog_actif', '0');
-    // onAuthStateChange SIGNED_IN gère la suite — pas de fallback reload (causait un flash gênant)
+    if(data.session){
+      await completeLabBoot(data.session);
+    }else{
+      hideAuthLoading();
+      document.getElementById('auth-overlay').style.display='flex';
+      showAuthErr('Compte créé ! Confirmez votre email si demandé, puis connectez-vous.');
+    }
+  }catch(e){
+    hideAuthLoading();
+    document.getElementById('auth-overlay').style.display='flex';
+    showAuthErr((e&&e.message)?e.message:'Erreur réseau');
+  }finally{
+    this.disabled = false;
+    this.textContent = 'Créer mon compte';
   }
 });
 
@@ -11322,6 +11554,7 @@ document.getElementById('btn-signup').addEventListener('click', async function()
 window.authLogout = function() {
   clearTimeout(_saveTimer);
   stopRealtime();
+  _paywallDismissed=false;
   // Masquer l'app immédiatement (feedback visuel instantané)
   showLogin();
   currentUser = null;
@@ -11404,6 +11637,45 @@ function _withTimeout(promise, ms, label){
     })
   ]);
 }
+let _getSessionInflight = null;
+function getSessionOnce(){
+  if(!_getSessionInflight){
+    _getSessionInflight = sbClient.auth.getSession().finally(function(){
+      setTimeout(function(){ _getSessionInflight = null; }, 100);
+    });
+  }
+  return _getSessionInflight;
+}
+async function getSessionReliable(retries, msPerTry){
+  var lastErr, n = retries || 2, ms = msPerTry || 20000;
+  for(var i = 0; i < n; i++){
+    try{
+      return await _withTimeout(getSessionOnce(), ms, 'getSession');
+    }catch(e){
+      lastErr = e;
+      _getSessionInflight = null;
+      if(i < n - 1) await new Promise(function(r){ setTimeout(r, 600); });
+    }
+  }
+  throw lastErr;
+}
+function _scheduleSessionRetry(){
+  setTimeout(async function(){
+    if(currentUser) return;
+    try{
+      var sessionResult = await _withTimeout(getSessionOnce(), 15000, 'getSession');
+      var session = sessionResult.data && sessionResult.data.session;
+      if(!session) return;
+      if(isCourierAccount(session.user)){
+        showLogin();
+        showAuthErr('Session coursier détectée. Utilisez labosync.app/courier pour ce compte.');
+        await sbClient.auth.signOut();
+        return;
+      }
+      await completeLabBoot(session);
+    }catch(e){ console.warn('session retry', e); }
+  }, 1200);
+}
 function _bootWatchdog(){
   setTimeout(function(){
     var el=document.getElementById('auth-loading');
@@ -11423,75 +11695,59 @@ function _bootWatchdog(){
 _bootWatchdog();
 (async () => {
   applyLang();
+  var loginEarly = setTimeout(function(){
+    if(!currentUser){ hideAuthLoading(); showLogin(); }
+  }, 4500);
   try {
-    const sessionResult = await _withTimeout(sbClient.auth.getSession(), 12000, 'getSession');
-    const { data: { session } } = sessionResult;
+    var sessionResult = await getSessionReliable(2, 20000);
+    var session = sessionResult.data && sessionResult.data.session;
     if (session) {
-      clearIfDifferentUser(session.user.id);
-      currentUser = session.user;
-      _cachedAccessToken = session.access_token;
-      const okAccess = await _withTimeout(checkAccessOrPaywall(), 15000, 'abonnement');
-      if (okAccess) {
-        showApp();
-        try{
-          await _withTimeout(cloudRestore(true), 20000, 'cloudRestore');
-        }catch(e2){
-          console.warn('cloudRestore init',e2);
-        }
-        startRealtime(session.user.id);
-        try{_maybeRunOnboarding();}catch(e){console.warn('onboarding',e);}
+      if(isCourierAccount(session.user)){
+        showLogin();
+        showAuthErr('Session coursier détectée. Utilisez labosync.app/courier pour ce compte.');
+        await sbClient.auth.signOut();
+      }else{
+        await completeLabBoot(session);
       }
-    } else {
+    } else if(!currentUser) {
       showLogin();
     }
   } catch(e) {
-    console.error('Auth init error', e);
-    showLogin();
+    console.warn('Auth init getSession', e);
+    if(!currentUser){
+      showLogin();
+      _scheduleSessionRetry();
+    }
+  } finally {
+    clearTimeout(loginEarly);
+    _authInitDone = true;
   }
-  _authInitDone = true;
 })();
 
 // Écoute les changements d'état auth (après init)
 sbClient.auth.onAuthStateChange(async (event, session) => {
-  if (!_authInitDone && event !== 'SIGNED_IN') return; // ignorer pendant init, sauf SIGNED_IN (nouveau compte)
-  if (!_authInitDone && event === 'SIGNED_IN' && currentUser) return; // l'IIFE a déjà traité cette session, éviter la double-init
   if (event === 'SIGNED_OUT') {
     stopRealtime();
     currentUser = null;
     _cachedAccessToken = '';
     Object.keys(localStorage).forEach(function(k){if(k.startsWith('sb-'))localStorage.removeItem(k);});
     showLogin();
-  } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-    // Mettre à jour le token en cache à chaque connexion ou refresh
+    return;
+  }
+  if (event === 'TOKEN_REFRESHED' && session) {
     _cachedAccessToken = session.access_token;
-    if (event === 'TOKEN_REFRESHED') return; // juste le token, pas besoin de reinit
-    const wasLoggedOut = !currentUser; // vraie nouvelle connexion si l'utilisateur n'était pas connecté
-    clearIfDifferentUser(session.user.id);
-    currentUser = session.user;
-    if(!localStorage.getItem('lb_types_seeded')){
-      if(!customTypes.length){customTypes=cloneDefaultTypes();saveCustomTypes();}
-      localStorage.setItem('lb_types_seeded','1');
-    }
-    if(localStorage.getItem('lb_fresh_login')){
-      localStorage.removeItem('lb_fresh_login');
-      window.location.href='labo-mobile.html';
-      return;
-    }
-    const hasAccessNow = await _withTimeout(checkAccessOrPaywall(), 15000, 'abonnement');
-    if(!hasAccessNow)return;
-    showApp();
-    if(wasLoggedOut){
-      const dashTab=document.querySelector('[data-pane="dashboard"]');
-      if(dashTab)dashTab.click();
-    }
+    return;
+  }
+  if (event === 'SIGNED_IN' && session && _authInitDone) {
+    const appMain=document.getElementById('app-main');
+    if(appMain&&appMain.style.display==='block')return;
     try{
-      await _withTimeout(cloudRestore(true), 20000, 'cloudRestore');
-    }catch(e2){
-      console.warn('cloudRestore sign-in',e2);
+      hideAuthLoading();
+      await completeLabBoot(session);
+    }catch(e){
+      console.error('SIGNED_IN boot',e);
+      _safeBootToLogin((e&&e.message)?e.message:'Connexion interrompue');
     }
-    startRealtime(session.user.id);
-    if(typeof updateQueueBadge==='function')updateQueueBadge();
-    try{_maybeRunOnboarding();}catch(e){console.warn('onboarding',e);}
   }
 });
 
@@ -11579,9 +11835,7 @@ Réponds toujours en français, de façon concise et professionnelle.`;
     document.getElementById('ai-send').disabled=true;
     showTyping();
     try{
-      const res=await fetch('/.netlify/functions/ai-chat',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
+      const res=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:_aiApiHeaders(),
         body:JSON.stringify({
           max_tokens:1024,
           system:buildSystemPrompt(),
@@ -11727,7 +11981,6 @@ function _noteChatPollResult(portalId, ok){
   if(ok){
     if((_chatPollFailures[portalId]||0)>=3){
       // #region agent log
-      fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-post-fix',hypothesisId:'H9',location:'app.html:_noteChatPollResult',message:'Chat polling recovered after cooldown',data:{portalId:portalId,prevFailures:_chatPollFailures[portalId]||0},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
     }
     _chatPollFailures[portalId]=0;
@@ -11739,7 +11992,6 @@ function _noteChatPollResult(portalId, ok){
     // Coupe-circuit: évite de marteler l'API en cas de 500 répétés.
     _chatPollCooldownUntil[portalId]=Date.now()+120000;
     // #region agent log
-    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-post-fix',hypothesisId:'H9',location:'app.html:_noteChatPollResult',message:'Chat polling circuit breaker opened',data:{portalId:portalId,failures:_chatPollFailures[portalId],cooldownMs:120000},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
   }
 }
@@ -11776,7 +12028,7 @@ async function loadChatMessages(scrollToBottom){
   if(!_chatPortalId) return;
   if(!_canPollChat(_chatPortalId)) return;
   try{
-    const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(_chatPortalId));
+    const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(_chatPortalId),{headers:_portalApiHeaders()});
     if(!r.ok){
       _noteChatPollResult(_chatPortalId,false);
       return;
@@ -11878,7 +12130,7 @@ async function sendChatMsg(){
     if(attachment) body.attachment = attachment;
     const r = await fetch('/.netlify/functions/portal',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:_portalApiHeaders(),
       body:JSON.stringify(body)
     });
     if(r.ok){ await loadChatMessages(true); }
@@ -12083,7 +12335,6 @@ function _queueMessagesPaneRender(){
     _messagesPaneRerenderQueued = false;
     if(document.getElementById('pane-messages').classList.contains('on') && !_isRenderingMessagesPane){
       // #region agent log
-      fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-post-fix',hypothesisId:'H13',location:'app.html:_queueMessagesPaneRender',message:'Deferred messages pane rerender',data:{},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       renderMessagesPane();
     }
@@ -12123,7 +12374,7 @@ async function renderMessagesPane(){
     if(!cab.portalId) return;
     if(!_canPollChat(cab.portalId)) return;
     try{
-      const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId));
+      const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId),{headers:_portalApiHeaders()});
       if(!r.ok){
         _noteChatPollResult(cab.portalId,false);
         return;
@@ -12173,7 +12424,7 @@ function startChatBgPoll(){
       if(!cab.portalId) continue;
       if(!_canPollChat(cab.portalId)) continue;
       try{
-        const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId));
+        const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId),{headers:_portalApiHeaders()});
         if(!r.ok){
           _noteChatPollResult(cab.portalId,false);
           continue;
@@ -12290,6 +12541,649 @@ function openJobDetail(jobId){
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
 }
+
+/* ══ COURSIERS ══ */
+const COURIER_API='/.netlify/functions/courier-api';
+let _courierLinks=[];
+let _cdCabId=null;
+let _cdType='pickup';
+let _cpStops=[{type:'pickup',cabId:'',address:'',phone:''}];
+let _courierRtChannel=null;
+let _courierPollTimer=null;
+let _courierMissionsSummary=[];
+
+function courierLinksRowId(){return currentUser?'courier_links_'+currentUser.id:'';}
+function labCourierIdxRowId(){return currentUser?'lab_courier_idx_'+currentUser.id:'';}
+
+async function getLabAuthToken(){
+  if(_cachedAccessToken)return _cachedAccessToken;
+  const sess=await sbClient.auth.getSession();
+  const t=sess.data&&sess.data.session?sess.data.session.access_token:'';
+  if(t)_cachedAccessToken=t;
+  return t||'';
+}
+
+async function laboDataRowGet(rowId){
+  const token=await getLabAuthToken();
+  if(!token||!rowId)throw new Error('Session expirée');
+  const r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+encodeURIComponent(rowId)+'&select=data',{
+    headers:{apikey:SB_KEY,Authorization:'Bearer '+token},
+  });
+  if(!r.ok)throw new Error('Lecture cloud ('+r.status+')');
+  const rows=await r.json();
+  return rows[0]&&rows[0].data?rows[0].data:null;
+}
+
+function saveCourierLinksCache(links){
+  try{localStorage.setItem('lb_courier_links_'+currentUser.id,JSON.stringify(links||[]));}catch(e){}
+}
+function loadCourierLinksCache(){
+  try{
+    const raw=localStorage.getItem('lb_courier_links_'+(currentUser&&currentUser.id||''));
+    return raw?JSON.parse(raw):[];
+  }catch(e){return[];}
+}
+
+async function listLinkedCouriersLocal(){
+  const data=await laboDataRowGet(courierLinksRowId());
+  const links=(data&&data.links)||[];
+  if(links.length)saveCourierLinksCache(links);
+  return links;
+}
+
+async function listMissionsLocal(){
+  const data=await laboDataRowGet(labCourierIdxRowId());
+  return (data&&data.missions)||[];
+}
+
+function friendlyCourierErr(msg){
+  if(!msg)return 'Erreur inconnue';
+  if(msg==='Non authentifié'||msg.indexOf('Non authentifi')>=0){
+    return 'Connexion au service coursier impossible. Déconnectez-vous, rechargez la page (Ctrl+F5), puis réessayez.';
+  }
+  return msg;
+}
+
+async function courierApi(action,payload){
+  let token=await getLabAuthToken();
+  if(!token)throw new Error('Session expirée — reconnectez-vous.');
+  let lastErr='';
+  for(var attempt=0;attempt<2;attempt++){
+    const r=await fetch(COURIER_API,{
+      method:'POST',
+      headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+token},
+      body:JSON.stringify(Object.assign({action:action},payload||{})),
+    });
+    const j=await r.json().catch(function(){return {};});
+    if(r.ok)return j;
+    lastErr=j.error||('Erreur '+r.status);
+    if(r.status===401&&attempt===0){
+      try{
+        await sbClient.auth.refreshSession();
+        const s2=await sbClient.auth.getSession();
+        token=s2.data&&s2.data.session?s2.data.session.access_token:'';
+        if(token)_cachedAccessToken=token;
+        continue;
+      }catch(e){}
+    }
+    break;
+  }
+  throw new Error(friendlyCourierErr(lastErr));
+}
+
+function courierStatusLabel(st){
+  return{offered:'⏳ En attente',accepted:'✓ Acceptée',en_route:'🚗 En route',completed:'✅ Terminée',declined:'✗ Refusée',cancelled:'⊘ Annulée'}[st]||st;
+}
+
+function updateCourierNavBadge(missions){
+  const list=missions||_courierMissionsSummary||[];
+  const pending=list.filter(function(m){return m.status==='offered';}).length;
+  const inProgress=list.filter(function(m){return ['accepted','en_route'].includes(m.status);}).length;
+  const badge=document.getElementById('courier-tab-badge');
+  const sub=document.getElementById('courier-tab-status');
+  if(badge){
+    if(pending>0){badge.style.display='inline';badge.textContent=pending>9?'9+':String(pending);badge.title='En attente d\'acceptation par le coursier';}
+    else if(inProgress>0){badge.style.display='inline';badge.textContent='🚗';badge.style.background='#2a6049';badge.title='Mission(s) en cours';}
+    else{badge.style.display='none';badge.style.background='#e53935';}
+  }
+  if(sub){
+    if(pending>0)sub.textContent='⏳ '+pending+' en attente d\'acceptation';
+    else if(inProgress>0)sub.textContent='🚗 '+inProgress+' mission(s) en cours';
+    else sub.textContent='Missions & dispatch';
+  }
+  try{
+    const base='Labosync';
+    document.title=pending>0?'('+pending+') '+base:base;
+  }catch(e){}
+}
+
+async function refreshCourierMissionsSummary(){
+  if(!currentUser)return;
+  try{
+    const j=await courierApi('listMissions',{scope:'all',limit:80});
+    _courierMissionsSummary=j.missions||[];
+    updateCourierNavBadge(_courierMissionsSummary);
+    notifyLabCourierMissionChanges(_courierMissionsSummary);
+    const pane=document.getElementById('pane-coursiers');
+    if(pane&&pane.classList.contains('on'))await renderCourierBoard();
+  }catch(e){console.warn('refreshCourierMissionsSummary',e);}
+}
+
+function startCourierMissionPolling(){
+  if(_courierPollTimer)return;
+  refreshCourierMissionsSummary();
+  _courierPollTimer=setInterval(function(){refreshCourierMissionsSummary();},25000);
+}
+
+let _cpDragIdx=null;
+let _labCourierNotifySnap=null;
+
+function buildMapsDirectionsUrl(stops){
+  const addrs=(stops||[]).map(function(s){
+    return String(s.cabAddress||s.cabName||'').trim();
+  }).filter(Boolean);
+  if(!addrs.length)return '';
+  const enc=function(a){return encodeURIComponent(a);};
+  if(addrs.length===1)return 'https://www.google.com/maps/dir/?api=1&destination='+enc(addrs[0])+'&travelmode=driving';
+  const origin=enc(addrs[0]);
+  const dest=enc(addrs[addrs.length-1]);
+  let url='https://www.google.com/maps/dir/?api=1&origin='+origin+'&destination='+dest+'&travelmode=driving';
+  if(addrs.length>2)url+='&waypoints='+addrs.slice(1,-1).map(enc).join('|');
+  return url;
+}
+
+function labCourierNotify(title,body,tag){
+  if(!('Notification' in window)||Notification.permission!=='granted')return;
+  if(document.visibilityState==='visible')return;
+  try{new Notification(title||'Labosync',{body:body,tag:tag||'labosync-lab-courier',icon:'/icon.svg'});}catch(e){}
+}
+
+function notifyLabCourierMissionChanges(all){
+  if(!('Notification' in window)||Notification.permission!=='granted')return;
+  const snap={};
+  (all||[]).forEach(function(m){snap[m.id]=m.status;});
+  if(!_labCourierNotifySnap){_labCourierNotifySnap=snap;return;}
+  (all||[]).forEach(function(m){
+    const prev=_labCourierNotifySnap[m.id];
+    const title=(missionStopsList(m)[0]&&missionStopsList(m)[0].cabName)||'Course';
+    if(prev==='offered'&&m.status==='accepted')labCourierNotify('Course acceptée','Le coursier a pris en charge la course.','lab-accept-'+m.id);
+    if(prev&&['accepted','en_route'].includes(prev)&&m.status==='completed')labCourierNotify('Course terminée',title,'lab-done-'+m.id);
+  });
+  _labCourierNotifySnap=snap;
+}
+
+function updateCpMapsPreviewBtn(){
+  const btn=document.getElementById('btn-cp-maps-preview');
+  if(!btn)return;
+  const addrs=collectCpStopsPayload().map(function(s){return s.cabAddress||s.cabName;}).filter(Boolean);
+  btn.style.display=addrs.length?'':'none';
+}
+
+function missionStopsList(m){
+  if(Array.isArray(m.stops)&&m.stops.length){
+    return m.stops.slice().sort(function(a,b){return(a.order||0)-(b.order||0);});
+  }
+  if(m.cabName)return[{type:m.type==='delivery'?'delivery':'pickup',cabId:m.cabId||'',cabName:m.cabName,cabPhone:m.cabPhone||'',cabAddress:m.cabAddress||'',status:m.status==='completed'?'done':'pending'}];
+  return[];
+}
+
+function missionStopsSummaryHtml(m){
+  const stops=missionStopsList(m);
+  if(stops.length<=1){
+    const s0=stops[0]||m;
+    const mark=s0.status==='done'?' ✓':'';
+    return (s0.type==='delivery'?'📦 Livraison':'📥 Récupération')+' · '+escH(s0.cabName||m.cabName||'')+mark;
+  }
+  return stops.map(function(s,idx){
+    const mark=s.status==='done'?' <span style="color:#2a6049;font-weight:700;">✓</span>':' <span style="color:var(--ink-soft);">○</span>';
+    return '<div style="font-size:.76rem;padding:2px 0;">'+(idx+1)+'. '+(s.type==='delivery'?'📦':'📥')+' '+escH(s.cabName)+mark+'</div>';
+  }).join('');
+}
+
+function cpCabinetOptions(selectedId){
+  const sorted=cabinets.slice().sort(function(a,b){return(a.name||'').localeCompare(b.name||'');});
+  return '<option value="">— Dentiste —</option>'+
+    sorted.map(function(c){
+      return '<option value="'+escH(c.id)+'"'+(c.id===selectedId?' selected':'')+'>'+escH(c.name)+'</option>';
+    }).join('');
+}
+
+function renderCpStops(){
+  const el=document.getElementById('cp-stops-list');
+  if(!el)return;
+  el.innerHTML=_cpStops.map(function(stop,idx){
+    const canRemove=_cpStops.length>1;
+    return '<div class="cp-stop-row" data-idx="'+idx+'" draggable="true" style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--bg);">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">'+
+        '<span class="cp-drag-handle" title="Glisser pour réordonner" style="cursor:grab;user-select:none;font-size:1rem;line-height:1;color:var(--ink-soft);">⠿</span>'+
+        '<span style="font-size:.72rem;font-weight:700;color:var(--ink-soft);flex:1;">Arrêt '+(idx+1)+'</span>'+
+        (canRemove?'<button type="button" class="btn btn-b cp-stop-rm" data-idx="'+idx+'" style="font-size:.68rem;padding:2px 8px;">Retirer</button>':'')+
+      '</div>'+
+      '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">'+
+        '<button type="button" class="btn cp-stop-type '+(stop.type==='pickup'?'btn-a':'btn-b')+'" data-idx="'+idx+'" data-type="pickup" style="flex:1;min-width:120px;font-size:.74rem;padding:8px;">📥 Récup.</button>'+
+        '<button type="button" class="btn cp-stop-type '+(stop.type==='delivery'?'btn-a':'btn-b')+'" data-idx="'+idx+'" data-type="delivery" style="flex:1;min-width:120px;font-size:.74rem;padding:8px;">📦 Livr.</button>'+
+      '</div>'+
+      '<div class="fl" style="margin-bottom:8px;"><label>Dentiste</label><select class="cp-stop-cab" data-idx="'+idx+'">'+cpCabinetOptions(stop.cabId)+'</select></div>'+
+      '<div class="fl"><label>Adresse (optionnel)</label><input type="text" class="cp-stop-addr" data-idx="'+idx+'" value="'+escH(stop.address||'')+'" placeholder="Rue, ville…"/></div>'+
+    '</div>';
+  }).join('');
+  el.querySelectorAll('.cp-stop-type').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      const i=parseInt(btn.dataset.idx,10);
+      if(!isNaN(i)&&_cpStops[i]){_cpStops[i].type=btn.dataset.type==='delivery'?'delivery':'pickup';renderCpStops();}
+    });
+  });
+  el.querySelectorAll('.cp-stop-cab').forEach(function(sel){
+    sel.addEventListener('change',function(){
+      const i=parseInt(sel.dataset.idx,10);
+      if(isNaN(i)||!_cpStops[i])return;
+      _cpStops[i].cabId=sel.value;
+      const cab=cabinets.find(function(c){return c.id===sel.value;});
+      if(cab){
+        if(!_cpStops[i].address)_cpStops[i].address=cab.address||'';
+        if(!_cpStops[i].phone)_cpStops[i].phone=cab.phone||'';
+        renderCpStops();
+      }
+    });
+  });
+  el.querySelectorAll('.cp-stop-addr').forEach(function(inp){
+    inp.addEventListener('input',function(){
+      const i=parseInt(inp.dataset.idx,10);
+      if(!isNaN(i)&&_cpStops[i]){_cpStops[i].address=inp.value;updateCpMapsPreviewBtn();}
+    });
+  });
+  el.querySelectorAll('.cp-stop-rm').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      const i=parseInt(btn.dataset.idx,10);
+      if(_cpStops.length>1&&!isNaN(i)){_cpStops.splice(i,1);renderCpStops();}
+    });
+  });
+  el.querySelectorAll('.cp-stop-row').forEach(function(row){
+    row.addEventListener('dragstart',function(e){
+      _cpDragIdx=parseInt(row.dataset.idx,10);
+      row.classList.add('cp-dragging');
+      if(e.dataTransfer)e.dataTransfer.effectAllowed='move';
+    });
+    row.addEventListener('dragend',function(){
+      row.classList.remove('cp-dragging');
+      el.querySelectorAll('.cp-stop-row').forEach(function(r){r.classList.remove('cp-drag-over');});
+      _cpDragIdx=null;
+    });
+    row.addEventListener('dragover',function(e){
+      e.preventDefault();
+      row.classList.add('cp-drag-over');
+      if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+    });
+    row.addEventListener('dragleave',function(){row.classList.remove('cp-drag-over');});
+    row.addEventListener('drop',function(e){
+      e.preventDefault();
+      row.classList.remove('cp-drag-over');
+      const toIdx=parseInt(row.dataset.idx,10);
+      if(_cpDragIdx==null||isNaN(toIdx)||_cpDragIdx===toIdx)return;
+      const item=_cpStops.splice(_cpDragIdx,1)[0];
+      _cpStops.splice(toIdx,0,item);
+      renderCpStops();
+    });
+  });
+  updateCpMapsPreviewBtn();
+}
+
+function collectCpStopsPayload(){
+  return _cpStops.map(function(stop){
+    const cab=cabinets.find(function(c){return c.id===stop.cabId;});
+    if(!cab)return null;
+    return{
+      type:stop.type==='delivery'?'delivery':'pickup',
+      cabId:cab.id,
+      cabName:cab.name,
+      cabPhone:(stop.phone||cab.phone||'').trim(),
+      cabAddress:(stop.address||cab.address||'').trim(),
+    };
+  }).filter(Boolean);
+}
+
+async function initCourierPaneForm(){
+  const courierSel=document.getElementById('cp-courier');
+  const msg=document.getElementById('cp-msg');
+  if(!courierSel)return;
+  if(!_cpStops.length)_cpStops=[{type:'pickup',cabId:'',address:'',phone:''}];
+  renderCpStops();
+
+  if(!cabinets.length&&msg){
+    msg.style.color='#d97706';
+    msg.textContent='Aucun dentiste enregistré — ajoutez-en dans l\'onglet Dentistes.';
+  }
+
+  try{
+    const j=await courierApi('listLinkedCouriers');
+    _courierLinks=j.couriers||[];
+    saveCourierLinksCache(_courierLinks);
+  }catch(e){
+    console.warn('listLinkedCouriers API',e);
+    try{
+      _courierLinks=await listLinkedCouriersLocal();
+    }catch(e2){
+      _courierLinks=loadCourierLinksCache();
+    }
+    if(!_courierLinks.length){
+      courierSel.innerHTML='<option value="">— Aucun coursier —</option>';
+      if(msg){
+        msg.style.color='#c0392b';
+        msg.textContent=friendlyCourierErr(e.message)+' Allez dans Réglages → Coursiers pour ajouter un coursier.';
+      }
+      return;
+    }
+    if(msg){
+      msg.style.color='#d97706';
+      msg.textContent='Liste coursier chargée (mode secours). '+(_courierLinks.length)+' coursier(s).';
+    }
+  }
+
+  if(!_courierLinks.length){
+    courierSel.innerHTML='<option value="">— Aucun coursier —</option>';
+    if(msg){
+      msg.style.color='#d97706';
+      msg.textContent='Aucun coursier rattaché. Cliquez sur « Gérer les coursiers » pour en ajouter un.';
+    }
+  }else{
+    courierSel.innerHTML=_courierLinks.map(function(c,i){
+      return '<option value="'+escH(c.courierUserId)+'"'+(i===0?' selected':'')+'>'+escH(c.displayName)+' ('+escH(c.email||'')+')</option>';
+    }).join('');
+    if(msg&&!msg.textContent)msg.textContent='';
+  }
+}
+
+async function sendCourierMissionRequest(payload,ui){
+  const msgEl=ui&&ui.msgEl;
+  const btn=ui&&ui.btn;
+  if(btn)btn.disabled=true;
+  if(msgEl){msgEl.style.color='var(--ink-soft)';msgEl.textContent='Envoi en cours…';}
+  try{
+    if(!payload.courierUserId)throw new Error('Choisissez un coursier');
+    if(!payload.stops||!payload.stops.length){
+      if(!payload.cabName)throw new Error('Ajoutez au moins un arrêt avec un dentiste');
+    }
+    await courierApi('createMission',payload);
+    const n=payload.stops?payload.stops.length:(payload.cabName?1:0);
+    showToast('Demande envoyée au coursier !'+(n>1?' ('+n+' arrêts)':''),'#2a6049',3500);
+    refreshCourierMissionsSummary();
+    if(msgEl){msgEl.style.color='#2a6049';msgEl.textContent='Demande envoyée.';}
+    if(ui&&ui.onSuccess)ui.onSuccess();
+  }catch(e){
+    if(msgEl){msgEl.style.color='#c0392b';msgEl.textContent=e.message;}
+    else alert(e.message);
+    throw e;
+  }finally{
+    if(btn)btn.disabled=false;
+  }
+}
+
+
+function labBillingMonthOptions(){
+  const sel=document.getElementById('lab-courier-billing-month');
+  if(!sel)return;
+  const opts=[];
+  const d=new Date();
+  for(let i=0;i<18;i++){
+    const y=d.getUTCFullYear();
+    const m=d.getUTCMonth();
+    const mk=y+'-'+String(m+1).padStart(2,'0');
+    const label=d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+    opts.push('<option value="'+mk+'"'+(i===0?' selected':'')+'>'+label.charAt(0).toUpperCase()+label.slice(1)+'</option>');
+    d.setUTCMonth(d.getUTCMonth()-1);
+  }
+  sel.innerHTML=opts.join('');
+}
+
+function syncLabCourierBillingSelectors(){
+  const csel=document.getElementById('lab-courier-billing-courier');
+  if(!csel)return;
+  if(!_courierLinks.length){
+    csel.innerHTML='<option value="">— Aucun coursier —</option>';
+    return;
+  }
+  csel.innerHTML=_courierLinks.map(function(c,i){
+    return '<option value="'+escH(c.courierUserId)+'"'+(i===0?' selected':'')+'>'+escH(c.displayName)+'</option>';
+  }).join('');
+  labBillingMonthOptions();
+}
+
+function fmtMonthLabelCourier(mk){
+  if(!mk)return '';
+  const p=mk.split('-');
+  if(p.length<2)return mk;
+  const dt=new Date(Date.UTC(parseInt(p[0],10),parseInt(p[1],10)-1,1));
+  const label=dt.toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  return label.charAt(0).toUpperCase()+label.slice(1);
+}
+
+function fmtBillingDateCourier(iso){
+  if(!iso)return '';
+  return new Date(iso).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+
+async function loadLabCourierBilling(){
+  const el=document.getElementById('lab-courier-billing-result');
+  const csel=document.getElementById('lab-courier-billing-courier');
+  const msel=document.getElementById('lab-courier-billing-month');
+  if(!el||!csel||!msel)return;
+  const courierUserId=csel.value;
+  if(!courierUserId){
+    el.innerHTML='<span style="color:var(--ink-soft);">Choisissez un coursier rattaché.</span>';
+    return;
+  }
+  el.innerHTML='<span style="color:var(--ink-soft);">Chargement…</span>';
+  try{
+    const j=await courierApi('getCourierBillingForLab',{courierUserId:courierUserId,month:msel.value});
+    const b=j.summary||{};
+    const name=(b.courier&&b.courier.displayName)||'Coursier';
+    const monthLbl=fmtMonthLabelCourier(b.period&&b.period.month);
+    if(!b.totalCourses){
+      el.innerHTML='<'+D+' style="padding:12px;background:var(--bg);border-radius:8px;color:var(--ink-soft);">Aucune course terminée pour <b>'+escH(name)+'</b> en '+escH(monthLbl)+'.</'+D+'>';
+      return;
+    }
+    let html='<'+D+' style="padding:14px;background:#f0f7f4;border:1px solid #c8e6d4;border-radius:10px;margin-bottom:12px;">'+
+      '<'+D+' style="font-weight:700;font-size:1rem;color:#2a6049;">'+b.totalCourses+' course'+(b.totalCourses>1?'s':'')+' terminée'+(b.totalCourses>1?'s':'')+'</'+D+'>'+
+      '<'+D+' style="font-size:.78rem;color:#2a6049;margin-top:4px;">'+escH(name)+' · '+escH(monthLbl)+' · '+b.totalPickups+' réc. · '+b.totalDeliveries+' liv.</'+D+'></'+D+'>';
+    if((b.missions||[]).length){
+      html+='<'+D+' style="font-weight:700;margin-bottom:8px;font-size:.78rem;">Détail</'+D+'>';
+      html+=(b.missions||[]).map(function(m,i){
+        return '<'+D+' style="padding:8px 0;border-bottom:1px solid var(--border);font-size:.78rem;">'+
+          '<b>'+(i+1)+'.</b> '+escH(m.label)+'<br/><span style="color:var(--ink-soft);">'+fmtBillingDateCourier(m.completedAt)+'</span></'+D+'>';
+      }).join('');
+    }
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<span style="color:#c0392b;">'+escH(e.message)+'</span>';
+  }
+}
+
+
+async function renderCourierLinks(){
+  const el=document.getElementById('courier-links-list');
+  if(!el)return;
+  try{
+    const j=await courierApi('listLinkedCouriers');
+    _courierLinks=j.couriers||[];
+    el.innerHTML=_courierLinks.length?_courierLinks.map(function(c){
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--bg);">'+
+        '<div><div style="font-weight:600;font-size:.84rem;">'+escH(c.displayName)+'</div><div style="font-size:.72rem;color:var(--ink-soft);">'+escH(c.email)+'</div></div>'+
+        '<button type="button" class="btn btn-b" style="font-size:.72rem;padding:4px 10px;" onclick="unlinkCourier(\''+c.courierUserId+'\')">Retirer</button></div>';
+    }).join(''):'<div style="font-size:.78rem;color:var(--ink-soft);">Aucun coursier rattaché.</div>';
+    syncLabCourierBillingSelectors();
+    loadLabCourierBilling().catch(function(){});
+  }catch(e){el.innerHTML='<div style="color:#c0392b;font-size:.78rem;">'+escH(e.message)+'</div>';}
+}
+
+async function renderCourierBoard(){
+  const el=document.getElementById('courier-missions-board');
+  if(!el)return;
+  try{
+    var all=[];
+    try{
+      const j=await courierApi('listMissions',{scope:'all',limit:80});
+      all=j.missions||[];
+    }catch(e){
+      console.warn('listMissions API',e);
+      all=await listMissionsLocal();
+      if(!all.length)throw e;
+    }
+    _courierMissionsSummary=all;
+    updateCourierNavBadge(all);
+    notifyLabCourierMissionChanges(all);
+    const active=all.filter(function(m){return ['offered','accepted','en_route'].includes(m.status);});
+    const recent=all.filter(function(m){return ['completed','cancelled','declined'].includes(m.status);}).slice(0,15);
+    let html='';
+    if(active.length){
+      html+='<div style="font-size:.72rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;margin-bottom:8px;">En cours</div>';
+      html+=active.map(function(m){
+        const cName=_courierLinks.find(function(c){return c.courierUserId===m.courierUserId;});
+        const cLabel=cName?escH(cName.displayName):'Coursier';
+        return '<div style="border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:8px;background:var(--surface);">'+
+          '<div style="font-weight:600;">'+missionStopsSummaryHtml(m)+'</div>'+
+          '<div style="font-size:.72rem;color:var(--ink-soft);margin-top:4px;">'+cLabel+' · '+courierStatusLabel(m.status)+'</div>'+
+          (m.status!=='completed'&&m.status!=='cancelled'?'<button type="button" class="btn btn-b" style="margin-top:8px;font-size:.7rem;padding:4px 10px;" onclick="cancelCourierMission(\''+m.id+'\')">Annuler</button>':'')+
+        '</div>';
+      }).join('');
+    }else html+='<div style="font-size:.78rem;color:var(--ink-soft);margin-bottom:16px;">Aucune mission active.</div>';
+    if(recent.length){
+      html+='<div style="font-size:.72rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;margin:16px 0 8px;">Récent</div>';
+      html+=recent.map(function(m){
+        return '<div style="font-size:.78rem;padding:8px 0;border-bottom:1px solid var(--border);color:var(--ink-soft);">'+
+          missionStopsSummaryHtml(m)+' · '+courierStatusLabel(m.status)+'</div>';
+      }).join('');
+    }
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<div style="color:#c0392b;padding:12px;">'+escH(friendlyCourierErr(e.message))+
+      '<br/><button type="button" class="btn btn-b" style="margin-top:10px;font-size:.75rem;" onclick="renderCourierBoard()">Réessayer</button></div>';
+  }
+}
+
+function startCourierLabRealtime(){
+  if(!currentUser||_courierRtChannel)return;
+  try{
+    _courierRtChannel=sbClient.channel('lab-courier-board-'+currentUser.id)
+      .on('postgres_changes',{event:'*',schema:'public',table:'labo_data',filter:'id=eq.courier_board_'+currentUser.id},
+        function(){refreshCourierMissionsSummary();})
+      .subscribe();
+  }catch(e){console.warn('startCourierLabRealtime',e);}
+}
+
+async function openCourierDispatch(cabId,type){
+  _cdCabId=cabId;_cdType=type||'pickup';
+  const cab=cabinets.find(function(c){return c.id===cabId;});
+  if(!cab){alert('Cabinet introuvable');return;}
+  try{
+    if(!_courierLinks.length){const j=await courierApi('listLinkedCouriers');_courierLinks=j.couriers||[];}
+  }catch(e){alert(e.message);return;}
+  if(!_courierLinks.length){
+    if(confirm('Aucun coursier rattaché. Ouvrir les réglages pour en ajouter un ?')){
+      goSettings();setTimeout(function(){openSettingsSection('coursiers');},200);
+    }
+    return;
+  }
+  const sel=document.getElementById('cd-courier');
+  sel.innerHTML=_courierLinks.map(function(c,i){
+    return '<option value="'+c.courierUserId+'"'+(i===0?' selected':'')+'>'+escH(c.displayName)+'</option>';
+  }).join('');
+  document.getElementById('cd-title').textContent=(type==='delivery'?'📦 Livraison':'📥 Récupération')+' — '+cab.name;
+  document.getElementById('cd-cab-name').value=cab.name;
+  document.getElementById('cd-cab-address').value=cab.address||'';
+  document.getElementById('cd-cab-phone').value=cab.phone||'';
+  document.getElementById('cd-notes').value='';
+  document.getElementById('cd-msg').textContent='';
+  const mod=document.getElementById('courier-dispatch-modal');
+  mod.style.display='flex';
+}
+function closeCourierDispatch(){document.getElementById('courier-dispatch-modal').style.display='none';}
+
+async function unlinkCourier(courierUserId){
+  if(!confirm('Retirer ce coursier de votre laboratoire ?'))return;
+  try{
+    await courierApi('unlinkCourier',{courierUserId:courierUserId});
+    await renderCourierLinks();
+    showToast('Coursier retiré','#2a6049');
+  }catch(e){alert(e.message);}
+}
+
+async function cancelCourierMission(missionId){
+  if(!confirm('Annuler cette mission ?'))return;
+  try{
+    await courierApi('cancelMission',{missionId:missionId});
+    renderCourierBoard();
+    showToast('Mission annulée','#d97706');
+  }catch(e){alert(e.message);}
+}
+
+document.getElementById('btn-courier-link')?.addEventListener('click',async function(){
+  const email=document.getElementById('courier-link-email')?.value.trim();
+  const msg=document.getElementById('courier-link-msg');
+  if(!email){if(msg)msg.textContent='Email requis';return;}
+  this.disabled=true;
+  try{
+    await courierApi('linkCourier',{email:email});
+    if(msg){msg.style.color='#2a6049';msg.textContent='Coursier ajouté avec succès.';}
+    document.getElementById('courier-link-email').value='';
+    await renderCourierLinks();
+    try{
+      const j=await courierApi('listLinkedCouriers');
+      _courierLinks=j.couriers||[];
+      saveCourierLinksCache(_courierLinks);
+    }catch(e){}
+    if(document.getElementById('pane-coursiers')&&document.getElementById('pane-coursiers').classList.contains('on'))initCourierPaneForm();
+  }catch(e){if(msg){msg.style.color='#c0392b';msg.textContent=e.message;}}
+  this.disabled=false;
+});
+
+document.getElementById('btn-cd-send')?.addEventListener('click',async function(){
+  const cab=cabinets.find(function(c){return c.id===_cdCabId;});
+  if(!cab)return;
+  const msg=document.getElementById('cd-msg');
+  try{
+    await sendCourierMissionRequest({
+      type:_cdType,
+      courierUserId:document.getElementById('cd-courier').value,
+      cabId:cab.id,
+      cabName:cab.name,
+      cabPhone:document.getElementById('cd-cab-phone').value.trim(),
+      cabAddress:document.getElementById('cd-cab-address').value.trim(),
+      notes:document.getElementById('cd-notes').value.trim(),
+    },{msgEl:msg,btn:this,onSuccess:closeCourierDispatch});
+  }catch(e){}
+});
+
+document.getElementById('btn-cp-add-stop')?.addEventListener('click',function(){
+  _cpStops.push({type:'pickup',cabId:'',address:'',phone:''});
+  renderCpStops();
+});
+document.getElementById('lab-courier-billing-courier')?.addEventListener('change',function(){loadLabCourierBilling().catch(function(){});});
+document.getElementById('lab-courier-billing-month')?.addEventListener('change',function(){loadLabCourierBilling().catch(function(){});});
+document.getElementById('btn-cp-maps-preview')?.addEventListener('click',function(){
+  const url=buildMapsDirectionsUrl(collectCpStopsPayload());
+  if(url)window.open(url,'_blank','noopener');
+  else showToast('Ajoutez au moins une adresse pour l'itinéraire.','#c0392b');
+});
+if('Notification' in window&&Notification.permission==='default'){
+  try{Notification.requestPermission();}catch(e){}
+}
+document.getElementById('btn-cp-send')?.addEventListener('click',async function(){
+  const msg=document.getElementById('cp-msg');
+  const stops=collectCpStopsPayload();
+  if(!stops.length){if(msg){msg.style.color='#c0392b';msg.textContent='Ajoutez au moins un arrêt avec un dentiste choisi.';}return;}
+  try{
+    await sendCourierMissionRequest({
+      courierUserId:document.getElementById('cp-courier')?.value,
+      stops:stops,
+      notes:document.getElementById('cp-notes')?.value.trim()||'',
+    },{msgEl:msg,btn:this,onSuccess:function(){
+      document.getElementById('cp-notes').value='';
+      _cpStops=[{type:'pickup',cabId:'',address:'',phone:''}];
+      renderCpStops();
+      if(msg)msg.textContent='';
+    }});
+  }catch(e){}
+});
 </script>
 </body>
 </html>

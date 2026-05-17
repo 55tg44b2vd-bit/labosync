@@ -38,6 +38,11 @@
   to = "/labo-mobile.html"
   status = 200
 
+[[redirects]]
+  from = "/courier"
+  to = "/courier.html"
+  status = 200
+
 [[headers]]
   for = "/*"
   [headers.values]

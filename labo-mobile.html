@@ -14,7 +14,7 @@
 <title>Labosync Mobile</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/vendor/supabase.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -1444,10 +1444,10 @@ async function _fetchWithTimeoutMobile(url,opts,timeoutMs){
 }
 
 async function _fetchOrdersForCabMobile(portalId){
-  if(!portalId)return [];
+  if(!portalId||!_token)return [];
   try{
     var r=await _fetchWithTimeoutMobile(SB_URL+'/rest/v1/labo_data?id=eq.orders_'+portalId+'&select=data',{
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_token}
     },15000);
     var rows=await r.json();
     var list=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
@@ -1465,7 +1465,7 @@ async function _writeOrdersForCabMobile(portalId,list){
     await _fetchWithTimeoutMobile(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+_token,'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({id:'orders_'+portalId,data:{list:list,portalId:portalId},updated_at:new Date().toISOString()})
+      body:JSON.stringify({id:'orders_'+portalId,data:{list:list,portalId:portalId,labUserId:currentUser?currentUser.id:null},updated_at:new Date().toISOString()})
     },20000);
   }catch(e){
     if(e.name==='AbortError')throw new Error('Connexion trop lente pour sauvegarder.');
@@ -2175,8 +2175,7 @@ function _buildMissingMsgText(cabId){
 
 async function aiPolishMessageMobile(rawText,cabName){
   try{
-    var resp=await fetch('/.netlify/functions/ai-chat',{
-      method:'POST',headers:{'Content-Type':'application/json'},
+    var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
       body:JSON.stringify({
         max_tokens:600,
         system:'Tu es un assistant pour un laboratoire de prothèse dentaire qui rédige des messages courts, professionnels et chaleureux. Réponds uniquement avec le texte du message, sans préambule, sans markdown, sans guillemets autour.',
@@ -2305,8 +2304,7 @@ async function aiSummarizeReplyMobile(cabId){
       allOpen.map(function(q,i){return (i+1)+'. ['+q.patient+'] '+_miCatLabel(q.category)+(q.text?' : '+q.text:'');}).join('\n')+
       '\n\nRéponse(s) du cabinet :\n'+replies.map(function(m){return m.content||'';}).join('\n\n')+
       '\n\nPour chaque question, dis si la réponse y répond. JSON pur : [{"index":1,"answered":true,"summary":"A2 confirmée"}].';
-    var resp=await fetch('/.netlify/functions/ai-chat',{
-      method:'POST',headers:{'Content-Type':'application/json'},
+    var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
       body:JSON.stringify({
         max_tokens:800,
         system:'Tu es un assistant pour un laboratoire de prothèse dentaire. Réponds UNIQUEMENT en JSON valide, sans markdown ni texte autour.',

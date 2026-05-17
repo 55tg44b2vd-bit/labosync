@@ -1,21 +1,16 @@
-exports.handler = async (event) => {
-  const SB_URL = 'https://ljnfpslgwgagdisixuxz.supabase.co';
-  const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const reqOrigin = event.headers.origin || event.headers.Origin || '';
-  const allowOrigin = allowedOrigins.length
-    ? (allowedOrigins.includes(reqOrigin) ? reqOrigin : allowedOrigins[0])
-    : '*';
+const {
+  SB_URL,
+  buildCors,
+  verifySupabaseUser,
+  verifyPortalToken,
+  getPortalTokenFromEvent,
+  labOwnsPortal,
+} = require('./_labosync-auth');
 
-  const headers = {
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Portal-Token',
-    'Content-Type': 'application/json',
-  };
+exports.handler = async (event) => {
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  const headers = buildCors(event);
+  headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Portal-Token';
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
@@ -24,13 +19,14 @@ exports.handler = async (event) => {
   const isValidPortalId = (portalId) => typeof portalId === 'string' && /^[a-zA-Z0-9_-]{4,120}$/.test(portalId);
   const clampStr = (value, maxLen) => String(value || '').slice(0, maxLen);
   const normPortalId = (portalId) => String(portalId || '').trim().toLowerCase();
+
   const readRow = async (rowId) => {
     const resp = await fetch(
-      `${SB_URL}/rest/v1/labo_data?id=eq.${rowId}&select=data,updated_at`,
+      `${SB_URL}/rest/v1/labo_data?id=eq.${encodeURIComponent(rowId)}&select=data,updated_at`,
       {
         headers: {
-          'apikey': SERVICE_KEY,
-          'Authorization': `Bearer ${SERVICE_KEY}`,
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
         },
       }
     );
@@ -42,17 +38,36 @@ exports.handler = async (event) => {
     return { ok: true, rows };
   };
 
-  // ── GET : lire les données d'un portail ou d'un chat ────────────────────
+  async function authorizePortalAccess(portalId) {
+    if (!isValidPortalId(portalId)) return null;
+    const normalized = normPortalId(portalId);
+
+    const portalToken = getPortalTokenFromEvent(event);
+    if (portalToken) {
+      const payload = verifyPortalToken(portalToken);
+      if (payload && normPortalId(payload.portalId) === normalized) {
+        return { role: 'cabinet', portalId: normalized };
+      }
+    }
+
+    const user = await verifySupabaseUser(event);
+    if (user && user.id) {
+      const owns = await labOwnsPortal(user.id, normalized);
+      if (owns) return { role: 'lab', portalId: normalized, userId: user.id };
+    }
+
+    return null;
+  }
+
+  // ── GET : lire portail ou chat (authentifié) ─────────────────────────────
   if (event.httpMethod === 'GET') {
     const params = event.queryStringParameters || {};
     const portalId = params.portalId;
     if (!isValidPortalId(portalId)) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'portalId invalide' }) };
     }
-
-    const type = params.type; // 'chat' ou absent (portal)
     if (!SERVICE_KEY) {
-      // En local sans clé serveur, on évite les 500 en boucle sur le polling chat.
+      const type = params.type;
       if (type === 'chat') {
         return {
           statusCode: 200,
@@ -60,11 +75,24 @@ exports.handler = async (event) => {
           body: JSON.stringify([{ data: { messages: [] }, updated_at: null, _degraded: true }]),
         };
       }
-      return { statusCode: 503, headers, body: JSON.stringify({ error: 'Configuration locale incomplète: SUPABASE_SERVICE_KEY requis' }) };
+      return {
+        statusCode: 503,
+        headers,
+        body: JSON.stringify({ error: 'Configuration locale incomplète: SUPABASE_SERVICE_KEY requis' }),
+      };
     }
-    const normalizedId = normPortalId(portalId);
-    const rowId = type === 'chat' ? 'chat_' + normalizedId : 'portal_' + normalizedId;
-    const legacyRowId = type === 'chat' ? 'chat_' + portalId : 'portal_' + portalId;
+
+    const auth = await authorizePortalAccess(portalId);
+    if (!auth) {
+      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Accès portail refusé' }) };
+    }
+
+    const type = params.type;
+    const normalizedId = auth.portalId;
+    const rowId =
+      type === 'chat' ? `chat_${normalizedId}` : type === 'orders' ? `orders_${normalizedId}` : `portal_${normalizedId}`;
+    const legacyRowId =
+      type === 'chat' ? `chat_${portalId}` : type === 'orders' ? `orders_${portalId}` : `portal_${portalId}`;
     let rows = [];
     const firstRead = await readRow(rowId);
     if (!firstRead.ok) {
@@ -81,27 +109,48 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify(rows) };
   }
 
-  // ── POST : écrire les données d'un portail ou ajouter un message chat ──
+  // ── POST : écrire portail ou chat (authentifié) ───────────────────────────
   if (event.httpMethod === 'POST') {
     if (!SERVICE_KEY) {
-      return { statusCode: 503, headers, body: JSON.stringify({ error: 'Configuration locale incomplète: SUPABASE_SERVICE_KEY requis' }) };
+      return {
+        statusCode: 503,
+        headers,
+        body: JSON.stringify({ error: 'Configuration locale incomplète: SUPABASE_SERVICE_KEY requis' }),
+      };
     }
     let body;
-    try { body = JSON.parse(event.body); } catch (e) {
+    try {
+      body = JSON.parse(event.body);
+    } catch (e) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'JSON invalide' }) };
     }
 
     const { action, portalId, payload } = body;
 
-    // ── action = 'chat' : ajouter un message ──────────────────────────────
     if (action === 'chat') {
       const { sender, senderName, content, image, attachment } = body;
       if (!isValidPortalId(portalId) || !sender || (!content && !image && !attachment)) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Données manquantes (portalId, sender, et content ou pièce jointe)' }) };
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'Données manquantes (portalId, sender, et content ou pièce jointe)' }),
+        };
       }
       if (sender !== 'labo' && sender !== 'cabinet') {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'sender invalide' }) };
       }
+
+      const auth = await authorizePortalAccess(portalId);
+      if (!auth) {
+        return { statusCode: 401, headers, body: JSON.stringify({ error: 'Accès portail refusé' }) };
+      }
+      if (auth.role === 'cabinet' && sender !== 'cabinet') {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Sender non autorisé' }) };
+      }
+      if (auth.role === 'lab' && sender !== 'labo') {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Sender non autorisé' }) };
+      }
+
       if (content && String(content).length > 5000) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Message trop long' }) };
       }
@@ -112,11 +161,10 @@ exports.handler = async (event) => {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Pièce jointe invalide' }) };
       }
 
-      const normalizedId = normPortalId(portalId);
-      const rowId = 'chat_' + normalizedId;
-      const legacyRowId = 'chat_' + portalId;
+      const normalizedId = auth.portalId;
+      const rowId = `chat_${normalizedId}`;
+      const legacyRowId = `chat_${portalId}`;
 
-      // Lire les messages existants
       let rows = [];
       const firstRead = await readRow(rowId);
       if (!firstRead.ok) {
@@ -130,7 +178,7 @@ exports.handler = async (event) => {
         }
         rows = legacyRead.rows;
       }
-      const existing = (rows[0] && rows[0].data && rows[0].data.messages) ? rows[0].data.messages : [];
+      const existing = rows[0] && rows[0].data && rows[0].data.messages ? rows[0].data.messages : [];
 
       const newMsg = {
         id: Date.now() + '_' + Math.random().toString(36).slice(2, 7),
@@ -141,7 +189,6 @@ exports.handler = async (event) => {
       };
       if (image) newMsg.image = image;
       if (attachment && attachment.url) {
-        // On ne stocke que les métadonnées de la pièce jointe (URL Supabase Storage)
         newMsg.attachment = {
           url: clampStr(attachment.url, 2048),
           name: clampStr(attachment.name || 'fichier', 200),
@@ -150,21 +197,19 @@ exports.handler = async (event) => {
         };
       }
 
-      const messages = [...existing, newMsg];
-      // Garder les 200 derniers messages max
-      const trimmed = messages.slice(-200);
+      const trimmed = [...existing, newMsg].slice(-200);
 
       const writeResp = await fetch(`${SB_URL}/rest/v1/labo_data`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': SERVICE_KEY,
-          'Authorization': `Bearer ${SERVICE_KEY}`,
-          'Prefer': 'resolution=merge-duplicates,return=minimal',
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+          Prefer: 'resolution=merge-duplicates,return=minimal',
         },
         body: JSON.stringify({
           id: rowId,
-          data: { messages: trimmed },
+          data: { messages: trimmed, labUserId: auth.userId || null },
           updated_at: new Date().toISOString(),
         }),
       });
@@ -177,23 +222,83 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true, message: newMsg }) };
     }
 
-    // ── action absent : écriture portail standard ─────────────────────────
+    if (action === 'orders') {
+      const { list, cabId } = body;
+      if (!isValidPortalId(portalId) || !Array.isArray(list)) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Données commandes invalides' }) };
+      }
+      if (list.length > 500) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Trop de commandes' }) };
+      }
+
+      const auth = await authorizePortalAccess(portalId);
+      if (!auth) {
+        return { statusCode: 401, headers, body: JSON.stringify({ error: 'Accès portail refusé' }) };
+      }
+      if (auth.role !== 'cabinet') {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Seul le cabinet peut soumettre des commandes ici' }) };
+      }
+
+      const normalizedId = auth.portalId;
+      const rowId = `orders_${normalizedId}`;
+      let labUserId = null;
+      const portalRow = await readRow(`portal_${normalizedId}`);
+      if (portalRow.ok && portalRow.rows[0]?.data?.labUserId) {
+        labUserId = portalRow.rows[0].data.labUserId;
+      }
+
+      const writeResp = await fetch(`${SB_URL}/rest/v1/labo_data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({
+          id: rowId,
+          data: {
+            list: list.slice(0, 500),
+            portalId: normalizedId,
+            cabId: clampStr(cabId || '', 80) || null,
+            labUserId,
+          },
+          updated_at: new Date().toISOString(),
+        }),
+      });
+
+      if (!writeResp.ok) {
+        const txt = await writeResp.text();
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Écriture commandes échouée : ' + txt }) };
+      }
+
+      return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
+    }
+
     if (!isValidPortalId(portalId) || !payload) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Données manquantes' }) };
     }
 
-    const normalizedId = normPortalId(portalId);
+    const auth = await authorizePortalAccess(portalId);
+    if (!auth || auth.role !== 'lab') {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Seul le laboratoire peut publier le portail' }) };
+    }
+
+    const normalizedId = auth.portalId;
+    const safePayload = Object.assign({}, payload, { labUserId: auth.userId });
+    delete safePayload.cabPwd;
+
     const resp = await fetch(`${SB_URL}/rest/v1/labo_data`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': SERVICE_KEY,
-        'Authorization': `Bearer ${SERVICE_KEY}`,
-        'Prefer': 'resolution=merge-duplicates,return=minimal',
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        Prefer: 'resolution=merge-duplicates,return=minimal',
       },
       body: JSON.stringify({
-        id: 'portal_' + normalizedId,
-        data: payload,
+        id: `portal_${normalizedId}`,
+        data: safePayload,
         updated_at: new Date().toISOString(),
       }),
     });

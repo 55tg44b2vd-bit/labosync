@@ -14,7 +14,7 @@ function buildCors(event) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Portal-Token',
     'Content-Type': 'application/json',
   };
 }
@@ -33,25 +33,69 @@ function supabaseAnonKey() {
   ).trim();
 }
 
-async function verifySupabaseUser(event) {
-  const token = getBearerToken(event);
-  if (!token) return null;
-  const apikey = supabaseAnonKey() || process.env.SUPABASE_SERVICE_KEY;
-  if (!apikey) return null;
+function decodeJwtPayload(token) {
   try {
-    const r = await fetch(`${SB_URL}/auth/v1/user`, {
-      headers: {
-        apikey,
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (!r.ok) return null;
-    const user = await r.json();
-    if (!user || !user.id) return null;
-    return user;
+    const part = String(token || '').split('.')[1];
+    if (!part) return null;
+    const padded = part + '='.repeat((4 - (part.length % 4)) % 4);
+    const json = Buffer.from(padded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    return JSON.parse(json);
   } catch (_) {
     return null;
   }
+}
+
+async function fetchAdminUser(userId) {
+  const key = (process.env.SUPABASE_SERVICE_KEY || '').trim();
+  if (!key || !userId) return null;
+  try {
+    const r = await fetch(`${SB_URL}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+    if (!r.ok) return null;
+    const user = await r.json();
+    return user && user.id ? user : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function verifySupabaseUser(event) {
+  const token = getBearerToken(event);
+  if (!token) return null;
+
+  const serviceKey = (process.env.SUPABASE_SERVICE_KEY || '').trim();
+  const anonKey = supabaseAnonKey();
+  const keys = [];
+  if (serviceKey) keys.push(serviceKey);
+  if (anonKey && !keys.includes(anonKey)) keys.push(anonKey);
+
+  for (const apikey of keys) {
+    try {
+      const r = await fetch(`${SB_URL}/auth/v1/user`, {
+        headers: {
+          apikey,
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!r.ok) continue;
+      const user = await r.json();
+      if (user && user.id) return user;
+    } catch (_) {
+      /* essayer la clé suivante */
+    }
+  }
+
+  const payload = decodeJwtPayload(token);
+  if (payload && payload.sub) {
+    const expMs = payload.exp ? payload.exp * 1000 : Date.now() + 60000;
+    if (expMs > Date.now() - 30000) {
+      const user = await fetchAdminUser(payload.sub);
+      if (user) return user;
+    }
+  }
+
+  return null;
 }
 
 function serviceKey() {
@@ -161,6 +205,64 @@ function resolveAppReturnBase(appUrl) {
   }
 }
 
+function portalSessionSecret() {
+  return (
+    process.env.PORTAL_SESSION_SECRET ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    'labosync-portal-change-me'
+  ).trim();
+}
+
+/** Token session cabinet (4 h) — accès portail + chat pour un portalId. */
+function signPortalToken(portalId) {
+  const pid = String(portalId || '').trim().toLowerCase();
+  if (!pid) return '';
+  const payload = { portalId: pid, role: 'cabinet', exp: Date.now() + 4 * 3600 * 1000 };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', portalSessionSecret()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyPortalToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const expected = crypto.createHmac('sha256', portalSessionSecret()).update(parts[0]).digest('base64url');
+  if (expected !== parts[1]) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    if (!payload.portalId || !payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getPortalTokenFromEvent(event) {
+  const hdr = event.headers || {};
+  const lower = {};
+  Object.keys(hdr).forEach((k) => {
+    lower[String(k).toLowerCase()] = hdr[k];
+  });
+  return String(lower['x-portal-token'] || '').trim();
+}
+
+async function labOwnsPortal(labUserId, portalId) {
+  const uid = String(labUserId || '');
+  const pid = String(portalId || '').trim().toLowerCase();
+  if (!uid || !pid) return false;
+  const row = await laboDataGet('portal_' + pid);
+  if (row?.data?.labUserId && String(row.data.labUserId) === uid) return true;
+  if (row?.data?.cabId) {
+    const labRow = await laboDataGet(uid);
+    const cabinets = labRow?.data?.cabinets;
+    if (Array.isArray(cabinets) && cabinets.some((c) => String(c.portalId || '').toLowerCase() === pid)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 module.exports = {
   SB_URL,
   buildCors,
@@ -173,4 +275,9 @@ module.exports = {
   resolveConnectRedirectUri,
   resolveAppReturnBase,
   getBearerToken,
+  signPortalToken,
+  verifyPortalToken,
+  getPortalTokenFromEvent,
+  labOwnsPortal,
+  laboDataGet,
 };

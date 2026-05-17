@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="Labosync Coursier"/>
+<meta name="theme-color" content="#0f172a"/>
+<link rel="manifest" href="/manifest.json"/>
+<link rel="icon" href="/icon.svg" type="image/svg+xml"/>
+<title>Labosync Coursier</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="/vendor/supabase.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#f1f5f9;--surface:#fff;--ink:#0f172a;--ink-soft:#64748b;
+  --accent:#2563eb;--green:#059669;--orange:#d97706;--red:#dc2626;
+  --border:#e2e8f0;--shadow:0 2px 8px rgba(15,23,42,.08);
+}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh;}
+input,select,textarea{font-size:16px;font-family:inherit;}
+#auth-screen{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(145deg,#0f172a,#1e3a5f 55%,#1d4ed8);}
+.auth-card{background:var(--surface);border-radius:20px;padding:28px 22px;width:100%;max-width:400px;box-shadow:var(--shadow);}
+.auth-brand{text-align:center;margin-bottom:22px;}
+.auth-brand h1{font-size:1.5rem;font-weight:800;}
+.auth-brand h1 span{color:var(--accent);}
+.auth-brand p{font-size:.76rem;color:var(--ink-soft);margin-top:6px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:5px;}
+.field input{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:12px;background:var(--bg);}
+.btn{border:none;border-radius:10px;padding:14px;font-weight:600;font-size:.9rem;cursor:pointer;width:100%;min-height:48px;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-secondary{background:var(--bg);border:1.5px solid var(--border);color:var(--ink-soft);margin-top:8px;}
+#auth-err{color:var(--red);font-size:.78rem;text-align:center;min-height:18px;margin-top:10px;}
+.auth-toggle{text-align:center;margin-top:14px;font-size:.78rem;color:var(--ink-soft);}
+.auth-toggle a{color:var(--accent);font-weight:600;cursor:pointer;}
+#app{display:none;flex-direction:column;min-height:100dvh;}
+#app-loading{padding:24px;text-align:center;color:var(--ink-soft);font-size:.86rem;}
+#app-error{margin:0 0 12px;padding:12px 14px;background:var(--red-soft,#fef2f2);border:1px solid #fecaca;border-radius:10px;color:var(--red);font-size:.8rem;display:none;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:50;}
+.topbar h1{font-size:1rem;font-weight:800;flex:1;}
+.topbar h1 span{color:var(--accent);}
+.topbar button{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:6px 10px;font-size:.72rem;cursor:pointer;}
+.main{flex:1;padding:14px 14px calc(90px + env(safe-area-inset-bottom));}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:50;}
+.nav-item{flex:1;border:none;background:none;padding:10px 4px;font-size:.62rem;font-weight:600;color:var(--ink-soft);cursor:pointer;position:relative;}
+.nav-item.on{color:var(--accent);}
+.nav-item .ico{font-size:1.15rem;display:block;margin-bottom:2px;}
+.nav-badge{position:absolute;top:6px;right:calc(50% - 22px);background:var(--red);color:#fff;font-size:.55rem;font-weight:700;border-radius:99px;padding:1px 5px;min-width:16px;}
+.view{display:none;}
+.view.on{display:block;}
+.mcard{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:var(--shadow);}
+.mcard-type{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.mcard-type.pickup{color:var(--green);}
+.mcard-type.delivery{color:var(--orange);}
+.mcard-title{font-size:1rem;font-weight:700;margin-bottom:4px;}
+.mcard-sub{font-size:.78rem;color:var(--ink-soft);line-height:1.4;}
+.mcard-lab{font-size:.72rem;color:var(--accent);font-weight:600;margin-top:6px;}
+.mcard-stops{margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;}
+.mcard-stop{font-size:.78rem;padding:6px 0;border-bottom:1px solid var(--border);}
+.mcard-stop:last-child{border-bottom:none;}
+.mcard-stop-num{font-size:.62rem;font-weight:700;color:var(--ink-soft);margin-right:4px;}
+.mcard-stop.done .mcard-stop-main{opacity:.85;}
+.mcard-stop-row{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;}
+.mcard-stop-main{flex:1;min-width:0;}
+.mcard-stop-done{margin-top:6px;padding:6px 10px!important;font-size:.72rem!important;min-height:auto!important;width:auto!important;}
+.btn-maps{display:block;text-align:center;margin-top:10px;padding:11px 12px;background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;border-radius:10px;font-weight:600;font-size:.8rem;text-decoration:none;}
+.mcard-progress{font-size:.72rem;color:var(--accent);font-weight:600;margin-top:6px;}
+.mcard-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+.mcard-actions .btn{width:auto;flex:1;min-width:120px;padding:10px;font-size:.8rem;}
+.btn-green{background:var(--green);color:#fff;}
+.btn-orange{background:var(--orange);color:#fff;}
+.btn-red{background:var(--red);color:#fff;}
+.empty{text-align:center;padding:40px 16px;color:var(--ink-soft);font-size:.86rem;}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;}
+.stat-val{font-size:1.4rem;font-weight:800;color:var(--accent);}
+.stat-lbl{font-size:.68rem;color:var(--ink-soft);margin-top:4px;}
+.toast{position:fixed;bottom:calc(80px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:99px;font-size:.8rem;font-weight:600;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none;}
+.toast.show{opacity:1;}
+.offer-pulse{animation:pulse 1.2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.3)}50%{box-shadow:0 0 0 8px rgba(37,99,235,0)}}
+</style>
+</head>
+<body>
+
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <h1>Labo<span>sync</span> Coursier</h1>
+      <p id="auth-sub">Connexion à votre espace missions</p>
+      <p id="auth-hint" style="font-size:.72rem;color:var(--ink-soft);margin-top:8px;line-height:1.35;">Session séparée du laboratoire — vous pouvez rester connecté sur <b>labosync.app/app</b> en parallèle.</p>
+    </div>
+    <div id="auth-login">
+      <div class="field"><label>Email</label><input type="email" id="auth-email" autocomplete="email"/></div>
+      <div class="field"><label>Mot de passe</label><input type="password" id="auth-pass" autocomplete="current-password"/></div>
+      <button type="button" class="btn btn-primary" id="btn-login">Se connecter</button>
+      <p class="auth-toggle">Pas encore de compte ? <a id="link-signup">Créer un compte coursier</a></p>
+    </div>
+    <div id="auth-signup" style="display:none;">
+      <div class="field"><label>Prénom / Nom</label><input type="text" id="auth-name" placeholder="Jean Martin"/></div>
+      <div class="field"><label>Email</label><input type="email" id="auth-email2" autocomplete="email"/></div>
+      <div class="field"><label>Mot de passe (6 car. min.)</label><input type="password" id="auth-pass2" autocomplete="new-password"/></div>
+      <button type="button" class="btn btn-primary" id="btn-signup">Créer mon compte</button>
+      <p class="auth-toggle"><a id="link-login">← Retour connexion</a></p>
+    </div>
+    <div id="auth-err"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header class="topbar">
+    <h1>Labo<span>sync</span></h1>
+    <span id="sync-hint" style="font-size:.65rem;color:var(--ink-soft);"></span>
+    <button type="button" id="btn-refresh-missions" title="Actualiser les demandes">↻</button>
+    <button type="button" id="btn-logout">Déconnexion</button>
+  </header>
+  <main class="main">
+    <div id="app-error" role="alert"></div>
+    <div id="view-missions" class="view on">
+      <div id="missions-offered-label" style="font-size:.72rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;margin-bottom:8px;display:none;">Nouvelles demandes</div>
+      <div id="missions-list"></div>
+    </div>
+    <div id="view-active" class="view">
+      <div id="active-list"></div>
+    </div>
+    <div id="view-history" class="view">
+      <div id="history-list"></div>
+    </div>
+    <div id="view-stats" class="view">
+      <div class="mcard" style="margin-bottom:12px;padding:14px;">
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:4px;">Relevé pour facturation</div>
+        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.4;">Comptez vos courses terminées par mois et par laboratoire pour facturer le labo.</p>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Période</label>
+          <select id="billing-month" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--bg);"></select>
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Tarif par course (€, optionnel)</label>
+          <input type="number" id="billing-rate" min="0" step="0.01" placeholder="ex. 12.50" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--bg);"/>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-save-billing-rate" style="margin-bottom:8px;">Enregistrer le tarif</button>
+        <button type="button" class="btn btn-secondary" id="btn-print-billing">🖨️ Imprimer le relevé</button>
+      </div>
+      <div class="stat-grid" id="billing-grid"></div>
+      <div class="mcard" id="billing-by-lab"></div>
+      <div class="mcard" id="billing-detail"></div>
+      <details style="margin-top:12px;">
+        <summary style="font-size:.78rem;font-weight:600;color:var(--ink-soft);cursor:pointer;padding:8px 0;">Statistiques globales</summary>
+        <div class="stat-grid" id="stats-grid" style="margin-top:10px;"></div>
+        <div class="mcard" id="stats-month"></div>
+        <div class="mcard" id="stats-labs"></div>
+      </details>
+    </div>
+    <div id="view-profile" class="view">
+      <div class="mcard">
+        <div class="field"><label>Nom affiché</label><input type="text" id="prof-name"/></div>
+        <div class="field"><label>Téléphone</label><input type="tel" id="prof-phone" placeholder="06 12 34 56 78"/></div>
+        <button type="button" class="btn btn-primary" id="btn-save-prof">Enregistrer</button>
+      </div>
+      <div class="mcard" style="margin-top:12px;">
+        <div style="font-weight:700;margin-bottom:8px;">Laboratoires partenaires</div>
+        <div id="labs-list" style="font-size:.82rem;color:var(--ink-soft);"></div>
+      </div>
+    </div>
+  </main>
+  <nav class="bottom-nav">
+    <button type="button" class="nav-item on" data-view="missions"><span class="ico">📥</span>Demandes<span class="nav-badge" id="badge-offered" style="display:none;">0</span></button>
+    <button type="button" class="nav-item" data-view="active"><span class="ico">🚗</span>En cours</button>
+    <button type="button" class="nav-item" data-view="history"><span class="ico">📋</span>Historique</button>
+    <button type="button" class="nav-item" data-view="stats"><span class="ico">📊</span>Facturation</button>
+    <button type="button" class="nav-item" data-view="profile"><span class="ico">👤</span>Profil</button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SB_URL='https://ljnfpslgwgagdisixuxz.supabase.co';
+const SB_KEY='sb_publishable_vUJCiePex3KYK5CS3SezGw_60mzxHa8';
+const API='/.netlify/functions/courier-api';
+const sb=supabase.createClient(SB_URL,SB_KEY,{
+  auth:{storageKey:'labosync-courier-auth',persistSession:true,autoRefreshToken:true}
+});
+
+let currentUser=null;
+let _accessToken='';
+let _missions=[];
+let _rtChannel=null;
+let _bootPromise=null;
+let _bootGen=0;
+let _pollTimer=null;
+let _missionNotifySnap=null;
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},2800);}
+function showAuthErr(m){document.getElementById('auth-err').textContent=m||'';}
+
+async function getAccessToken(){
+  if(_accessToken)return _accessToken;
+  const sess=await sb.auth.getSession();
+  const token=sess.data.session?.access_token;
+  if(token){_accessToken=token;return token;}
+  await new Promise(function(r){setTimeout(r,350);});
+  const sess2=await sb.auth.getSession();
+  const token2=sess2.data.session?.access_token;
+  if(token2)_accessToken=token2;
+  return token2||'';
+}
+
+async function api(action,payload){
+  const token=await getAccessToken();
+  if(!token)throw new Error('Session expirée — reconnectez-vous.');
+  const ctrl=new AbortController();
+  const timer=setTimeout(function(){ctrl.abort();},22000);
+  let r;
+  try{
+    r=await fetch(API,{method:'POST',signal:ctrl.signal,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(Object.assign({action:action},payload||{}))});
+  }catch(err){
+    if(err&&err.name==='AbortError')throw new Error('Délai dépassé — réessayez.');
+    throw err;
+  }finally{clearTimeout(timer);}
+  const j=await r.json().catch(function(){return {};});
+  if(!r.ok){
+    const msg=j.error||('Erreur '+r.status);
+    if(r.status===401)throw new Error(msg==='Non authentifié'?'Session refusée par le serveur — réessayez ou déconnectez-vous puis reconnectez-vous.':msg);
+    throw new Error(msg);
+  }
+  return j;
+}
+
+function typeLabel(t){return t==='delivery'?'Livraison':'Récupération';}
+function typeIcon(t){return t==='delivery'?'📦':'📥';}
+
+function missionStops(m){
+  if(Array.isArray(m.stops)&&m.stops.length){
+    return m.stops.slice().sort(function(a,b){return(a.order||0)-(b.order||0);});
+  }
+  if(m.cabName)return[{id:'legacy',order:0,type:m.type==='delivery'?'delivery':'pickup',cabName:m.cabName,cabPhone:m.cabPhone||'',cabAddress:m.cabAddress||'',status:'pending'}];
+  return[];
+}
+
+function stopsProgress(stops){
+  const list=stops||[];
+  const done=list.filter(function(s){return s.status==='done';}).length;
+  return{done:done,total:list.length};
+}
+
+function buildMapsDirectionsUrl(stops){
+  const addrs=(stops||[]).map(function(s){
+    return String(s.cabAddress||s.cabName||'').trim();
+  }).filter(Boolean);
+  if(!addrs.length)return '';
+  const enc=function(a){return encodeURIComponent(a);};
+  if(addrs.length===1)return 'https://www.google.com/maps/dir/?api=1&destination='+enc(addrs[0])+'&travelmode=driving';
+  const origin=enc(addrs[0]);
+  const dest=enc(addrs[addrs.length-1]);
+  let url='https://www.google.com/maps/dir/?api=1&origin='+origin+'&destination='+dest+'&travelmode=driving';
+  if(addrs.length>2)url+='&waypoints='+addrs.slice(1,-1).map(enc).join('|');
+  return url;
+}
+
+function missionTitle(m){
+  const stops=missionStops(m);
+  if(stops.length<=1)return esc(stops[0]&&stops[0].cabName||m.cabName||'');
+  const pu=stops.filter(function(s){return s.type!=='delivery';}).length;
+  const de=stops.filter(function(s){return s.type==='delivery';}).length;
+  return 'Course · '+stops.length+' arrêt'+(stops.length>1?'s':'')+(pu?' · '+pu+' réc.':'')+(de?' · '+de+' liv.':'');
+}
+
+function missionStopsHtml(m,mode){
+  const stops=missionStops(m);
+  const interactive=mode==='active'&&['accepted','en_route'].includes(m.status);
+  function stopRow(s,idx){
+    const done=s.status==='done';
+    const addr=s.cabAddress?'<div style="font-size:.72rem;color:var(--ink-soft);">📍 '+esc(s.cabAddress)+'</div>':'';
+    const phone=s.cabPhone?'<div style="font-size:.72rem;">📞 '+esc(s.cabPhone)+'</div>':'';
+    const action=interactive
+      ?(done
+        ?'<span style="font-size:.72rem;font-weight:700;color:var(--green);white-space:nowrap;">✓ Fait</span>'
+        :'<button type="button" class="btn btn-green mcard-stop-done" data-act="complete_stop" data-id="'+esc(m.id)+'" data-stop-id="'+esc(s.id||'')+'" data-stop-idx="'+idx+'">✓ Fait</button>')
+      :(done?'<span style="font-size:.7rem;color:var(--green);">✓</span>':'');
+    return '<div class="mcard-stop'+(done?' done':'')+'">'+
+      '<div class="mcard-stop-row">'+
+        '<div class="mcard-stop-main"><span class="mcard-stop-num">'+(idx+1)+'.</span>'+
+          typeIcon(s.type)+' <b>'+typeLabel(s.type)+'</b> — '+esc(s.cabName)+addr+phone+
+        '</div>'+action+
+      '</div></div>';
+  }
+  if(stops.length<=1){
+    const s0=stops[0]||m;
+    if(stops.length)return stopRow(s0,0);
+    const addr=m.cabAddress?'<div style="margin-top:4px;">📍 '+esc(m.cabAddress)+'</div>':'';
+    const phone=m.cabPhone?'<div>📞 '+esc(m.cabPhone)+'</div>':'';
+    return addr+phone;
+  }
+  return '<div class="mcard-stops">'+stops.map(stopRow).join('')+'</div>';
+}
+
+function fmtWhen(iso){
+  if(!iso)return '';
+  const d=new Date(iso);
+  const now=new Date();
+  const diff=(now-d)/60000;
+  if(diff<2)return 'À l\'instant';
+  if(diff<60)return 'Il y a '+Math.round(diff)+' min';
+  return d.toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+
+function missionCard(m,mode){
+  const pulse=m.status==='offered'?' offer-pulse':'';
+  const stops=missionStops(m);
+  const prog=stopsProgress(stops);
+  const pendingStops=stops.filter(function(x){return x.status!=='done';}).length;
+  let actions='';
+  if(mode==='offered'){
+    actions='<div class="mcard-actions">'+
+      '<button type="button" class="btn btn-green" data-act="accept" data-id="'+esc(m.id)+'">✓ Accepter</button>'+
+      '<button type="button" class="btn btn-secondary" data-act="decline" data-id="'+esc(m.id)+'">Refuser</button>'+
+    '</div>';
+  }else if(mode==='active'){
+    if(m.status==='accepted'&&pendingStops===stops.length){
+      actions='<div class="mcard-actions"><button type="button" class="btn btn-orange" data-act="en_route" data-id="'+esc(m.id)+'">🚗 En route</button></div>';
+    }else if(m.status==='en_route'&&stops.length===1&&pendingStops){
+      actions='<div class="mcard-actions"><button type="button" class="btn btn-green" data-act="complete_stop" data-id="'+esc(m.id)+'" data-stop-id="'+esc(stops[0].id||'')+'" data-stop-idx="0">✓ Terminer</button></div>';
+    }
+  }
+  const headType=stops.length>1?'multi':(stops[0]&&stops[0].type)||m.type;
+  const notes=m.notes?'<div style="margin-top:6px;font-style:italic;">'+esc(m.notes)+'</div>':'';
+  const progHtml=(mode==='active'&&stops.length>1&&prog.total>0)
+    ?'<div class="mcard-progress">'+prog.done+'/'+prog.total+' arrêt'+(prog.total>1?'s':'')+' effectué'+(prog.done>1?'s':'')+'</div>':'';
+  const mapsUrl=(mode==='active'&&['accepted','en_route'].includes(m.status))?buildMapsDirectionsUrl(stops):'';
+  const mapsHtml=mapsUrl?'<a href="'+mapsUrl+'" target="_blank" rel="noopener noreferrer" class="btn-maps">🗺️ Ouvrir dans Maps</a>':'';
+  return '<div class="mcard'+pulse+'" data-mid="'+esc(m.id)+'">'+
+    '<div class="mcard-type '+(headType==='delivery'?'delivery':'pickup')+'">'+
+      (stops.length>1?'🛵 Course multi-arrêts':typeIcon(headType)+' '+typeLabel(headType))+'</div>'+
+    '<div class="mcard-title">'+missionTitle(m)+'</div>'+
+    '<div class="mcard-sub">'+fmtWhen(m.createdAt)+progHtml+missionStopsHtml(m,mode)+mapsHtml+notes+'</div>'+
+    '<div class="mcard-lab">'+esc(m.labName)+'</div>'+
+    actions+
+  '</div>';
+}
+
+function renderAll(){
+  const offered=_missions.filter(function(m){return m.status==='offered';});
+  const active=_missions.filter(function(m){return ['accepted','en_route'].includes(m.status);});
+  const history=_missions.filter(function(m){return ['completed','cancelled','declined'].includes(m.status);}).slice(0,60);
+
+  const badge=document.getElementById('badge-offered');
+  if(offered.length){badge.style.display='';badge.textContent=offered.length;}else badge.style.display='none';
+
+  document.getElementById('missions-offered-label').style.display=offered.length?'':'none';
+  document.getElementById('missions-list').innerHTML=offered.length
+    ?offered.map(function(m){return missionCard(m,'offered');}).join('')
+    :'<div class="empty">Aucune nouvelle demande.<br/><span style="font-size:.76rem;margin-top:8px;display:block;">Le labo doit vous rattacher avec <b>'+esc(currentUser&&currentUser.email||'votre email')+'</b>. Appuyez sur ↻ pour actualiser.</span></div>';
+  document.getElementById('active-list').innerHTML=active.length
+    ?active.map(function(m){return missionCard(m,'active');}).join('')
+    :'<div class="empty">Aucune mission en cours.</div>';
+  document.getElementById('history-list').innerHTML=history.length
+    ?history.map(function(m){
+        const st=m.status==='completed'?'✅ Terminée':m.status==='declined'?'✗ Refusée':'⊘ Annulée';
+        const hStops=missionStops(m);
+        const hType=hStops.length>1?'multi':(hStops[0]&&hStops[0].type)||m.type;
+        return '<div class="mcard"><div class="mcard-type '+(hType==='delivery'?'delivery':'pickup')+'">'+(hStops.length>1?'🛵 Course':typeIcon(hType)+' '+typeLabel(hType))+' · '+st+'</div>'+
+          '<div class="mcard-title">'+missionTitle(m)+'</div>'+
+          '<div class="mcard-sub">'+esc(m.labName)+' · '+fmtWhen(m.completedAt||m.declinedAt||m.cancelledAt||m.createdAt)+'</div></div>';
+      }).join('')
+    :'<div class="empty">Historique vide.</div>';
+}
+
+async function loadMissions(){
+  const j=await api('listMissions',{scope:'all',limit:150});
+  _missions=(j.missions||[]).sort(function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');});
+  renderAll();
+  const hint=document.getElementById('sync-hint');
+  if(hint){
+    const n=_missions.filter(function(m){return m.status==='offered';}).length;
+    hint.textContent=n?n+' demande(s)':'À jour · '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  }
+}
+
+
+let _billingSummary=null;
+
+function billingMonthOptions(){
+  const sel=document.getElementById('billing-month');
+  if(!sel)return;
+  const opts=[];
+  const d=new Date();
+  for(let i=0;i<18;i++){
+    const y=d.getUTCFullYear();
+    const m=d.getUTCMonth();
+    const mk=y+'-'+String(m+1).padStart(2,'0');
+    const label=d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+    opts.push('<option value="'+mk+'"'+(i===0?' selected':'')+'>'+label.charAt(0).toUpperCase()+label.slice(1)+'</option>');
+    d.setUTCMonth(d.getUTCMonth()-1);
+  }
+  sel.innerHTML=opts.join('');
+}
+
+function fmtBillingDate(iso){
+  if(!iso)return '';
+  return new Date(iso).toLocaleString('fr-FR',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function fmtMonthLabel(mk){
+  if(!mk)return '';
+  const p=mk.split('-');
+  if(p.length<2)return mk;
+  const d=new Date(Date.UTC(parseInt(p[0],10),parseInt(p[1],10)-1,1));
+  const label=d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  return label.charAt(0).toUpperCase()+label.slice(1);
+}
+
+async function loadBilling(){
+  billingMonthOptions();
+  const monthEl=document.getElementById('billing-month');
+  const month=monthEl?monthEl.value:'';
+  const j=await api('getBillingSummary',{month:month});
+  _billingSummary=j.summary||{};
+  const b=_billingSummary;
+  const rateEl=document.getElementById('billing-rate');
+  if(rateEl&&b.ratePerCourse!=null)rateEl.value=String(b.ratePerCourse);
+  document.getElementById('billing-grid').innerHTML=
+    '<div class="stat-box"><div class="stat-val">'+((b.totalCourses)||0)+'</div><div class="stat-lbl">Courses terminées</div></div>'+
+    '<div class="stat-box"><div class="stat-val">'+((b.totalPickups)||0)+'</div><div class="stat-lbl">Récupérations</div></div>'+
+    '<div class="stat-box"><div class="stat-val">'+((b.totalDeliveries)||0)+'</div><div class="stat-lbl">Livraisons</div></div>'+
+    '<div class="stat-box"><div class="stat-val">'+(b.estimatedTotal!=null?b.estimatedTotal.toFixed(2)+' €':'—')+'</div><div class="stat-lbl">Montant estimé</div></div>';
+  const labs=b.byLab||[];
+  document.getElementById('billing-by-lab').innerHTML=labs.length
+    ?'<div style="font-weight:700;margin-bottom:10px;">Par laboratoire — '+esc(fmtMonthLabel(b.period&&b.period.month))+'</div>'+
+      labs.map(function(l){
+        return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;font-size:.82rem;padding:10px 0;border-bottom:1px solid var(--border);">'+
+          '<div><b>'+esc(l.labName)+'</b><div style="font-size:.72rem;color:var(--ink-soft);margin-top:2px;">'+l.pickups+' réc. · '+l.deliveries+' liv.</div></div>'+
+          '<div style="text-align:right;white-space:nowrap;"><b style="font-size:1.1rem;color:var(--accent);">'+l.courses+'</b> course'+(l.courses>1?'s':'')+'</div></div>';
+      }).join('')
+    :'<div style="color:var(--ink-soft);font-size:.82rem;">Aucune course terminée sur cette période.</div>';
+  const missions=b.missions||[];
+  document.getElementById('billing-detail').innerHTML=missions.length
+    ?'<div style="font-weight:700;margin-bottom:10px;">Détail des courses</div>'+
+      missions.map(function(m,idx){
+        return '<div style="font-size:.78rem;padding:8px 0;border-bottom:1px solid var(--border);">'+
+          '<div style="font-weight:600;">'+(idx+1)+'. '+esc(m.label)+'</div>'+
+          '<div style="color:var(--ink-soft);margin-top:2px;">'+esc(m.labName)+' · '+fmtBillingDate(m.completedAt)+
+          (m.stopCount>1?' · '+m.stopCount+' arrêts':'')+'</div></div>';
+      }).join('')
+    :'';
+}
+
+function printBillingReleve(){
+  const b=_billingSummary;
+  if(!b||!b.totalCourses){toast('Aucune course sur cette période');return;}
+  const rate=b.ratePerCourse;
+  const w=window.open('','_blank');
+  if(!w){toast('Autorisez les pop-ups pour imprimer');return;}
+  const rows=(b.missions||[]).map(function(m,i){
+    return '<tr><td>'+(i+1)+'</td><td>'+esc(m.labName)+'</td><td>'+esc(m.label)+'</td><td>'+fmtBillingDate(m.completedAt)+'</td><td style="text-align:center;">'+m.pickups+'</td><td style="text-align:center;">'+m.deliveries+'</td></tr>';
+  }).join('');
+  const labRows=(b.byLab||[]).map(function(l){
+    return '<tr><td>'+esc(l.labName)+'</td><td style="text-align:center;"><b>'+l.courses+'</b></td><td style="text-align:center;">'+l.pickups+'</td><td style="text-align:center;">'+l.deliveries+'</td></tr>';
+  }).join('');
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relevé coursier</title><style>body{font-family:system-ui,sans-serif;padding:24px;color:#111;}h1{font-size:1.2rem;}table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background:#f1f5f9;}.tot{font-size:1.1rem;font-weight:700;margin:12px 0;}</style></head><body>'+
+    '<h1>Relevé de courses — '+esc(b.courierName||'Coursier')+'</h1>'+
+    '<p>Période : <b>'+esc(fmtMonthLabel(b.period&&b.period.month))+'</b></p>'+
+    '<p class="tot">Total : <b>'+b.totalCourses+'</b> course'+(b.totalCourses>1?'s':'')+
+    ' · '+b.totalPickups+' récup. · '+b.totalDeliveries+' livraisons'+
+    (b.estimatedTotal!=null?' · Montant indicatif : <b>'+b.estimatedTotal.toFixed(2)+' €</b>'+(rate!=null?' ('+rate+' €/course)':''):'')+'</p>'+
+    '<h2>Par laboratoire</h2><table><thead><tr><th>Laboratoire</th><th>Courses</th><th>Récup.</th><th>Livr.</th></tr></thead><tbody>'+labRows+'</tbody></table>'+
+    '<h2>Détail</h2><table><thead><tr><th>#</th><th>Labo</th><th>Course</th><th>Terminée le</th><th>Récup.</th><th>Livr.</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<p style="font-size:.75rem;color:#666;margin-top:24px;">Document généré par Labosync Coursier — '+new Date().toLocaleString('fr-FR')+'</p></body></html>');
+  w.document.close();
+  w.focus();
+  setTimeout(function(){w.print();},400);
+}
+
+
+async function loadStats(){
+  const j=await api('getStats');
+  const s=j.stats||{};
+  document.getElementById('stats-grid').innerHTML=
+    '<div class="stat-box"><div class="stat-val">'+(s.totalCompleted||0)+'</div><div class="stat-lbl">Missions terminées</div></div>'+
+    '<div class="stat-box"><div class="stat-val">'+(s.pickups||0)+'</div><div class="stat-lbl">Récupérations</div></div>'+
+    '<div class="stat-box"><div class="stat-val">'+(s.deliveries||0)+'</div><div class="stat-lbl">Livraisons</div></div>'+
+    '<div class="stat-box"><div class="stat-val">'+(s.avgAcceptMin!=null?s.avgAcceptMin+' min':'—')+'</div><div class="stat-lbl">Délai moyen d\'acceptation</div></div>';
+  const months=Object.keys(s.byMonth||{}).sort().reverse().slice(0,6);
+  document.getElementById('stats-month').innerHTML=months.length
+    ?'<div style="font-weight:700;margin-bottom:10px;">Par mois</div>'+months.map(function(mk){
+        const x=s.byMonth[mk];
+        return '<div style="display:flex;justify-content:space-between;font-size:.8rem;padding:6px 0;border-bottom:1px solid var(--border);"><span>'+mk+'</span><span><b>'+x.total+'</b> ('+x.pickup+' réc. · '+x.delivery+' liv.)</span></div>';
+      }).join('')
+    :'<div style="color:var(--ink-soft);font-size:.82rem;">Pas encore de données mensuelles.</div>';
+  const labIds=Object.keys(s.byLab||{});
+  const labNames=s.byLabNames||{};
+  document.getElementById('stats-labs').innerHTML=labIds.length
+    ?'<div style="font-weight:700;margin-bottom:10px;">Par laboratoire (tout temps)</div>'+labIds.map(function(id){
+        const name=labNames[id]||id.slice(0,8)+'…';
+        return '<div style="font-size:.8rem;padding:4px 0;">'+esc(name)+' : <b>'+s.byLab[id]+'</b> courses</div>';
+      }).join('')
+    :'<div style="color:var(--ink-soft);font-size:.82rem;">Les stats par labo apparaîtront après vos premières missions.</div>';
+}
+
+async function loadProfile(){
+  const j=await api('getProfile');
+  document.getElementById('prof-name').value=j.profile.displayName||'';
+  document.getElementById('prof-phone').value=j.profile.phone||'';
+  const rateEl=document.getElementById('billing-rate');
+  if(rateEl&&j.profile.billingRatePerCourse!=null)rateEl.value=String(j.profile.billingRatePerCourse);
+  const labs=await api('listLinkedLabs');
+  document.getElementById('labs-list').innerHTML=(labs.labs||[]).length
+    ?(labs.labs||[]).map(function(l){return '<div style="padding:6px 0;border-bottom:1px solid var(--border);">🏭 '+esc(l.labName)+'</div>';}).join('')
+    :'Aucun laboratoire pour l\'instant. Demandez à un labo de vous ajouter avec votre email d\'inscription.';
+}
+
+function showApp(){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+}
+
+function showLogin(){
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+  stopRealtime();
+}
+
+function startRealtime(){
+  if(!currentUser)return;
+  stopRealtime();
+  _rtChannel=sb.channel('courier-inbox-'+currentUser.id)
+    .on('postgres_changes',{event:'*',schema:'public',table:'labo_data',filter:'id=eq.courier_inbox_'+currentUser.id},
+      function(){loadMissions().catch(function(){});notifyIfNeeded();})
+    .subscribe();
+}
+
+function stopRealtime(){
+  if(_rtChannel){sb.removeChannel(_rtChannel);_rtChannel=null;}
+  if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}
+}
+
+function startCourierPolling(){
+  if(_pollTimer)return;
+  const tick=function(){
+    if(document.visibilityState==='hidden')return;
+    loadMissions().then(notifyIfNeeded).catch(function(){});
+  };
+  tick();
+  _pollTimer=setInterval(tick,12000);
+}
+
+function courierNotify(title,body,tag){
+  if(!('Notification' in window)||Notification.permission!=='granted')return;
+  if(document.visibilityState==='visible')return;
+  try{new Notification(title||'Labosync Coursier',{body:body,tag:tag||'labosync-courier',icon:'/icon.svg'});}catch(e){}
+}
+function buildMissionNotifySnap(list){
+  const snap={};
+  (list||[]).forEach(function(m){
+    const p=stopsProgress(missionStops(m));
+    snap[m.id]={status:m.status,done:p.done,total:p.total,title:missionTitle(m)};
+  });
+  return snap;
+}
+function notifyIfNeeded(){
+  if(!('Notification' in window)||Notification.permission!=='granted')return;
+  const snap=buildMissionNotifySnap(_missions);
+  if(!_missionNotifySnap){_missionNotifySnap=snap;return;}
+  Object.keys(snap).forEach(function(id){
+    const cur=snap[id],prev=_missionNotifySnap[id];
+    if(!prev&&cur.status==='offered')courierNotify('Nouvelle course',cur.title,'courier-offer-'+id);
+    if(prev&&prev.status!=='completed'&&cur.status==='completed')courierNotify('Course terminée',cur.title,'courier-done-'+id);
+  });
+  _missionNotifySnap=snap;
+}
+
+document.querySelectorAll('.nav-item').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.nav-item').forEach(function(b){b.classList.remove('on');});
+    btn.classList.add('on');
+    document.querySelectorAll('.view').forEach(function(v){v.classList.remove('on');});
+    const v=btn.dataset.view;
+    document.getElementById('view-'+v).classList.add('on');
+    if(v==='missions'||v==='active'||v==='history')renderAll();
+    if(v==='stats'){loadBilling().catch(function(e){toast(e.message);});loadStats().catch(function(){});}
+    if(v==='profile')loadProfile().catch(function(e){toast(e.message);});
+  });
+});
+
+document.getElementById('missions-list').addEventListener('click',onMissionAction);
+document.getElementById('active-list').addEventListener('click',onMissionAction);
+
+async function onMissionAction(e){
+  const btn=e.target.closest('[data-act]');
+  if(!btn)return;
+  const id=btn.dataset.id;
+  const act=btn.dataset.act;
+  btn.disabled=true;
+  try{
+    if(act==='accept'){await api('acceptMission',{missionId:id});toast('Mission acceptée !');}
+    else if(act==='decline'){if(!confirm('Refuser cette mission ?'))return;await api('declineMission',{missionId:id});toast('Mission refusée');}
+    else if(act==='en_route'){await api('setMissionStatus',{missionId:id,status:'en_route'});toast('En route');}
+    else if(act==='complete_stop'){
+      const body={missionId:id,stopId:btn.dataset.stopId||''};
+      const idx=parseInt(btn.dataset.stopIdx,10);
+      if(Number.isFinite(idx))body.stopIndex=idx;
+      const j=await api('completeStop',body);
+      toast(j.mission&&j.mission.status==='completed'?'Course terminée ✓':'Arrêt validé');
+    }
+    else if(act==='complete'){await api('setMissionStatus',{missionId:id,status:'completed'});toast('Mission terminée ✓');}
+    await loadMissions();
+    notifyIfNeeded();
+    if(act==='complete'||act==='complete_stop')loadStats().catch(function(){});
+  }catch(err){toast(err.message);}
+  finally{btn.disabled=false;}
+}
+
+document.getElementById('link-signup').onclick=function(){
+  document.getElementById('auth-login').style.display='none';
+  document.getElementById('auth-signup').style.display='';
+};
+document.getElementById('link-login').onclick=function(){
+  document.getElementById('auth-signup').style.display='none';
+  document.getElementById('auth-login').style.display='';
+};
+
+document.getElementById('btn-login').onclick=async function(){
+  showAuthErr('');
+  const email=document.getElementById('auth-email').value.trim();
+  const pass=document.getElementById('auth-pass').value;
+  if(!email||!pass){showAuthErr('Email et mot de passe requis');return;}
+  this.disabled=true;
+  this.textContent='Connexion…';
+  try{
+    const{data,error}=await sb.auth.signInWithPassword({email,password:pass});
+    if(error){
+      showAuthErr(error.message==='Invalid login credentials'?'Identifiants incorrects':error.message);
+      return;
+    }
+    if(!data.session){
+      showAuthErr('Connexion en attente — confirmez votre email si demandé.');
+      return;
+    }
+    _accessToken=data.session.access_token;
+    await scheduleBoot(data.session,true);
+  }catch(e){
+    showAuthErr(e.message||'Erreur de connexion');
+  }finally{
+    this.disabled=false;
+    this.textContent='Se connecter';
+  }
+};
+
+document.getElementById('btn-signup').onclick=async function(){
+  showAuthErr('');
+  const name=document.getElementById('auth-name').value.trim();
+  const email=document.getElementById('auth-email2').value.trim();
+  const pass=document.getElementById('auth-pass2').value;
+  if(!name||!email||!pass){showAuthErr('Tous les champs sont requis');return;}
+  if(pass.length<6){showAuthErr('Mot de passe : 6 caractères minimum');return;}
+  this.disabled=true;
+  const{error}=await sb.auth.signUp({
+    email,password:pass,
+    options:{data:{account_type:'courier',display_name:name,courier_name:name}}
+  });
+  this.disabled=false;
+  if(error)showAuthErr(error.message);
+  else showAuthErr('Compte créé ! Vérifiez votre email si demandé, puis connectez-vous.');
+};
+
+document.getElementById('billing-month')?.addEventListener('change',function(){loadBilling().catch(function(e){toast(e.message);});});
+document.getElementById('btn-print-billing')?.addEventListener('click',printBillingReleve);
+document.getElementById('btn-save-billing-rate')?.addEventListener('click',async function(){
+  try{
+    const rate=document.getElementById('billing-rate')?.value;
+    await api('saveProfile',{
+      displayName:document.getElementById('prof-name')?.value.trim()||'',
+      phone:document.getElementById('prof-phone')?.value.trim()||'',
+      billingRatePerCourse:rate===''||rate==null?null:rate,
+    });
+    toast('Tarif enregistré');
+    loadBilling().catch(function(){});
+  }catch(e){toast(e.message);}
+});
+document.getElementById('btn-save-prof').onclick=async function(){
+  try{
+    await api('saveProfile',{
+      displayName:document.getElementById('prof-name').value.trim(),
+      phone:document.getElementById('prof-phone').value.trim(),
+      billingRatePerCourse:document.getElementById('billing-rate')?.value||null,
+    });
+    toast('Profil enregistré');
+  }catch(e){toast(e.message);}
+};
+
+document.getElementById('btn-logout').onclick=function(){
+  sb.auth.signOut().finally(function(){location.reload();});
+};
+
+document.getElementById('btn-refresh-missions').onclick=async function(){
+  this.disabled=true;
+  try{
+    await loadMissions();
+    toast('Liste actualisée');
+    notifyIfNeeded();
+  }catch(e){toast(e.message);}
+  this.disabled=false;
+};
+
+function isCourierUser(user){
+  if(!user||!user.user_metadata)return false;
+  var m=user.user_metadata;
+  if(m.account_type==='courier')return true;
+  if(m.account_type==='lab'||m.labo_name)return false;
+  return !!m.courier_name;
+}
+
+function showAppError(msg){
+  const el=document.getElementById('app-error');
+  if(!el)return;
+  if(msg){el.textContent=msg;el.style.display='block';}
+  else{el.textContent='';el.style.display='none';}
+}
+
+async function bootCourierSession(session){
+  if(!session||!session.user)return;
+  if(!isCourierUser(session.user)){
+    showLogin();
+    _accessToken='';
+    var isLab=session.user.user_metadata&&(session.user.user_metadata.labo_name||session.user.user_metadata.account_type==='lab');
+    showAuthErr(isLab
+      ?'Ce compte est un laboratoire — connectez-vous sur labosync.app/app. Ici, utilisez un compte coursier (ou créez-en un).'
+      :'Ce compte n\'est pas un profil coursier. Inscrivez-vous ici avec « Créer un compte coursier ».');
+    await sb.auth.signOut();
+    return;
+  }
+  currentUser=session.user;
+  _accessToken=session.access_token||_accessToken;
+  showApp();
+  showAppError('');
+  const listEl=document.getElementById('missions-list');
+  if(listEl)listEl.innerHTML='<div class="empty">Chargement…</div>';
+  try{
+    if('Notification' in window&&Notification.permission==='default'){
+      Notification.requestPermission().catch(function(){});
+    }
+    await Promise.all([
+      loadMissions(),
+      loadProfile().catch(function(){
+        const labs=document.getElementById('labs-list');
+        if(labs)labs.textContent='Profil non chargé.';
+      }),
+    ]);
+    startRealtime();
+    startCourierPolling();
+  }catch(e){
+    console.error('courier boot',e);
+    const msg=e.message||'Impossible de charger les missions.';
+    if((msg.indexOf('Non authentifi')>=0||msg.indexOf('Session refusée')>=0)&&session.access_token){
+      _accessToken=session.access_token;
+      try{
+        await new Promise(function(r){setTimeout(r,500);});
+        await loadMissions();
+        startRealtime();
+        startCourierPolling();
+        return;
+      }catch(e2){console.warn('courier boot retry',e2);}
+    }
+    showLogin();
+    showAuthErr(msg);
+    showAppError('');
+    if(listEl)listEl.innerHTML='';
+    toast(msg);
+  }
+}
+
+window.retryBoot=function(){
+  sb.auth.getSession().then(function(res){
+    if(res.data.session)scheduleBoot(res.data.session,true);
+  });
+};
+
+function scheduleBoot(session,force){
+  if(!session||!session.user){currentUser=null;showLogin();return Promise.resolve();}
+  if(force){_bootPromise=null;_bootGen++;}
+  else if(_bootPromise)return _bootPromise;
+  const gen=_bootGen;
+  _bootPromise=bootCourierSession(session).finally(function(){
+    if(gen===_bootGen)_bootPromise=null;
+  });
+  return _bootPromise;
+}
+
+sb.auth.onAuthStateChange(function(event,session){
+  if(event==='SIGNED_OUT'){currentUser=null;_accessToken='';_bootPromise=null;_bootGen++;showLogin();return;}
+  if(session&&session.access_token)_accessToken=session.access_token;
+  if(session&&session.user&&(event==='INITIAL_SESSION'||event==='SIGNED_IN')){
+    scheduleBoot(session,event==='SIGNED_IN');
+  }
+});
+</script>
+</body>
+</html>

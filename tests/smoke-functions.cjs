@@ -9,6 +9,7 @@ const aiChat = require('../netlify/functions/ai-chat.js');
 const sendEmail = require('../netlify/functions/send-email.js');
 const logClientError = require('../netlify/functions/log-client-error.js');
 const auditLog = require('../netlify/functions/audit-log.js');
+const courierApi = require('../netlify/functions/courier-api.js');
 
 async function run() {
   const tests = [];
@@ -56,6 +57,11 @@ async function run() {
   tests.push((async () => {
     const res = await auditLog.handler({ httpMethod: 'GET', headers: {} });
     assert.equal(res.statusCode, 405);
+  })());
+
+  tests.push((async () => {
+    const res = await courierApi.handler({ httpMethod: 'OPTIONS', headers: {} });
+    assert.equal(res.statusCode, 200);
   })());
 
   await Promise.all(tests);
