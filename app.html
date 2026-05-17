@@ -3636,6 +3636,7 @@ async function confirmAcceptOrder(){
   const c=_findOrder(_acceptForm.portalId,_acceptForm.caseId);if(!c){_releaseAcceptLock();return;}
   const step=_findStep(c,_acceptForm.stepId);if(!step){alert('Étape introuvable');_releaseAcceptLock();return;}
   const cab=cabinets.find(function(x){return x.portalId===_acceptForm.portalId;});if(!cab){_releaseAcceptLock();return;}
+  _debugAuditLog('H3','Desktop confirmAcceptOrder start',{portalId:_acceptForm.portalId,caseId:_acceptForm.caseId,stepId:_acceptForm.stepId,items:validItems.length,hasDeliveryDate:!!_acceptForm.deliveryDate});
 
   try {
   // Construire le job avec items multi-types (comme la saisie normale)
@@ -3686,6 +3687,9 @@ async function confirmAcceptOrder(){
     list[cIdx].updatedAt=new Date().toISOString();
   }
   await _writeOrdersForCab(_acceptForm.portalId,list);
+  // #region agent log
+  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-accept-billing',hypothesisId:'H14',location:'app.html:confirmAcceptOrder',message:'Accept workflow persisted to backend',data:{portalId:_acceptForm.portalId,caseId:_acceptForm.caseId,stepId:_acceptForm.stepId},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   _pendingOrdersCache[_acceptForm.portalId]=list;
 
   // Libérer le verrou anti-doublon AVANT de fermer la modale
@@ -3694,6 +3698,9 @@ async function confirmAcceptOrder(){
   showConfirm('Travail créé pour '+_acceptForm.patient+'.\n\nIl est maintenant dans « Mes travaux ».',{kind:'success'});
   render();renderDashboard();
   } catch(e) {
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-accept-billing',hypothesisId:'H14',location:'app.html:confirmAcceptOrder',message:'Accept workflow failed',data:{msg:e&&e.message?String(e.message):'unknown',portalId:_acceptForm.portalId,caseId:_acceptForm.caseId},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     // Erreur (timeout, réseau, etc.) — annuler proprement, retirer le job ajouté
     console.error('confirmAcceptOrder failed',e);
     // Retirer le job ajouté optimistiquement à jobs[] pour éviter un travail orphelin
@@ -6879,6 +6886,7 @@ function buildMergedStepList(items,emp){
 
 function programQueueAuto(id){
   const q=queue.find(function(x){return x.id===id;});if(!q)return;
+  _debugAuditLog('H2','Desktop programQueueAuto start',{qid:id,queueSize:(queue||[]).length,patientCodePresent:!!q.patient});
   const items=q.items&&q.items.length?q.items:[{type:q.type,nb:q.nb||1}];
   const base=new Date();
   let allTasks;
@@ -9715,6 +9723,11 @@ function reportClientError(payload){
     body: body
   }).catch(function(){});
 }
+function _debugAuditLog(hypothesisId, message, data){
+  // #region agent log
+  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-baseline',hypothesisId:hypothesisId,location:'app.html',message:message,data:data||{},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+}
 // Token d'accès mis en cache — évite d'appeler getSession() à chaque publishPortal
 // (les appels concurrents à getSession causent des erreurs de lock Supabase)
 let _cachedAccessToken = '';
@@ -9764,6 +9777,7 @@ function _safeBootToLogin(message){
 }
 
 window.addEventListener('error', function(ev){
+  _debugAuditLog('H1','Desktop window.error',{msg:ev&&ev.message?String(ev.message):'window.error'});
   reportClientError({
     level: 'error',
     message: ev && ev.message ? ev.message : 'window.error',
@@ -9778,6 +9792,7 @@ window.addEventListener('error', function(ev){
 
 window.addEventListener('unhandledrejection', function(ev){
   const reason = ev && ev.reason;
+  _debugAuditLog('H1','Desktop unhandledrejection',{msg:reason&&reason.message?String(reason.message):String(reason||'unhandledrejection')});
   reportClientError({
     level: 'error',
     message: reason && reason.message ? reason.message : String(reason || 'unhandledrejection'),
@@ -9801,7 +9816,13 @@ async function fetchSubscriptionStatus(){
     const r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.sub_'+currentUser.id+'&select=data',{
       headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_cachedAccessToken}
     });
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-reset-diagnosis',hypothesisId:'H19',location:'app.html:fetchSubscriptionStatus',message:'Subscription row fetch response',data:{ok:!!r.ok,status:r.status,hasToken:!!_cachedAccessToken},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     const rows=await r.json();
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-reset-diagnosis',hypothesisId:'H19',location:'app.html:fetchSubscriptionStatus',message:'Subscription row parsed',data:{hasRows:Array.isArray(rows)&&rows.length>0,hasData:!!(rows&&rows[0]&&rows[0].data),status:rows&&rows[0]&&rows[0].data&&rows[0].data.status?String(rows[0].data.status):''},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return rows[0]&&rows[0].data?rows[0].data:null;
   }catch(e){console.warn('fetchSubscriptionStatus',e);return null;}
 }
@@ -9809,7 +9830,12 @@ async function fetchSubscriptionStatus(){
 async function ensureSubscriptionRow(){
   if(!currentUser)return null;
   const existing=await fetchSubscriptionStatus();
-  if(existing)return existing;
+  if(existing){
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-reset-diagnosis',hypothesisId:'H20',location:'app.html:ensureSubscriptionRow',message:'Existing subscription row reused',data:{status:existing.status?String(existing.status):'',hasTrialEnd:!!(existing.trialEndsAt||existing.trialEnd)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return existing;
+  }
   // Premier accès → créer la ligne avec début d'essai
   const now=new Date();
   const trialEnd=new Date(now.getTime()+TRIAL_DAYS*86400000);
@@ -9823,11 +9849,14 @@ async function ensureSubscriptionRow(){
     createdAt:now.toISOString()
   };
   try{
-    await fetch(SB_URL+'/rest/v1/labo_data',{
+    const wr=await fetch(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+_cachedAccessToken,'Prefer':'resolution=merge-duplicates,return=minimal'},
       body:JSON.stringify({id:'sub_'+currentUser.id,data:data,updated_at:now.toISOString()})
     });
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-reset-diagnosis',hypothesisId:'H20',location:'app.html:ensureSubscriptionRow',message:'Created fallback trial row',data:{ok:!!wr.ok,status:wr.status,trialEndsAt:data.trialEndsAt},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   }catch(e){console.warn('ensureSubscriptionRow',e);}
   return data;
 }
@@ -9838,6 +9867,9 @@ function getTrialEnd(sub){
 }
 function hasAccess(sub){
   if(!sub)return false;
+  // #region agent log
+  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H21',location:'app.html:hasAccess',message:'Evaluate access decision',data:{status:sub.status?String(sub.status):'',trialEndsAt:sub.trialEndsAt||sub.trialEnd||'',hasStripeSubscriptionId:!!sub.stripeSubscriptionId,hasStripeCustomerId:!!sub.stripeCustomerId},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   // Abonnement Stripe actif
   if(sub.status==='active'||sub.status==='trialing')return true;
   // Essai local encore valide
@@ -9855,6 +9887,9 @@ function subReason(sub){
 
 async function checkAccessOrPaywall(){
   const sub=await ensureSubscriptionRow();
+  // #region agent log
+  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H22',location:'app.html:checkAccessOrPaywall',message:'Check access or paywall entry',data:{status:sub&&sub.status?String(sub.status):'',trialEndsAt:sub&&sub.trialEndsAt?sub.trialEndsAt:(sub&&sub.trialEnd?sub.trialEnd:''),hasAccessPreview:!!hasAccess(sub)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if(hasAccess(sub)){
     showApp();
     applyRoleUi();
@@ -9868,11 +9903,18 @@ async function checkAccessOrPaywall(){
     }catch(e){}
     return true;
   }
+  // #region agent log
+  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H22',location:'app.html:checkAccessOrPaywall',message:'Paywall shown',data:{reason:String(subReason(sub)||''),status:sub&&sub.status?String(sub.status):''},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   showPaywall(subReason(sub));
   return false;
 }
 
 function showTrialBanner(sub){
+  if(typeof window._trialBannerTimer!=='undefined' && window._trialBannerTimer){
+    clearInterval(window._trialBannerTimer);
+    window._trialBannerTimer=null;
+  }
   var el=document.getElementById('trial-banner');
   if(!el){
     el=document.createElement('div');
@@ -9887,9 +9929,20 @@ function showTrialBanner(sub){
   // Sinon : essai gratuit en cours, on incite à souscrire
   var te=getTrialEnd(sub);
   if(sub.status==='trialing'||(te&&new Date(te)>new Date())){
-    var endDate=new Date(te||Date.now());
-    var daysLeft=Math.max(0,Math.ceil((endDate-Date.now())/86400000));
-    el.innerHTML='🎁 Essai gratuit — <strong>'+daysLeft+' jour'+(daysLeft>1?'s':'')+' restant'+(daysLeft>1?'s':'')+'</strong> · Cliquez pour souscrire';
+    function _fmtTrialCountdown(endIso){
+      var ms=Math.max(0,new Date(endIso||Date.now()).getTime()-Date.now());
+      var totalMin=Math.floor(ms/60000);
+      var d=Math.floor(totalMin/(24*60));
+      var h=Math.floor((totalMin%(24*60))/60);
+      var m=totalMin%60;
+      return d+'j '+String(h).padStart(2,'0')+'h '+String(m).padStart(2,'0')+'m';
+    }
+    function _renderTrialCountdown(){
+      var cd=_fmtTrialCountdown(te);
+      el.innerHTML='🎁 Essai gratuit — <strong>'+cd+' restants</strong> · Cliquez pour souscrire';
+    }
+    _renderTrialCountdown();
+    window._trialBannerTimer=setInterval(_renderTrialCountdown,60000);
     el.onclick=function(){showPaywall('trial_expired');};
     el.style.display='block';
   } else {
@@ -9905,6 +9958,9 @@ async function startSubscription(plan){
   var origText=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='⏳ Redirection vers Stripe…';}
   try{
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-subscription-routing',hypothesisId:'H18',location:'app.html:startSubscription',message:'Subscription checkout requested',data:{plan:plan||'monthly',hasButton:!!btn},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     const resp=await fetch('/.netlify/functions/stripe-create-subscription',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -9921,7 +9977,11 @@ async function startSubscription(plan){
     window.location.href=data.url;
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent=origText;}
-    if(errEl){errEl.textContent='❌ '+e.message;errEl.style.display='block';}
+    var rawMsg=(e&&e.message)?String(e.message):'Erreur serveur';
+    if(/Configuration Stripe manquante|Configuration Stripe incomplète|Clé Stripe non configurée|Prix Stripe non configurés/i.test(rawMsg)){
+      rawMsg='Souscription indisponible en local: configurez STRIPE_SECRET_KEY (ou STRIPE_SUBSCRIPTION_KEY) et STRIPE_PRICE_MONTHLY / STRIPE_PRICE_ANNUAL dans Netlify Dev.';
+    }
+    if(errEl){errEl.textContent='❌ '+rawMsg;errEl.style.display='block';}
   }
 }
 
@@ -9945,21 +10005,46 @@ async function renderSubInfo(){
 async function openBillingPortal(){
   if(!currentUser){showToast('Non connecté','#c0392b');return;}
   try{
+    const sub=await fetchSubscriptionStatus();
+    const hasStripeSub=!!(sub&&(sub.stripeSubscriptionId||sub.stripeCustomerId));
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-subscription-routing',hypothesisId:'H17',location:'app.html:openBillingPortal',message:'Manage subscription routing decision',data:{status:sub&&sub.status?String(sub.status):'none',hasStripeSubscriptionId:!!(sub&&sub.stripeSubscriptionId),hasStripeCustomerId:!!(sub&&sub.stripeCustomerId),route:hasStripeSub?'portal':'checkout'},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if(!hasStripeSub){
+      // Pas encore d'abonnement Stripe: on envoie vers la souscription.
+      await startSubscription('monthly');
+      return;
+    }
     const resp=await fetch('/.netlify/functions/stripe-create-portal-session',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({userId:currentUser.id,returnUrl:window.location.href.split('?')[0]})
     });
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-accept-billing',hypothesisId:'H15',location:'app.html:openBillingPortal',message:'Billing portal HTTP response',data:{status:resp.status,ok:!!resp.ok},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     const data=await resp.json();
-    if(!resp.ok||!data.url){throw new Error(data.error||'Erreur');}
+    if(!resp.ok||!data.url){
+      var rawMsg=(data&&data.error)?String(data.error):'Erreur';
+      if(/Configuration Stripe manquante|Clé Stripe non configurée/i.test(rawMsg)){
+        throw new Error('Abonnement indisponible en local: configurez STRIPE_SECRET_KEY (ou STRIPE_SUBSCRIPTION_KEY) dans Netlify Dev.');
+      }
+      throw new Error(rawMsg);
+    }
     window.location.href=data.url;
-  }catch(e){showToast('❌ '+e.message,'#c0392b',6000);}
+  }catch(e){
+    _debugAuditLog('H4','Desktop openBillingPortal failed',{msg:e&&e.message?String(e.message):'unknown'});
+    showToast('❌ '+e.message,'#c0392b',6000);
+  }
 }
 
 // Retour de Stripe Checkout — forcer un refresh de l'état
 (function(){
   var params=new URLSearchParams(window.location.search);
   if(params.get('sub_ok')==='1'){
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H23',location:'app.html:sub_ok_handler',message:'Subscription success callback detected',data:{path:window.location.pathname||''},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     setTimeout(function(){
       var clean=window.location.pathname;
       history.replaceState({},'',clean);
@@ -9972,6 +10057,9 @@ async function openBillingPortal(){
 // (ex : après avoir géré son abonnement sur le portail Stripe)
 window.addEventListener('focus',function(){
   if(!currentUser)return;
+  // #region agent log
+  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'trial-paywall-enforcement',hypothesisId:'H24',location:'app.html:focus_refresh',message:'Window focus refresh subscription status',data:{},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   fetchSubscriptionStatus().then(function(sub){
     if(!sub)return;
     showTrialBanner(sub);
@@ -10421,6 +10509,33 @@ var _chatCabId = null;
 var _chatPortalId = null;
 var _chatPollInterval = null;
 var _chatUnread = {};
+var _chatPollFailures = {};
+var _chatPollCooldownUntil = {};
+function _canPollChat(portalId){
+  if(!portalId) return false;
+  return Date.now() >= (_chatPollCooldownUntil[portalId]||0);
+}
+function _noteChatPollResult(portalId, ok){
+  if(!portalId) return;
+  if(ok){
+    if((_chatPollFailures[portalId]||0)>=3){
+      // #region agent log
+      fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-post-fix',hypothesisId:'H9',location:'app.html:_noteChatPollResult',message:'Chat polling recovered after cooldown',data:{portalId:portalId,prevFailures:_chatPollFailures[portalId]||0},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }
+    _chatPollFailures[portalId]=0;
+    _chatPollCooldownUntil[portalId]=0;
+    return;
+  }
+  _chatPollFailures[portalId]=(_chatPollFailures[portalId]||0)+1;
+  if(_chatPollFailures[portalId]>=3){
+    // Coupe-circuit: évite de marteler l'API en cas de 500 répétés.
+    _chatPollCooldownUntil[portalId]=Date.now()+120000;
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-post-fix',hypothesisId:'H9',location:'app.html:_noteChatPollResult',message:'Chat polling circuit breaker opened',data:{portalId:portalId,failures:_chatPollFailures[portalId],cooldownMs:120000},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }
+}
 
 function openChatModal(cabId){
   const cab = cabinets.find(function(c){return c.id===cabId;});
@@ -10452,14 +10567,22 @@ function closeChatModal(){
 
 async function loadChatMessages(scrollToBottom){
   if(!_chatPortalId) return;
+  if(!_canPollChat(_chatPortalId)) return;
   try{
     const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(_chatPortalId));
-    if(!r.ok) return;
+    if(!r.ok){
+      _noteChatPollResult(_chatPortalId,false);
+      return;
+    }
+    _noteChatPollResult(_chatPortalId,true);
     const rows = await r.json();
     const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
     renderChatMessages(msgs, scrollToBottom);
     if(_chatCabId) _chatUnread[_chatCabId] = 0;
-  }catch(e){ console.warn('Chat load error',e); }
+  }catch(e){
+    _noteChatPollResult(_chatPortalId,false);
+    console.warn('Chat load error',e);
+  }
 }
 
 function renderChatMessages(msgs, scrollToBottom){
@@ -10739,16 +10862,34 @@ function updateChatBadge(cabId){
   const modeBadge = document.getElementById('msg-mode-badge');
   if(modeBadge) modeBadge.style.display = total>0 ? 'inline' : 'none';
   // Rafraîchir le pane si ouvert
-  if(document.getElementById('pane-messages').classList.contains('on')) renderMessagesPane();
+  if(document.getElementById('pane-messages').classList.contains('on') && !_isRenderingMessagesPane) _queueMessagesPaneRender();
 }
 
 /* Données de chat mises en cache pour l'affichage du pane */
 var _chatPreview = {}; // {portalId: {lastMsg, lastTime, unreadCount}}
+var _isRenderingMessagesPane = false;
+var _messagesPaneRerenderQueued = false;
+function _queueMessagesPaneRender(){
+  if(_messagesPaneRerenderQueued) return;
+  _messagesPaneRerenderQueued = true;
+  requestAnimationFrame(function(){
+    _messagesPaneRerenderQueued = false;
+    if(document.getElementById('pane-messages').classList.contains('on') && !_isRenderingMessagesPane){
+      // #region agent log
+      fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-post-fix',hypothesisId:'H13',location:'app.html:_queueMessagesPaneRender',message:'Deferred messages pane rerender',data:{},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      renderMessagesPane();
+    }
+  });
+}
 
 async function renderMessagesPane(){
+  if(_isRenderingMessagesPane) return;
+  _isRenderingMessagesPane = true;
   const el = document.getElementById('messages-cab-list');
   if(!cabinets.length){
     el.innerHTML = '<div class="empty">'+t('empty.cabinets')+'</div>';
+    _isRenderingMessagesPane = false;
     return;
   }
   // Affichage immédiat avec données en cache, puis refresh en arrière-plan
@@ -10773,9 +10914,14 @@ async function renderMessagesPane(){
   // Charger les previews en arrière-plan
   cabinets.forEach(async function(cab){
     if(!cab.portalId) return;
+    if(!_canPollChat(cab.portalId)) return;
     try{
       const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId));
-      if(!r.ok) return;
+      if(!r.ok){
+        _noteChatPollResult(cab.portalId,false);
+        return;
+      }
+      _noteChatPollResult(cab.portalId,true);
       const rows = await r.json();
       const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
       if(!msgs.length) return;
@@ -10787,12 +10933,17 @@ async function renderMessagesPane(){
         lastTime: last.createdAt,
         unreadCount: unreadCount
       };
+      const prevUnread=_chatUnread[cab.id]||0;
       if(unreadCount > 0){
         _chatUnread[cab.id] = unreadCount;
+        if(prevUnread!==unreadCount) updateChatBadge(cab.id);
+      } else if(prevUnread!==0){
+        _chatUnread[cab.id] = 0;
         updateChatBadge(cab.id);
       }
     }catch(e){}
   });
+  _isRenderingMessagesPane = false;
 }
 
 function fmtChatTime(iso){
@@ -10813,9 +10964,14 @@ function startChatBgPoll(){
     if(document.getElementById('chat-modal').style.display==='flex') return;
     for(const cab of cabinets){
       if(!cab.portalId) continue;
+      if(!_canPollChat(cab.portalId)) continue;
       try{
         const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId));
-        if(!r.ok) continue;
+        if(!r.ok){
+          _noteChatPollResult(cab.portalId,false);
+          continue;
+        }
+        _noteChatPollResult(cab.portalId,true);
         const rows = await r.json();
         const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
         const cabMsgs = msgs.filter(function(m){return m.sender==='cabinet';});
@@ -10838,7 +10994,7 @@ function startChatBgPoll(){
           var _dashPane=document.getElementById('pane-dashboard');
           if(_dashPane&&_dashPane.classList.contains('on')&&typeof renderDashboard==='function')renderDashboard();
         }
-      }catch(e){}
+      }catch(e){ _noteChatPollResult(cab.portalId,false); }
     }
   }, 30000);
 }

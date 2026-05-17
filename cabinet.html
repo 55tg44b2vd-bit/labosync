@@ -329,6 +329,11 @@ function reportClientError(payload){
   }catch(e){}
   fetch('/.netlify/functions/log-client-error',{method:'POST',headers:{'Content-Type':'application/json'},body:body}).catch(function(){});
 }
+function _debugAuditLogCab(hypothesisId,message,data){
+  // #region agent log
+  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-baseline',hypothesisId:hypothesisId,location:'cabinet.html',message:message,data:data||{},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+}
 window.addEventListener('error',function(ev){
   reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:ev&&ev.error&&ev.error.stack?ev.error.stack:''});
 });
@@ -432,6 +437,7 @@ window.addEventListener('unhandledrejection',function(ev){
 
 async function loadPortal(portalId, code, pwd, fromSession){
   const err = document.getElementById('login-err');
+  _debugAuditLogCab('H5','Cabinet loadPortal start',{portalIdPresent:!!portalId,fromSession:!!fromSession,codeLen:(code||'').length});
   try{
     if(fromSession){
       throw new Error('Session invalide.');
@@ -451,6 +457,7 @@ async function loadPortal(portalId, code, pwd, fromSession){
     }
     portalData._updatedAt = payload.updatedAt || null;
     sessionPortalId = portalId;
+    _debugAuditLogCab('H5','Cabinet loadPortal success',{portalId:portalId,hasPortalData:!!portalData});
     // Save session (4h expiry) avec snapshot sanitizé
     sessionStorage.setItem('ls_portal_session', JSON.stringify({
       portalId: portalId,
@@ -460,6 +467,7 @@ async function loadPortal(portalId, code, pwd, fromSession){
     }));
     showPortal();
   }catch(e){
+    _debugAuditLogCab('H6','Cabinet loadPortal failed',{msg:e&&e.message?String(e.message):'unknown',portalIdPresent:!!portalId});
     if(err) err.textContent = e&&e.message ? e.message : 'Connexion impossible pour le moment.';
     console.error(e);
   }

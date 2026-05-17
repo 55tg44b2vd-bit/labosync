@@ -19,7 +19,12 @@ exports.handler = async (event) => {
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Méthode non autorisée' }) };
-  if (!SERVICE_KEY) return { statusCode: 500, headers, body: JSON.stringify({ error: 'Clé serveur non configurée' }) };
+  if (!SERVICE_KEY) {
+    // #region agent log
+    fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-post-fix',hypothesisId:'H11',location:'netlify/functions/portal-login.js',message:'Portal login blocked without service key',data:{},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return { statusCode: 503, headers, body: JSON.stringify({ error: 'Configuration locale incomplète: SUPABASE_SERVICE_KEY requis pour la connexion cabinet' }) };
+  }
 
   let body;
   try {

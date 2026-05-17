@@ -541,6 +541,11 @@ function reportClientError(payload){
   }catch(e){}
   fetch('/.netlify/functions/log-client-error',{method:'POST',headers:{'Content-Type':'application/json'},body:body}).catch(function(){});
 }
+function _debugAuditLogMobile(hypothesisId,message,data){
+  // #region agent log
+  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-baseline',hypothesisId:hypothesisId,location:'labo-mobile.html',message:message,data:data||{},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+}
 window.addEventListener('error',function(ev){
   reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:ev&&ev.error&&ev.error.stack?ev.error.stack:''});
 });
@@ -1571,6 +1576,7 @@ async function confirmAcceptOrderMobile(){
   }
 
   var portalId=_acceptFormMobile.portalId,caseId=_acceptFormMobile.caseId,stepId=_acceptFormMobile.stepId;
+  _debugAuditLogMobile('H7','Mobile confirmAcceptOrder start',{portalId:portalId,caseId:caseId,stepId:stepId,items:validItems.length,hasDeliveryDate:!!_acceptFormMobile.deliveryDate});
   var list=_pendingOrdersCacheMobile[portalId]||await _fetchOrdersForCabMobile(portalId);
   var c=list.find(function(x){return x.id===caseId;});if(!c){_releaseMobileLock();return;}
   _migrateOrderToCase(c);
@@ -1618,6 +1624,7 @@ async function confirmAcceptOrderMobile(){
     list[cIdx].updatedAt=new Date().toISOString();
   }
   await _writeOrdersForCabMobile(portalId,list);
+  _debugAuditLogMobile('H16','Mobile accept persisted to backend',{portalId:portalId,caseId:caseId,stepId:stepId});
   _pendingOrdersCacheMobile[portalId]=list;
   await saveData();
 
@@ -1627,6 +1634,7 @@ async function confirmAcceptOrderMobile(){
   toast('✅ Travail créé pour '+_acceptFormMobile.patient,'var(--green)');
   renderAll();
   } catch(err) {
+    _debugAuditLogMobile('H8','Mobile confirmAcceptOrder failed',{msg:err&&err.message?String(err.message):'unknown',stepId:stepId});
     // Erreur (timeout, réseau) — annuler proprement
     console.error('confirmAcceptOrderMobile failed',err);
     var lastJob=jobs[jobs.length-1];

@@ -24,8 +24,20 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Méthode non autorisée' }) };
 
-  if (!STRIPE_SECRET_KEY) return { statusCode: 500, headers, body: JSON.stringify({ error: 'Clé Stripe non configurée sur le serveur' }) };
-  if (!PRICE_MONTHLY || !PRICE_ANNUAL) return { statusCode: 500, headers, body: JSON.stringify({ error: 'Prix Stripe non configurés (STRIPE_PRICE_MONTHLY / STRIPE_PRICE_ANNUAL)' }) };
+  if (!STRIPE_SECRET_KEY) {
+    return {
+      statusCode: 503,
+      headers,
+      body: JSON.stringify({ error: 'Configuration Stripe manquante (STRIPE_SECRET_KEY ou STRIPE_SUBSCRIPTION_KEY)' }),
+    };
+  }
+  if (!PRICE_MONTHLY || !PRICE_ANNUAL) {
+    return {
+      statusCode: 503,
+      headers,
+      body: JSON.stringify({ error: 'Configuration Stripe incomplète (STRIPE_PRICE_MONTHLY / STRIPE_PRICE_ANNUAL)' }),
+    };
+  }
 
   let body;
   try { body = JSON.parse(event.body); } catch {
