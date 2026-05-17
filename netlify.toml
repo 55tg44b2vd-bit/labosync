@@ -39,6 +39,16 @@
   status = 200
 
 [[redirects]]
+  from = "/open"
+  to = "/open.html"
+  status = 200
+
+[[redirects]]
+  from = "/manifest-mobile.json"
+  to = "/manifest-mobile.json"
+  status = 200
+
+[[redirects]]
   from = "/courier"
   to = "/courier.html"
   status = 200

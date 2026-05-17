@@ -247,19 +247,90 @@ function getPortalTokenFromEvent(event) {
   return String(lower['x-portal-token'] || '').trim();
 }
 
-async function labOwnsPortal(labUserId, portalId) {
-  const uid = String(labUserId || '');
-  const pid = String(portalId || '').trim().toLowerCase();
-  if (!uid || !pid) return false;
-  const row = await laboDataGet('portal_' + pid);
-  if (row?.data?.labUserId && String(row.data.labUserId) === uid) return true;
-  if (row?.data?.cabId) {
-    const labRow = await laboDataGet(uid);
-    const cabinets = labRow?.data?.cabinets;
-    if (Array.isArray(cabinets) && cabinets.some((c) => String(c.portalId || '').toLowerCase() === pid)) {
-      return true;
+/** Trouve l’UUID Supabase du labo propriétaire d’un portail cabinet (push chat). */
+async function findLabUserIdForPortal(portalId) {
+  const raw = String(portalId || '').trim();
+  const pid = raw.toLowerCase();
+  if (!pid) return null;
+
+  const rowIds = [];
+  for (const id of [pid, raw]) {
+    if (!id) continue;
+    rowIds.push('portal_owner_' + id, 'portal_' + id, 'chat_' + id, 'orders_' + id);
+  }
+  const seen = new Set();
+  for (const rowId of rowIds) {
+    if (seen.has(rowId)) continue;
+    seen.add(rowId);
+    const row = await laboDataGet(rowId);
+    if (row?.data?.labUserId) return String(row.data.labUserId).trim();
+  }
+
+  const key = serviceKey();
+  if (!key) return null;
+  for (const portalIdValue of [pid, raw]) {
+    if (!portalIdValue) continue;
+    try {
+      const resp = await fetch(
+        `${SB_URL}/rest/v1/labo_data?select=id,data&data->>portalId=eq.${encodeURIComponent(portalIdValue)}&limit=12`,
+        { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+      );
+      if (!resp.ok) continue;
+      const rows = await resp.json();
+      for (const r of rows || []) {
+        if (r?.data?.labUserId) return String(r.data.labUserId).trim();
+      }
+    } catch (e) {
+      console.warn('[auth] findLabUserIdForPortal', e);
     }
   }
+
+  for (const portalIdValue of [pid, raw]) {
+    if (!portalIdValue) continue;
+    try {
+      const needle = encodeURIComponent(JSON.stringify([{ portalId: portalIdValue }]));
+      const resp = await fetch(
+        `${SB_URL}/rest/v1/labo_data?select=id,data&data->cabinets=cs.${needle}&limit=5`,
+        { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+      );
+      if (!resp.ok) continue;
+      const rows = await resp.json();
+      for (const r of rows || []) {
+        if (r?.data?.labUserId) return String(r.data.labUserId).trim();
+        if (/^[0-9a-f-]{36}$/i.test(String(r.id || ''))) return String(r.id).trim();
+      }
+    } catch (e) {
+      console.warn('[auth] findLabUserIdForPortal cabinets', e);
+    }
+  }
+
+  return null;
+}
+
+async function labOwnsPortal(labUserId, portalId) {
+  const uid = String(labUserId || '');
+  const raw = String(portalId || '').trim();
+  const pid = raw.toLowerCase();
+  if (!uid || !pid) return false;
+
+  const portalRowIds = [];
+  if (raw) portalRowIds.push('portal_' + raw);
+  const lowerId = 'portal_' + pid;
+  if (!portalRowIds.includes(lowerId)) portalRowIds.push(lowerId);
+
+  for (const rowId of portalRowIds) {
+    const row = await laboDataGet(rowId);
+    if (!row?.data) continue;
+    if (row.data.labUserId && String(row.data.labUserId) === uid) return true;
+  }
+
+  const labRow = await laboDataGet(uid);
+  const cabinets = labRow?.data?.cabinets;
+  if (Array.isArray(cabinets)) {
+    if (cabinets.some((c) => String(c.portalId || '').trim().toLowerCase() === pid)) return true;
+    if (cabinets.some((c) => String(c.portalId || '').trim() === raw)) return true;
+  }
+
   return false;
 }
 
@@ -279,5 +350,7 @@ module.exports = {
   verifyPortalToken,
   getPortalTokenFromEvent,
   labOwnsPortal,
+  findLabUserIdForPortal,
   laboDataGet,
+  laboDataUpsert,
 };

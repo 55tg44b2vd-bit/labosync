@@ -230,6 +230,8 @@
     try {
       var ua = global.navigator && global.navigator.userAgent ? global.navigator.userAgent : '';
       if (/firefox|fxios/i.test(ua)) return 'FirefoxPush';
+      /* iOS 16.4+ PWA : Web Push standard (type WebPush pour OneSignal). */
+      if (isIos() && isStandalone()) return 'WebPush';
       if (/safari/i.test(ua) && !/chrome|crios|crmo|edg/i.test(ua)) return 'SafariPush';
     } catch (e) {}
     return 'ChromePush';
@@ -723,6 +725,13 @@
     if (!supportsWebPush()) {
       return Promise.reject(new Error('Notifications non supportées.'));
     }
+    if (isIos() && !isStandalone()) {
+      return Promise.reject(
+        new Error(
+          'iPhone : ouvrez Labosync depuis l\'icône sur l\'écran d\'accueil (Safari → Partager → Sur l\'écran d\'accueil), pas depuis Safari.'
+        )
+      );
+    }
     if (isPrivateBrowsingSync()) {
       return Promise.reject(new Error(privateModeMessage()));
     }
@@ -745,7 +754,9 @@
           throw new Error('Clé push manquante — réessayez dans une minute.');
         }
         return ensurePushServiceWorker().then(function (reg) {
-          return subscribeNativePush(reg, vapid, true);
+          return subscribeNativePush(reg, vapid, false).catch(function () {
+            return subscribeNativePush(reg, vapid, true);
+          });
         });
       })
       .then(function (sub) {
@@ -758,11 +769,12 @@
         if (st && st.registered) {
           return {
             ok: true,
-            message: 'Appareil enregistré. Testez via ⚙️ → Tester une notification.',
+            message:
+              'Cet appareil est enregistré pour les messages même app fermée. Répétez sur chaque autre téléphone/PC.',
           };
         }
         throw new Error(
-          'Autorisation navigateur OK, enregistrement serveur incomplet — réessayez.'
+          'Autorisation OK mais serveur OneSignal ne voit pas cet appareil — réessayez depuis l\'icône écran d\'accueil (iPhone).'
         );
       });
   }
@@ -790,6 +802,7 @@
 
   function syncIfPermissionGranted() {
     if (!_externalId || isPrivateBrowsingSync()) return Promise.resolve();
+    if (isIos() && !isStandalone()) return Promise.resolve();
     if (nativePermission() !== 'granted') return Promise.resolve();
     return checkServerRegistration()
       .then(function (st) {
@@ -800,12 +813,88 @@
       });
   }
 
+  /**
+   * Enregistre cet appareil pour recevoir les push serveur (app fermée), comme WhatsApp.
+   * @param {{promptIfDefault?:boolean, skipIosCheck?:boolean}} opts
+   */
+  function ensureBackgroundPush(opts) {
+    opts = opts || {};
+    if (!_externalId) {
+      return Promise.resolve({ ok: false, reason: 'no_login', message: 'Connectez-vous d\'abord.' });
+    }
+    if (!supportsWebPush()) {
+      return Promise.resolve({ ok: false, reason: 'unsupported', message: 'Notifications non supportées.' });
+    }
+    if (isPrivateBrowsingSync()) {
+      return Promise.resolve({ ok: false, reason: 'private', message: privateModeMessage() });
+    }
+    if (!opts.skipIosCheck && isIos() && !isStandalone()) {
+      return Promise.resolve({
+        ok: false,
+        reason: 'ios_home_screen',
+        message:
+          'Sur iPhone : Safari → Partager → « Sur l\'écran d\'accueil », puis ouvrez Labosync depuis l\'icône et activez les notifications.',
+      });
+    }
+    if (nativePermission() === 'denied') {
+      return Promise.resolve({ ok: false, reason: 'denied', message: deniedMessage() });
+    }
+    if (nativePermission() === 'default') {
+      if (opts.promptIfDefault) return promptForNotifications();
+      return Promise.resolve({
+        ok: false,
+        reason: 'permission_default',
+        message: 'Autorisez les notifications pour recevoir les messages même quand l\'app est fermée.',
+      });
+    }
+
+    var tries = 0;
+    function attempt() {
+      return checkServerRegistration().then(function (st) {
+        if (st && st.registered) {
+          return {
+            ok: true,
+            registered: true,
+            deviceCount: st.activeWebPushCount || st.activeDeviceCount || 1,
+          };
+        }
+        return nativeRegister().then(function (res) {
+          if (res && res.ok !== false) {
+            return { ok: true, registered: true, message: res.message || '' };
+          }
+          tries += 1;
+          if (tries < 3) {
+            return new Promise(function (r) {
+              setTimeout(r, 1200 * tries);
+            }).then(attempt);
+          }
+          return {
+            ok: false,
+            reason: 'register_failed',
+            message: (res && res.message) || 'Enregistrement incomplet — réessayez.',
+          };
+        });
+      });
+    }
+    return attempt().catch(function (err) {
+      return { ok: false, reason: 'error', message: formatPushError(err) };
+    });
+  }
+
   function prepare(opts) {
     if (!opts || !opts.externalId) return;
     if (_externalId && _externalId !== opts.externalId) resetSdkState();
     _role = opts.role || null;
     _externalId = opts.externalId;
     if (typeof opts.authHeaders === 'function') _authHeadersFn = opts.authHeaders;
+    try {
+      global.localStorage.setItem('lb_push_external_id', _externalId);
+    } catch (e) {}
+    if (nativePermission() === 'granted' && !isPrivateBrowsingSync()) {
+      setTimeout(function () {
+        ensureBackgroundPush({ promptIfDefault: false, skipIosCheck: false }).catch(function () {});
+      }, 1500);
+    }
   }
 
   function init(opts) {
@@ -878,8 +967,9 @@
       title +
       '</div>' +
       '<div style="font-size:.82rem;color:#475569;line-height:1.45;margin-bottom:10px;">' +
-      (opts.subtitle || 'Messages et factures même application fermée.') +
-      ' Si le cadenas est déjà vert : menu ⚙️ → Finaliser l\'enregistrement.</div>' +
+      (opts.subtitle ||
+        'Comme WhatsApp : chaque téléphone et chaque PC une fois. Messages reçus même app fermée.') +
+      ' Sur cet appareil : acceptez les notifications puis Finaliser.</div>' +
       '<button type="button" data-lb-push-enable style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:.84rem;font-weight:700;cursor:pointer;margin-right:8px;">🔔 Activer / finaliser</button>' +
       '<button type="button" data-lb-push-dismiss style="background:#fff;border:1px solid #93c5fd;color:#1d4ed8;border-radius:8px;padding:10px 14px;font-size:.8rem;cursor:pointer;">Plus tard</button>' +
       '<div data-lb-push-status style="margin-top:10px;font-size:.78rem;min-height:1.2em;font-weight:600;"></div></div>';
@@ -946,13 +1036,123 @@
 
   function getStatus() {
     return checkServerRegistration().then(function (server) {
+      var deviceCount =
+        typeof server.activeWebPushCount === 'number'
+          ? server.activeWebPushCount
+          : server.registered
+            ? 1
+            : 0;
       return {
         externalId: _externalId,
         browserPermission: nativePermission(),
         serverRegistered: !!(server && server.registered),
+        activeDeviceCount: deviceCount,
+        playerId: getStoredPlayerId(),
         sdkReady: _sdkReady,
+        isIos: isIos(),
+        isStandalone: isStandalone(),
+        iosReady: !isIos() || isStandalone(),
       };
     });
+  }
+
+  /** Enregistre cet appareil sans désabonner les autres (téléphone + PC). */
+  function registerThisDevice() {
+    return nativeRegister();
+  }
+
+  /** Alerte locale (titre + texte) — utile quand l'onglet est ouvert. */
+  function showAlert(title, body, tag) {
+    if (nativePermission() !== 'granted') {
+      return Promise.resolve({ ok: false, reason: 'permission' });
+    }
+    var icon = '/icon.svg';
+    try {
+      if (global.location && global.location.origin) {
+        icon = global.location.origin + '/icon.svg';
+      }
+    } catch (e) {}
+    var t = String(title || 'Labosync').slice(0, 120);
+    var b = String(body || '').slice(0, 240);
+    var tg = tag || 'lb-alert-' + Date.now();
+    try {
+      if (global.Notification) {
+        new global.Notification(t, { body: b, icon: icon, tag: tg });
+      }
+    } catch (e) {}
+    return ensurePushServiceWorker()
+      .then(function (reg) {
+        return reg.showNotification(t, {
+          body: b,
+          icon: icon,
+          badge: icon,
+          tag: tg,
+        });
+      })
+      .then(function () {
+        return { ok: true };
+      })
+      .catch(function (err) {
+        return { ok: false, reason: String(err.message || err) };
+      });
+  }
+
+  /** Affiche une notification via le service worker (sans OneSignal). */
+  function testLocalDisplay() {
+    if (nativePermission() !== 'granted') {
+      return Promise.reject(
+        new Error('Autorisez les notifications pour labosync.app (cadenas à gauche de l\'adresse).')
+      );
+    }
+    var icon = '/icon.svg';
+    try {
+      if (global.location && global.location.origin) {
+        icon = global.location.origin + '/icon.svg';
+      }
+    } catch (e) {}
+    try {
+      if (global.Notification) {
+        new global.Notification('Test Labosync', {
+          body: 'Test direct — si vous voyez ceci, le navigateur peut afficher des alertes.',
+          icon: icon,
+          tag: 'lb-test-page',
+        });
+      }
+    } catch (e) {}
+    return ensurePushServiceWorker().then(function (reg) {
+      return reg.showNotification('Test Labosync', {
+        body: 'Test service worker — réduisez la fenêtre si vous ne voyez rien.',
+        icon: icon,
+        badge: icon,
+        tag: 'lb-test-sw',
+        requireInteraction: true,
+      });
+    });
+  }
+
+  /** Après envoi d'un message chat — affiche si la push serveur a échoué (debug). */
+  function reportChatPushResult(response, context) {
+    if (!response || !response.ok) return Promise.resolve();
+    return response
+      .clone()
+      .json()
+      .then(function (j) {
+        var p = j && j.push;
+        if (!p || p.ok) return;
+        console.warn('[push] serveur', context || '', p);
+        var msg =
+          p.reason === 'no_recipient'
+            ? 'Message enregistré mais notification impossible (portail à republier).'
+            : p.reason === 'no_subscribed_devices'
+              ? 'Message enregistré — activez les notifications sur le téléphone/PC du destinataire (Profil → Finaliser).'
+              : 'Message enregistré — notification cloud non délivrée (' + (p.reason || '?') + ').';
+        if (typeof global.showToast === 'function') {
+          global.showToast(msg, '#d97706', 9000);
+        } else if (typeof global.toast === 'function') {
+          global.toast(msg, '#d97706', 9000);
+        }
+      })
+      .catch(function () {});
   }
 
   global.LabosyncPush = {
@@ -968,8 +1168,13 @@
     activateOrFinalize: activateOrFinalize,
     finalizeRegistration: finalizeRegistration,
     syncIfPermissionGranted: syncIfPermissionGranted,
+    ensureBackgroundPush: ensureBackgroundPush,
     checkServerRegistration: checkServerRegistration,
     getStatus: getStatus,
     getExternalId: getExternalId,
+    testLocalDisplay: testLocalDisplay,
+    showAlert: showAlert,
+    registerThisDevice: registerThisDevice,
+    reportChatPushResult: reportChatPushResult,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

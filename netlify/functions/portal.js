@@ -5,6 +5,8 @@ const {
   verifyPortalToken,
   getPortalTokenFromEvent,
   labOwnsPortal,
+  findLabUserIdForPortal,
+  laboDataUpsert,
 } = require('./_labosync-auth');
 const {
   detectNewlySentInvoices,
@@ -238,6 +240,9 @@ exports.handler = async (event) => {
       const trimmed = [...existing, newMsg].slice(-200);
 
       let chatLabUserId = auth.userId || null;
+      if (!chatLabUserId && rows[0]?.data?.labUserId) {
+        chatLabUserId = String(rows[0].data.labUserId);
+      }
       if (!chatLabUserId) {
         const portalRead = await readRow(`portal_${normalizedId}`);
         if (portalRead.ok && portalRead.rows[0]?.data?.labUserId) {
@@ -247,6 +252,22 @@ exports.handler = async (event) => {
           if (legacyPortal.ok && legacyPortal.rows[0]?.data?.labUserId) {
             chatLabUserId = String(legacyPortal.rows[0].data.labUserId);
           }
+        }
+      }
+      if (!chatLabUserId) {
+        chatLabUserId = await findLabUserIdForPortal(normalizedId);
+      }
+      if (!chatLabUserId && portalId !== normalizedId) {
+        chatLabUserId = await findLabUserIdForPortal(portalId);
+      }
+      if (chatLabUserId) {
+        try {
+          await laboDataUpsert(`portal_owner_${normalizedId}`, {
+            labUserId: chatLabUserId,
+            portalId: normalizedId,
+          });
+        } catch (e) {
+          console.warn('[portal] portal_owner from chat', e);
         }
       }
 
@@ -278,25 +299,39 @@ exports.handler = async (event) => {
         }
       }
 
+      let pushMeta = null;
       try {
+        let pushPreview = clampStr(content || '', 5000);
+        if (!pushPreview && (image || attachment)) pushPreview = 'Pièce jointe';
+
         const pushResult = await notifyChatMessage({
           sender,
           portalId: normalizedId,
           labUserId: chatLabUserId,
           senderName: clampStr(senderName || '', 80),
-          content: clampStr(content || '', 5000),
+          content: pushPreview,
           laboName,
         });
-        if (pushResult && !pushResult.ok && !pushResult.skipped) {
+        pushMeta = {
+          ok: !!pushResult?.ok,
+          recipients: pushResult?.recipients ?? null,
+          reason: pushResult?.reason || (pushResult?.skipped ? 'skipped' : null),
+        };
+        if (!chatLabUserId && sender === 'cabinet') {
+          console.warn('[push] chat no labUserId', { portalId: normalizedId });
+        } else if (pushResult && !pushResult.ok) {
           console.warn('[push] chat failed', JSON.stringify(pushResult));
-        } else if (pushResult?.reason === 'no_recipient') {
-          console.warn('[push] chat no recipient', { sender, portalId: normalizedId, chatLabUserId });
         }
       } catch (err) {
         console.warn('[push] chat', err);
+        pushMeta = { ok: false, reason: String(err.message || err) };
       }
 
-      return { statusCode: 200, headers, body: JSON.stringify({ ok: true, message: newMsg }) };
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ ok: true, message: newMsg, push: pushMeta }),
+      };
     }
 
     if (action === 'orders') {
@@ -394,6 +429,16 @@ exports.handler = async (event) => {
       await upsertCabLoginIndex(normalizedId, safePayload.cabCode, safePayload.cabId);
     } catch (_) {
       /* index optionnel — la connexion par code reste possible via cabCode JSON */
+    }
+
+    try {
+      await laboDataUpsert(`portal_owner_${normalizedId}`, {
+        labUserId: auth.userId,
+        portalId: normalizedId,
+        cabId: safePayload.cabId || null,
+      });
+    } catch (e) {
+      console.warn('[portal] portal_owner index', e);
     }
 
     const newInvoices = detectNewlySentInvoices(prevFactures, safePayload.factures || []);

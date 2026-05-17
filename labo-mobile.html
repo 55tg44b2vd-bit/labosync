@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="Labosync"/>
 <meta name="theme-color" content="#ffffff"/>
-<link rel="manifest" href="/manifest.json"/>
-<script src="/lb-push.js?v=7" defer></script>
+<link rel="manifest" href="/manifest-mobile.json"/>
+<script src="/lb-push.js?v=13" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="/icon.svg"/>
 <script src="/lb-env-routing.js"></script>
@@ -325,6 +325,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
   <div class="main">
     <!-- ── DASHBOARD / AUJOURD'HUI ── -->
     <div class="view on" id="view-home">
+      <div id="lb-ios-push-banner" style="display:none;margin-bottom:12px;"></div>
       <div id="lb-push-banner"></div>
       <div id="home-greeting" style="margin-bottom:14px;"></div>
       <div class="stats-grid" id="stats-grid"></div>
@@ -610,13 +611,14 @@ function isJobComplete(job){
 }
 function fmtDate(d){if(!d)return'';try{return new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});}catch(e){return d;}}
 function fmtISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-function toast(msg,bg){
+function toast(msg,bg,dur){
   const t=document.createElement('div');t.className='toast';t.textContent=msg;
   t.style.opacity='0';t.style.transform='translateX(-50%) translateY(-8px)';
   if(bg)t.style.background=bg;
   document.body.appendChild(t);
   requestAnimationFrame(function(){t.style.transition='opacity .2s ease, transform .2s ease';t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';});
-  setTimeout(function(){t.style.opacity='0';t.style.transform='translateX(-50%) translateY(-8px)';setTimeout(function(){t.remove();},220);},2500);
+  var ms=typeof dur==='number'?dur:2500;
+  setTimeout(function(){t.style.opacity='0';t.style.transform='translateX(-50%) translateY(-8px)';setTimeout(function(){t.remove();},220);},ms);
 }
 
 /* ── AUTH ── */
@@ -841,6 +843,10 @@ function openProfileSheet(){
         '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🔑</span>'+
         '<span style="font-size:.94rem;font-weight:500;">Changer le mot de passe</span>'+
       '</button>'+
+      '<button class="ps-item" onclick="closeProfileSheet();openPushSheet();" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
+        '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🔔</span>'+
+        '<span style="font-size:.94rem;font-weight:500;">Notifications push</span>'+
+      '</button>'+
       '<div style="height:1px;background:var(--border);margin:8px 6px;"></div>'+
       '<button class="ps-item" onclick="closeProfileSheet();localStorage.setItem(\'lb_env\',\'desktop\');window.location.href=\'app.html\';" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
         '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🖥️</span>'+
@@ -964,6 +970,147 @@ function clearStripeMobile(){
   toast('Clé effacée','var(--ink-soft)');
 }
 
+function formatOsPushMsg(j,fallback){
+  if(!j)return fallback||'Erreur';
+  if(typeof j.message==='string'&&j.message)return j.message;
+  if(j.hint)return String(j.hint);
+  if(j.reason)return String(j.reason);
+  var e=j.error;
+  if(e&&Array.isArray(e.errors)){
+    var parts=e.errors.map(function(x){
+      if(typeof x==='string')return x;
+      if(x&&typeof x==='object')return x.title||x.message||x.code||'';
+      return '';
+    }).filter(Boolean);
+    if(parts.length)return parts.join(' — ').slice(0,200);
+  }
+  return fallback||'Erreur';
+}
+function updateIosPushBanner(){
+  var el=document.getElementById('lb-ios-push-banner');
+  if(!el||typeof LabosyncPush==='undefined')return;
+  LabosyncPush.getStatus().then(function(st){
+    if(!st.isIos){el.style.display='none';return;}
+    if(!st.isStandalone){
+      el.style.display='block';
+      el.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px;font-size:.8rem;color:#991b1b;line-height:1.45;"><strong>iPhone — étape obligatoire</strong><br>Les notifications <em>app fermée</em> ne marchent pas dans Safari. Safari → <strong>Partager</strong> → <strong>Sur l\'écran d\'accueil</strong>, puis ouvrez Labosync depuis l\'<strong>icône</strong> et revenez ici.</div>';
+      return;
+    }
+    if(!st.serverRegistered){
+      el.style.display='block';
+      el.innerHTML='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px;font-size:.8rem;color:#92400e;line-height:1.45;"><strong>Presque prêt</strong><br>Profil → <strong>Notifications push → Finaliser</strong>, puis fermez complètement l\'app et testez un message.</div>';
+      return;
+    }
+    el.style.display='none';
+  }).catch(function(){});
+}
+
+async function lbRefreshPushMobileUI(){
+  var el=document.getElementById('lb-push-mobile-status');
+  if(!el)return;
+  var perm='inconnu';
+  try{perm=typeof Notification!=='undefined'?Notification.permission:'non supporté';}catch(e){}
+  if(typeof LabosyncPush==='undefined'){
+    el.innerHTML='Module non chargé — rechargez la page.';
+    return;
+  }
+  try{
+    var st=await LabosyncPush.getStatus();
+    var ids=typeof LabosyncPush.getStoredPushIds==='function'?LabosyncPush.getStoredPushIds():{};
+    var lines=[
+      '<strong>Cet appareil :</strong> '+perm,
+      '<strong>Mode iPhone (icône écran d\'accueil) :</strong> '+(st.isStandalone?'oui ✓':'non — obligatoire'),
+      '<strong>Total compte Labosync :</strong> '+(st.activeDeviceCount||0)+' appareil(s)',
+      '<strong>Enregistré serveur (app fermée) :</strong> '+(st.serverRegistered?'oui ✓':'non'),
+    ];
+    if(ids.playerId)lines.push('<strong>ID :</strong> '+String(ids.playerId).slice(0,12)+'…');
+    if(perm!=='granted')lines.push('<span style="color:#b45309;">Autorisez les notifications quand Safari/Chrome le demande.</span>');
+    else if(!st.serverRegistered)lines.push('<span style="color:#c2410c;"><strong>Sans Finaliser : pas de notif si l\'app est fermée.</strong> Appuyez ci-dessous.</span>');
+    else lines.push('<span style="color:#059669;">Ce téléphone recevra les messages <strong>même app fermée</strong>. Faites pareil sur le PC.</span>');
+    el.innerHTML=lines.join('<br>');
+  }catch(e){
+    el.textContent=String(e&&e.message?e.message:e);
+  }
+}
+async function lbActivatePushMobile(){
+  if(typeof LabosyncPush==='undefined'){toast('Module notifications indisponible','var(--red)',4000);return;}
+  try{
+    var fn=typeof LabosyncPush.ensureBackgroundPush==='function'?LabosyncPush.ensureBackgroundPush:LabosyncPush.activateOrFinalize;
+    var r=await fn.call(LabosyncPush,{promptIfDefault:true});
+    toast(formatOsPushMsg(r,r.ok?'Messages reçus même app fermée':'Échec'),r.ok?'#2563eb':'#c0392b',7000);
+    lbRefreshPushMobileUI();
+    updateIosPushBanner();
+  }catch(e){
+    toast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',5000);
+  }
+}
+async function testLabPushLocalMobile(){
+  if(typeof LabosyncPush==='undefined'){toast('Module notifications indisponible','var(--red)',4000);return;}
+  try{
+    await LabosyncPush.testLocalDisplay();
+    toast('Test envoyé — vérifiez le centre de notifications du téléphone.','var(--accent)',8000);
+  }catch(e){
+    toast(String(e&&e.message?e.message:e).slice(0,200),'#c0392b',7000);
+  }
+}
+async function testLabPushCloudMobile(){
+  if(typeof LabosyncPush==='undefined'){toast('Module notifications indisponible','var(--red)',4000);return;}
+  try{
+    var st=await LabosyncPush.getStatus();
+    if(!st.serverRegistered){
+      var reg=await LabosyncPush.activateOrFinalize();
+      toast(formatOsPushMsg(reg,reg.ok?'OK':'Enregistrement requis'),reg.ok?'var(--accent)':'#c0392b',6000);
+      if(!reg.ok)return;
+      st=await LabosyncPush.getStatus();
+      if(!st.serverRegistered){
+        toast('Enregistrement incomplet — finalisez puis réessayez.','#c0392b',7000);
+        return;
+      }
+    }
+    var ext=LabosyncPush.getExternalId();
+    var ids=typeof LabosyncPush.getStoredPushIds==='function'?LabosyncPush.getStoredPushIds():{};
+    var r=await fetch('/.netlify/functions/onesignal-test-push',{
+      method:'POST',
+      headers:mobileStripeHeaders(),
+      body:JSON.stringify({externalId:ext,playerId:ids.playerId||null,subscriptionId:ids.subscriptionId||null})
+    });
+    var j=await r.json();
+    if(j.ok){
+      toast((j.message||'Notification cloud envoyée.')+' Si rien n\'apparaît, faites d\'abord le test local.','var(--accent)',9000);
+      try{await LabosyncPush.testLocalDisplay();}catch(_){}
+    }else{
+      toast(formatOsPushMsg(j,'Échec envoi test'),'#c0392b',7000);
+    }
+    lbRefreshPushMobileUI();
+  }catch(e){
+    toast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',5000);
+  }
+}
+function openPushSheet(){
+  if(document.getElementById('push-mobile-sheet'))return;
+  var ios=/iPhone|iPod|iPad/i.test(navigator.userAgent||'');
+  var sh=document.createElement('div');
+  sh.id='push-mobile-sheet';
+  sh.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5600;display:flex;align-items:flex-end;justify-content:center;';
+  sh.innerHTML=
+    '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch;">'+
+      '<div style="font-weight:700;margin-bottom:6px;font-size:1rem;">🔔 Notifications push</div>'+
+      '<p style="font-size:.76rem;color:var(--ink-soft);margin:0 0 12px;line-height:1.45;">Comme WhatsApp : enregistrez <strong>ce téléphone</strong> ici, puis faites pareil sur votre PC (Paramètres → Notifications push). iPhone : ajoutez Labosync à l\'écran d\'accueil d\'abord.</p>'+
+      (ios?'<p style="font-size:.72rem;color:#b45309;margin:0 0 12px;line-height:1.45;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;"><strong>iPhone :</strong> ajoutez Labosync à l\'écran d\'accueil (Safari → Partager), ouvrez depuis l\'icône, puis finalisez ici.</p>':'')+
+      '<div id="lb-push-mobile-status" style="font-size:.78rem;margin-bottom:14px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;line-height:1.55;">Chargement…</div>'+
+      '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">'+
+        '<button type="button" class="btn btn-primary" onclick="lbActivatePushMobile()">1. Finaliser l\'enregistrement</button>'+
+        '<button type="button" class="btn btn-secondary" onclick="testLabPushLocalMobile()">2. Test affichage local</button>'+
+        '<button type="button" class="btn btn-secondary" onclick="testLabPushCloudMobile()">3. Test notification cloud</button>'+
+      '</div>'+
+      '<p style="font-size:.7rem;color:var(--ink-soft);line-height:1.45;margin:0;">Autorisez les notifications dans les réglages du téléphone pour Chrome, Safari ou Edge selon votre navigateur.</p>'+
+      '<button type="button" class="btn btn-secondary" onclick="document.getElementById(\'push-mobile-sheet\').remove();" style="width:100%;margin-top:14px;">Fermer</button>'+
+    '</div>';
+  document.body.appendChild(sh);
+  sh.addEventListener('click',function(e){if(e.target===sh)sh.remove();});
+  lbRefreshPushMobileUI();
+}
+
 document.getElementById('env-desktop').addEventListener('click',function(){
   localStorage.setItem('lb_env','desktop');
   window.location.href='app.html';
@@ -982,6 +1129,7 @@ async function initMobileApp(){
   if(_mobileInitDone)return;
   _mobileInitDone=true;
   await loadData();
+  try{lbMobHandlePushDeepLink();}catch(eDl){}
   startPoll();
   populateJobForm();
   try{
@@ -994,15 +1142,41 @@ async function initMobileApp(){
   try{
     if(typeof LabosyncPush!=='undefined'&&currentUser){
       LabosyncPush.prepare({role:'lab',externalId:'lab:'+currentUser.id,authHeaders:function(){return {'Content-Type':'application/json','Authorization':_token?'Bearer '+_token:''};}});
+      LabosyncPush.syncIfPermissionGranted().then(function(){
+        return LabosyncPush.getStatus();
+      }).then(function(st){
+        if(st.browserPermission==='default'){
+          setTimeout(function(){openPushSheet();},1200);
+        }else if(st.browserPermission==='granted'&&!st.serverRegistered){
+          toast('Activez les notifications sur ce téléphone (Profil → Notifications push) — messages même app fermée','var(--accent)',9000);
+          if(typeof LabosyncPush.ensureBackgroundPush==='function'){
+            LabosyncPush.ensureBackgroundPush({promptIfDefault:false}).catch(function(){});
+          }
+        }
+      }).catch(function(){});
       var pushBanner=document.getElementById('lb-push-banner');
-      if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab_mobile'});
+      if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab_mobile',title:'Notifications sur ce téléphone'});
+      updateIosPushBanner();
     }
   }catch(ePush){console.warn('push init',ePush);}
   if(!_msgBgInterval){
     _msgBgInterval=setInterval(function(){
-      if(currentUser&&!document.hidden&&typeof loadLastMessages==='function')loadLastMessages();
-    },30000);
+      if(currentUser&&typeof loadLastMessages==='function')loadLastMessages();
+    },8000);
+    startMobChatRealtime();
   }
+}
+document.addEventListener('visibilitychange',function(){
+  if(!document.hidden&&currentUser&&typeof loadLastMessages==='function')loadLastMessages();
+});
+function lbMobHandlePushDeepLink(){
+  try{
+    var p=new URLSearchParams(location.search||'');
+    if(p.get('open')==='messages'&&typeof showView==='function'){
+      setTimeout(function(){showView('messages');},600);
+      if(p.get('from')==='push')history.replaceState({},'',location.pathname);
+    }
+  }catch(e){}
 }
 
 function showEnvSelector(){
@@ -1190,6 +1364,7 @@ async function loadData(){
     const hhmm=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     if(sync)sync.textContent='✓ '+hhmm;
     renderAll();
+    if(typeof startMobChatRealtime==='function')startMobChatRealtime();
   }catch(e){
     console.error('loadData',e);
     if(sync)sync.textContent='❌ Erreur sync';
@@ -2951,6 +3126,9 @@ async function sendChat(){
       body:JSON.stringify(body)
     });
     if(r.ok){
+      if(typeof LabosyncPush!=='undefined'&&LabosyncPush.reportChatPushResult){
+        LabosyncPush.reportChatPushResult(r,'labo→cabinet');
+      }
       var msgs=await _fetchPortalChat(cab.portalId);
       renderChat(msgs);
       if(msgs.length)_msgLastMessages[cab.id]=msgs[msgs.length-1];
@@ -3283,16 +3461,75 @@ async function renderMsgList(){
   loadLastMessages();
 }
 
+var _mobChatPushBootstrapDone=false;
+
+function mobSeedDedupeQuiet(cab,unseen){
+  (unseen||[]).forEach(function(msg){
+    var dedupeKey='lb_mnotif_'+cab.portalId+'_'+(msg.id||msg.createdAt||'');
+    try{localStorage.setItem(dedupeKey,'1');}catch(e){}
+  });
+}
+
+function mobNotifyCabinetMessages(cab,msgs){
+  if(!cab||!cab.portalId||!msgs||!msgs.length)return;
+  if(_chatCabId===cab.id)return;
+  var lastSeen=localStorage.getItem('lb_chat_seen_'+cab.id)||'';
+  var unseen=msgs.filter(function(m){return m.sender==='cabinet'&&m.createdAt>lastSeen;});
+  if(!unseen.length)return;
+  if(!_mobChatPushBootstrapDone){
+    mobSeedDedupeQuiet(cab,unseen);
+    return;
+  }
+  unseen.forEach(function(msg){
+    var dedupeKey='lb_mnotif_'+cab.portalId+'_'+(msg.id||msg.createdAt||'');
+    try{if(localStorage.getItem(dedupeKey)==='1')return;localStorage.setItem(dedupeKey,'1');}catch(e){}
+    var body=(msg.content||(msg.image?'📷 Photo':(msg.attachment?'📎 Fichier':'Message'))).slice(0,160);
+    if(typeof LabosyncPush!=='undefined'&&typeof LabosyncPush.showAlert==='function'){
+      LabosyncPush.showAlert('💬 '+(msg.senderName||cab.name),body,'mchat-'+dedupeKey);
+    }else if('Notification' in window&&Notification.permission==='granted'){
+      try{new Notification('💬 '+(msg.senderName||cab.name),{body:body,icon:'/icon.svg'});}catch(e){}
+    }
+  });
+}
+
+var _mobChatRtChannels=[];
+function stopMobChatRealtime(){
+  _mobChatRtChannels.forEach(function(ch){try{sbClient.removeChannel(ch);}catch(e){}});
+  _mobChatRtChannels=[];
+}
+function startMobChatRealtime(){
+  stopMobChatRealtime();
+  if(typeof sbClient==='undefined'||!sbClient)return;
+  cabinets.filter(function(c){return c.portalId;}).forEach(function(cab){
+    var pid=cab.portalId;
+    var ch=sbClient.channel('mob_chat_'+pid).on('postgres_changes',{
+      event:'UPDATE',schema:'public',table:'labo_data',filter:'id=eq.chat_'+pid
+    },function(payload){
+      try{
+        var data=payload.new&&payload.new.data;
+        var msgs=data&&data.messages?data.messages:[];
+        mobNotifyCabinetMessages(cab,msgs);
+        if(msgs.length)_msgLastMessages[cab.id]=msgs[msgs.length-1];
+      }catch(e){}
+    }).subscribe();
+    _mobChatRtChannels.push(ch);
+  });
+}
+
 async function loadLastMessages(){
+  var firstBoot=!_mobChatPushBootstrapDone;
   var cabs=cabinets.filter(function(c){return c.portalId;});
   await Promise.all(cabs.map(async function(c){
     var msgs=await _fetchPortalChat(c.portalId);
-    if(msgs.length)_msgLastMessages[c.id]=msgs[msgs.length-1];
-    else delete _msgLastMessages[c.id];
+    if(msgs.length){
+      _msgLastMessages[c.id]=msgs[msgs.length-1];
+      mobNotifyCabinetMessages(c,msgs);
+    }else delete _msgLastMessages[c.id];
   }));
   var el=document.getElementById('msg-cab-list');
   if(el&&el.children.length)renderMsgList_update();
   renderHomeMessages();
+  if(firstBoot)_mobChatPushBootstrapDone=true;
 }
 
 function renderMsgList_update(){

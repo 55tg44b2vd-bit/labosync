@@ -116,7 +116,7 @@ async function getWebPushTargets(externalId) {
         encodeURIComponent(appId) +
         '&external_user_id=' +
         encodeURIComponent(eid) +
-        '&limit=10';
+        '&limit=50';
       const resp = await fetch(listUrl, { headers: { Authorization: authorization } });
       if (!resp.ok) continue;
       const json = parseJson(await resp.text());
@@ -172,8 +172,13 @@ async function sendToExternalUsers({ externalUserIds, heading, body, url, data, 
     headings: { fr: heading, en: heading },
     contents: { fr: body, en: body },
     data: data || {},
+    priority: 10,
   };
   if (url) base.url = url;
+  if (data && data.collapseId) {
+    base.collapse_id = String(data.collapseId).slice(0, 64);
+    delete base.data.collapseId;
+  }
 
   const targets = await getWebPushTargets(ids[0]);
   if (Array.isArray(playerIds)) {
@@ -186,28 +191,41 @@ async function sendToExternalUsers({ externalUserIds, heading, body, url, data, 
   }
 
   const attempts = [];
-  if (targets.playerIds.length) {
-    attempts.push({ include_player_ids: targets.playerIds });
-  }
   if (targets.subscriptionIds.length) {
     attempts.push({ include_subscription_ids: targets.subscriptionIds });
   }
   attempts.push({ include_aliases: { external_id: ids } });
   attempts.push({ include_external_user_ids: ids });
+  if (targets.playerIds.length) {
+    attempts.push({ include_player_ids: targets.playerIds });
+  }
 
   let last = null;
   for (const targeting of attempts) {
     const via = Object.keys(targeting)[0];
     const result = await postOneSignalNotification({ ...base, ...targeting });
     last = result;
-    if (result.ok) {
-      console.log('[onesignal] sent', ids.join(','), via, result.recipients, result.result?.id || '');
+    const fansOut =
+      targeting.include_subscription_ids ||
+      targeting.include_aliases ||
+      targeting.include_external_user_ids;
+    if (result.ok && (fansOut || (result.recipients && result.recipients > 0))) {
+      console.log(
+        '[onesignal] sent',
+        ids.join(','),
+        via,
+        'subs=' + targets.subscriptionIds.length,
+        'players=' + targets.playerIds.length,
+        result.recipients,
+        result.result?.id || ''
+      );
       return {
         ok: true,
         result: result.result,
         recipients: result.recipients,
         via,
         targets,
+        deviceCount: Math.max(targets.subscriptionIds.length, targets.playerIds.length),
       };
     }
   }
@@ -255,28 +273,40 @@ function detectNewlySentInvoices(prevFactures, nextFactures) {
   return out;
 }
 
-async function notifyChatMessage({ sender, portalId, labUserId, senderName, content, laboName }) {
+function pushOpenUrl(role, target) {
   const origin = siteOrigin();
-  const preview = trimPreview(content, 120) || 'Nouveau message';
+  return (
+    origin +
+    '/open.html?role=' +
+    encodeURIComponent(role) +
+    '&target=' +
+    encodeURIComponent(target || 'messages')
+  );
+}
+
+async function notifyChatMessage({ sender, portalId, labUserId, senderName, content, laboName }) {
+  const preview = trimPreview(content, 200) || 'Nouveau message';
   const from = trimPreview(senderName, 60) || (sender === 'labo' ? laboName || 'Votre laboratoire' : 'Un cabinet');
+  const collapseId = 'chat_' + String(portalId || '').trim().toLowerCase();
 
   if (sender === 'labo') {
+    const who = trimPreview(laboName, 40) || 'Votre laboratoire';
     return sendToExternalUsers({
       externalUserIds: [cabinetExternalId(portalId)],
-      heading: (laboName || 'Votre laboratoire') + ' — message',
+      heading: who,
       body: preview,
-      url: origin + '/cabinet.html',
-      data: { kind: 'chat', portalId, sender: 'labo' },
+      url: pushOpenUrl('cab', 'messages'),
+      data: { kind: 'chat', portalId, sender: 'labo', collapseId },
     });
   }
 
   if (sender === 'cabinet' && labUserId) {
     return sendToExternalUsers({
       externalUserIds: [labExternalId(labUserId)],
-      heading: from + ' — message',
+      heading: from,
       body: preview,
-      url: origin + '/app.html',
-      data: { kind: 'chat', portalId, sender: 'cabinet' },
+      url: pushOpenUrl('lab', 'messages'),
+      data: { kind: 'chat', portalId, sender: 'cabinet', collapseId },
     });
   }
 
@@ -284,7 +314,6 @@ async function notifyChatMessage({ sender, portalId, labUserId, senderName, cont
 }
 
 async function notifyInvoice({ portalId, facture, laboName, cabName }) {
-  const origin = siteOrigin();
   const num = facture.num || facture.id || '';
   const total =
     typeof facture.total === 'number'
@@ -294,12 +323,18 @@ async function notifyInvoice({ portalId, facture, laboName, cabName }) {
     ? 'Facture ' + num + ' — ' + total
     : 'Facture ' + num + ' disponible sur votre espace.';
 
+  const who = trimPreview(laboName, 40) || 'Votre laboratoire';
   return sendToExternalUsers({
     externalUserIds: [cabinetExternalId(portalId)],
-    heading: (laboName || 'Votre laboratoire') + ' — nouvelle facture',
+    heading: who,
     body,
-    url: origin + '/cabinet.html',
-    data: { kind: 'invoice', portalId, factureId: facture.id || null },
+    url: pushOpenUrl('cab', 'factures'),
+    data: {
+      kind: 'invoice',
+      portalId,
+      factureId: facture.id || null,
+      collapseId: 'invoice_' + String(portalId || '').trim().toLowerCase(),
+    },
   });
 }
 
@@ -329,6 +364,7 @@ function formatOnesignalApiError(json, fallback) {
 function legacyDeviceType(pushType) {
   if (pushType === 'FirefoxPush') return 8;
   if (pushType === 'SafariPush' || pushType === 'SafariLegacyPush') return 7;
+  if (pushType === 'WebPush' || pushType === 'web_push') return 5;
   return 5;
 }
 
@@ -466,13 +502,22 @@ async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, p
     }
   }
 
-  const legacy = await registerLegacyWebPlayer({
+  let legacy = await registerLegacyWebPlayer({
     externalId: eid,
     endpoint: token,
     auth,
     p256dh,
     pushType: type,
   });
+  if (!legacy.ok && type === 'WebPush') {
+    legacy = await registerLegacyWebPlayer({
+      externalId: eid,
+      endpoint: token,
+      auth,
+      p256dh,
+      pushType: 'ChromePush',
+    });
+  }
   if (legacy.ok) {
     const targets = await getWebPushTargets(eid);
     return {

@@ -2,7 +2,7 @@
  * Envoie une notification test à l'external_id fourni (vérifie toute la chaîne).
  * POST { externalId: "lab:..." }
  */
-const { buildCors, verifySupabaseUser } = require('./_labosync-auth');
+const { buildCors, verifySupabaseUser, verifyPortalToken, getPortalTokenFromEvent } = require('./_labosync-auth');
 const { sendToExternalUsers, isConfigured, formatOnesignalApiError } = require('./_onesignal');
 
 exports.handler = async (event) => {
@@ -16,7 +16,10 @@ exports.handler = async (event) => {
   }
 
   const user = await verifySupabaseUser(event);
-  if (!user) {
+  const portalTok = getPortalTokenFromEvent(event);
+  const portalPayload = portalTok ? verifyPortalToken(portalTok) : null;
+
+  if (!user && !portalPayload) {
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Connexion requise' }) };
   }
 
@@ -31,7 +34,9 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'JSON invalide' }) };
   }
 
-  const externalId = String(body.externalId || 'lab:' + user.id).trim();
+  let externalId = String(body.externalId || '').trim();
+  if (!externalId && user) externalId = 'lab:' + user.id;
+  if (!externalId && portalPayload) externalId = 'cabinet:' + portalPayload.portalId;
   if (!externalId.startsWith('lab:') && !externalId.startsWith('cabinet:')) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'externalId invalide' }) };
   }

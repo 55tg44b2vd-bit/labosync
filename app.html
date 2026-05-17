@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Labo">
 <meta name="theme-color" content="#2563eb">
 <link rel="manifest" href="/manifest.json">
-<script src="/lb-push.js?v=7" defer></script>
+<script src="/lb-push.js?v=13" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>Labosync</title>
@@ -1093,6 +1093,11 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <span class="settings-row-body"><span class="settings-row-title">Visite guidée</span><span class="settings-row-desc">Revoir les écrans (optionnel)</span></span>
           <span class="settings-row-chevron">›</span>
         </button>
+        <button type="button" class="settings-row" onclick="openSettingsSection('notifications')">
+          <span class="settings-row-icon">🔔</span>
+          <span class="settings-row-body"><span class="settings-row-title">Notifications push</span><span class="settings-row-desc">Alertes messages et factures sur cet ordinateur</span></span>
+          <span class="settings-row-chevron">›</span>
+        </button>
       </div>
       <div class="settings-group" data-settings-group="labo">
         <div class="settings-group-label">Laboratoire</div>
@@ -1189,6 +1194,27 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <button class="btn btn-a" id="btn-role-save">Appliquer le rôle</button>
         </div>
         <div id="role-msg" style="font-size:.74rem;color:var(--ink-soft);margin-top:8px;min-height:16px;"></div>
+      </div>
+    </div>
+
+    <div id="settings-sec-notifications" class="settings-section">
+      <div class="settings-topbar">
+        <button type="button" class="settings-back" onclick="closeSettingsSection()" aria-label="Retour">←</button>
+        <h2>Notifications push</h2>
+        <span class="settings-topbar-spacer"></span>
+      </div>
+      <div class="card">
+        <h2>🔔 Notifications (téléphone + PC)</h2>
+        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;">Comme <strong>WhatsApp</strong> : activez une fois sur chaque appareil (PC, iPhone, Android). Vous recevrez le <strong>texte du message</strong> en notification, <strong>même quand Labosync est fermé</strong> — inutile de rester devant l'écran.</p>
+        <div id="lb-push-settings-status" style="font-size:.78rem;color:var(--ink);margin-bottom:14px;padding:12px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;line-height:1.55;">Chargement…</div>
+        <div style="display:flex;flex-direction:column;gap:10px;max-width:420px;">
+          <button type="button" class="btn btn-a" onclick="lbActivatePush()">1. Finaliser l'enregistrement</button>
+          <button type="button" class="btn btn-b" onclick="testLabPushLocal()">2. Test affichage (sans OneSignal)</button>
+          <button type="button" class="btn btn-b" onclick="testLabPushNotification()">3. Test notification cloud</button>
+        </div>
+        <div style="font-size:.72rem;color:var(--ink-soft);margin-top:16px;line-height:1.55;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;">
+          <strong>Si rien n'apparaît à l'écran :</strong> Windows → Paramètres → Système → Notifications → activer <strong>Google Chrome</strong> ou <strong>Microsoft Edge</strong> (pas seulement Cursor). Désactivez « Ne pas déranger », réduisez le navigateur, puis regardez l'icône 🔔 en bas à droite de Windows.
+        </div>
       </div>
     </div>
 
@@ -2629,7 +2655,7 @@ function canAccessSettingsSection(id){
   if(id==='migration')return canAccessPane('migration');
   if(id==='danger')return _userRole==='admin'||hasPerm('*');
   if(id==='paiements')return _userRole==='admin'||_userRole==='billing'||hasPerm('*');
-  if(id==='compte')return true;
+  if(id==='compte'||id==='notifications')return true;
   return canAccessPane('parametres')||hasPerm('*');
 }
 function applySettingsHubVisibility(){
@@ -2673,6 +2699,7 @@ function openSettingsSection(id){
   if(id==='paiements'){loadStripeConnectUI();}
   if(id==='tarifs'){renderCustomTypesList();}
   if(id==='labo'){setTimeout(function(){initAllSignaturePads();},80);}
+  if(id==='notifications'){lbRefreshPushSettingsUI();}
   try{sec.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}
 }
 function closeSettingsSection(){
@@ -9921,7 +9948,16 @@ document.getElementById('bill-docs-list').addEventListener('click',function(e){
     if(doc.status!=='brouillon'){showToast(t('toast.invoice_locked'),'#c0392b');return;}
     doc.status='envoye';saveDocs();renderToInvoice();renderBillDocs();updateBillStats();
     const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
-    if(cab)publishPortal(cab);
+    if(cab){
+      publishPortal(cab);
+      lbPushNotifyServer({
+        type:'invoice',
+        portalId:cab.portalId,
+        facture:{id:doc.id,num:doc.num,total:doc.total,type:doc.type||'facture',status:'envoye'},
+        laboName:localStorage.getItem('lb_name')||'',
+        cabName:cab.name||''
+      });
+    }
     // Auto-envoi email si le cabinet a une adresse
     const cabForEmail=cabinets.find(function(c){return c.id===doc.cabinet;});
     if(cabForEmail&&cabForEmail.email){
@@ -12017,13 +12053,69 @@ function lbUpdatePushMenuLabel(){
     }
   }catch(e){}
 }
+async function lbRefreshPushSettingsUI(){
+  var el=document.getElementById('lb-push-settings-status');
+  if(!el)return;
+  var perm='inconnu';
+  try{perm=typeof Notification!=='undefined'?Notification.permission:'non supporté';}catch(e){}
+  if(typeof LabosyncPush==='undefined'){
+    el.innerHTML='Module notifications non chargé — rechargez la page (Ctrl+F5).';
+    return;
+  }
+  try{
+    var st=await LabosyncPush.getStatus();
+    var ids=typeof LabosyncPush.getStoredPushIds==='function'?LabosyncPush.getStoredPushIds():{};
+    var lines=[
+      '<strong>Navigateur (cet écran) :</strong> '+perm,
+      '<strong>Appareils enregistrés sur votre compte :</strong> '+(st.activeDeviceCount||0),
+      '<strong>Cet appareil enregistré :</strong> '+(st.serverRegistered?'oui':'non'),
+    ];
+    if(ids.playerId)lines.push('<strong>ID appareil :</strong> '+String(ids.playerId).slice(0,12)+'…');
+    lines.push('<span style="color:#475569;">Comme WhatsApp : le PC et le téléphone doivent chacun être activés une fois.</span>');
+    if(perm!=='granted')lines.push('<span style="color:#b45309;">Autorisez les notifications via le cadenas à gauche de l\'adresse.</span>');
+    else if(!st.serverRegistered)lines.push('<span style="color:#b45309;">Cliquez « Finaliser l\'enregistrement » sur <em>cet</em> appareil.</span>');
+    else lines.push('<span style="color:#166534;">Cet appareil est prêt. Ouvrez Labosync sur votre téléphone → Profil → Notifications push → Finaliser.</span>');
+    el.innerHTML=lines.join('<br>');
+  }catch(e){
+    el.textContent=String(e&&e.message?e.message:e);
+  }
+}
 async function lbActivatePush(){
   if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
   try{
-    var r=await LabosyncPush.activateOrFinalize();
-    showToast(formatOsPushMsg(r,r.ok?'OK':'Échec'),r.ok?'#2563eb':'#c0392b',8000);
+    var fn=typeof LabosyncPush.ensureBackgroundPush==='function'?LabosyncPush.ensureBackgroundPush:LabosyncPush.activateOrFinalize;
+    var r=await fn.call(LabosyncPush,{promptIfDefault:true});
+    showToast(formatOsPushMsg(r,r.ok?'Cet appareil reçoit les messages (app fermée)':'Échec'),r.ok?'#2563eb':'#c0392b',9000);
+    lbRefreshPushSettingsUI();
   }catch(e){
     showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);
+  }
+}
+function lbHandlePushDeepLink(){
+  try{
+    var p=new URLSearchParams(location.search||'');
+    if(p.get('open')!=='messages')return;
+    function go(){
+      var btn=document.querySelector('.mode-btn[data-mode="messages"]');
+      if(btn){btn.click();return;}
+      var pane=document.getElementById('pane-messages');
+      if(pane){
+        document.querySelectorAll('.pane').forEach(function(x){x.classList.remove('on');});
+        pane.classList.add('on');
+        if(typeof renderMessagesPane==='function')renderMessagesPane();
+      }
+    }
+    setTimeout(go,800);
+    if(p.get('from')==='push')history.replaceState({},'',location.pathname);
+  }catch(e){}
+}
+async function testLabPushLocal(){
+  if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
+  try{
+    await LabosyncPush.testLocalDisplay();
+    showToast('Test envoyé — regardez en bas à droite de Windows (icône cloche). Réduisez le navigateur si besoin.','#2563eb',10000);
+  }catch(e){
+    showToast(String(e&&e.message?e.message:e).slice(0,200),'#c0392b',9000);
   }
 }
 function formatOsPushMsg(j,fallback){
@@ -12060,8 +12152,11 @@ async function testLabPushNotification(){
     var ids=typeof LabosyncPush.getStoredPushIds==='function'?LabosyncPush.getStoredPushIds():{};
     var r=await fetch('/.netlify/functions/onesignal-test-push',{method:'POST',headers:_portalApiHeaders(),body:JSON.stringify({externalId:ext,playerId:ids.playerId||null,subscriptionId:ids.subscriptionId||null})});
     var j=await r.json();
-    if(j.ok)showToast(j.message||('Notification test envoyée ('+(j.recipients||1)+' appareil) — vérifiez la bannière Windows'),'#2563eb',8000);
-    else showToast(formatOsPushMsg(j,'Échec envoi test — finalisez l\'enregistrement d\'abord.'),'#c0392b',9000);
+    if(j.ok){
+      showToast((j.message||'Notification cloud envoyée.')+' Si rien n\'apparaît : faites d\'abord le test « affichage local » (bouton 2).','#2563eb',12000);
+      try{await LabosyncPush.testLocalDisplay();}catch(_){}
+    }else showToast(formatOsPushMsg(j,'Échec envoi test — finalisez l\'enregistrement d\'abord.'),'#c0392b',9000);
+    lbRefreshPushSettingsUI();
   }catch(e){
     showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);
   }
@@ -12140,7 +12235,8 @@ async function completeLabBoot(session){
       if(typeof render==='function')render();
       refreshTechSelects();refreshTypeSelects();applyProgMode();
       if(typeof renderMessagesPane==='function')renderMessagesPane();
-      try{startChatBgPoll();}catch(eChat){}
+      try{startChatBgPoll();startChatRealtimeAll();}catch(eChat){}
+      try{lbHandlePushDeepLink();}catch(eDl){}
       republishAllPortals().catch(function(e){console.warn('republishAllPortals',e);});
     }).catch(function(e2){console.warn('cloudRestore',e2);});
 
@@ -12152,8 +12248,18 @@ async function completeLabBoot(session){
       if(typeof LabosyncPush!=='undefined'&&session&&session.user){
         LabosyncPush.prepare({role:'lab',externalId:'lab:'+session.user.id,authHeaders:function(){return _portalApiHeaders();}});
         lbUpdatePushMenuLabel();
+        LabosyncPush.syncIfPermissionGranted().catch(function(){});
+        LabosyncPush.getStatus().then(function(st){
+          if(st.browserPermission==='default'){
+            setTimeout(function(){lbActivatePush();},2500);
+          }else if(st.browserPermission==='granted'&&!st.serverRegistered){
+            setTimeout(function(){
+              showToast('Activez les notifications sur cet appareil (Paramètres → Notifications push) pour recevoir les messages comme sur WhatsApp.','var(--accent)',10000);
+            },2000);
+          }
+        }).catch(function(){});
         var pushBanner=document.getElementById('lb-push-banner');
-        if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab'});
+        if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab',title:'Messages comme WhatsApp (app fermée)'});
       }
     }catch(ePush){console.warn('push init',ePush);}
   }finally{
@@ -12723,6 +12829,8 @@ function startRealtime(userId){
 }
 function stopRealtime(){
   if(_realtimeChannel){sbClient.removeChannel(_realtimeChannel);_realtimeChannel=null;}
+  if(typeof stopChatRealtimeAll==='function')stopChatRealtimeAll();
+  _chatPushBootstrapDone=false;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -13234,7 +13342,13 @@ async function sendChatMsg(){
       headers:_portalApiHeaders(),
       body:JSON.stringify(body)
     });
-    if(r.ok){ await loadChatMessages(true); }
+    if(r.ok){
+      if(typeof LabosyncPush!=='undefined'&&LabosyncPush.reportChatPushResult){
+        LabosyncPush.reportChatPushResult(r,'labo→cabinet');
+      }
+      await loadChatMessages(true);
+      lbPushNotifyServer({type:'chat',portalId:_chatPortalId,sender:'labo',senderName:laboName,content:content||'Pièce jointe',laboName:laboName});
+    }
     else { showToast(ti('toast.error',{msg:'Échec envoi message'}),'#c0392b'); }
   }catch(e){ showToast(ti('toast.network_error',{msg:String(e).slice(0,50)}),'#c0392b'); }
   input.disabled = false;
@@ -13509,7 +13623,10 @@ async function renderMessagesPane(){
         if(prevUnread!==unreadCount){
           updateChatBadge(cab.id);
           const unseen=msgs.filter(function(m){return m.sender==='cabinet'&&m.createdAt>lastSeen;});
-          if(unseen.length)notifyLabNewChatMessages(cab,unseen);
+          if(unseen.length){
+            if(!_chatPushBootstrapDone)seedChatDedupeQuiet(cab,unseen);
+            else notifyLabNewChatMessages(cab,unseen);
+          }
         }
       }else if(prevUnread!==0){
         _chatUnread[cab.id]=0;
@@ -13531,48 +13648,107 @@ function fmtChatTime(iso){
   return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
 }
 
-// Background polling for new cabinet messages (every 30s, modal closed)
+// Messagerie : polling + realtime (alertes même application ouverte)
 var _chatBgInterval = null;
-function startChatBgPoll(){
-  if(_chatBgInterval) return;
-  _chatBgInterval = setInterval(async function(){
-    if(document.getElementById('chat-modal').style.display==='flex') return;
-    for(const cab of cabinets){
-      if(!cab.portalId) continue;
-      if(!_canPollChat(cab.portalId)) continue;
-      try{
-        const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId),{headers:_portalApiHeaders()});
-        if(!r.ok){
-          _noteChatPollResult(cab.portalId,false);
-          continue;
-        }
-        _noteChatPollResult(cab.portalId,true);
-        const rows = await r.json();
-        const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
-        const cabMsgs = msgs.filter(function(m){return m.sender==='cabinet';});
-        if(!cabMsgs.length) continue;
-        const lastSeen = localStorage.getItem('chat_seen_'+cab.portalId)||'';
-        const unseen = cabMsgs.filter(function(m){return m.createdAt>lastSeen;});
-        // Mettre à jour le preview dans tous les cas
-        if(msgs.length){
-          const last = msgs[msgs.length-1];
-          _chatPreview[cab.portalId] = {
-            lastMsg: (last.senderName||last.sender)+' : '+last.content.slice(0,60)+(last.content.length>60?'…':''),
-            lastTime: last.createdAt,
-          };
-        }
-        if(unseen.length){
-          _chatUnread[cab.id]=unseen.length;
-          updateChatBadge(cab.id);
-          notifyLabNewChatMessages(cab,unseen);
-          var _dashPane=document.getElementById('pane-dashboard');
-          if(_dashPane&&_dashPane.classList.contains('on')&&typeof renderDashboard==='function')renderDashboard();
-        }
-      }catch(e){ _noteChatPollResult(cab.portalId,false); }
-    }
-  }, 30000);
+var _chatRealtimeChannels = [];
+var _chatPushBootstrapDone = false;
+
+function chatDedupeKey(cab, msg){
+  return 'lb_notif_'+cab.portalId+'_'+(msg.id||msg.createdAt||'');
 }
-window.addEventListener('load', function(){setTimeout(startChatBgPoll, 5000);});
+function seedChatDedupeQuiet(cab, unseen){
+  (unseen||[]).forEach(function(msg){
+    try{localStorage.setItem(chatDedupeKey(cab,msg),'1');}catch(e){}
+  });
+}
+
+function isActiveChatWithCab(cabId){
+  var m=document.getElementById('chat-modal');
+  return !!(m&&m.style.display==='flex'&&_chatCabId===cabId);
+}
+
+function processNewCabinetMessages(cab, msgs){
+  if(!cab||!cab.portalId||!msgs||!msgs.length)return;
+  var cabMsgs=msgs.filter(function(m){return m.sender==='cabinet';});
+  if(!cabMsgs.length)return;
+  var lastSeen=localStorage.getItem('chat_seen_'+cab.portalId)||'';
+  var unseen=cabMsgs.filter(function(m){return m.createdAt>lastSeen;});
+  var last=msgs[msgs.length-1];
+  _chatPreview[cab.portalId]={
+    lastMsg:(last.senderName||last.sender)+' : '+(last.content||'').slice(0,60)+((last.content||'').length>60?'…':''),
+    lastTime:last.createdAt,
+  };
+  if(!unseen.length)return;
+  _chatUnread[cab.id]=unseen.length;
+  updateChatBadge(cab.id);
+  if(!_chatPushBootstrapDone){
+    seedChatDedupeQuiet(cab,unseen);
+    return;
+  }
+  notifyLabNewChatMessages(cab,unseen,isActiveChatWithCab(cab.id));
+  var _dashPane=document.getElementById('pane-dashboard');
+  if(_dashPane&&_dashPane.classList.contains('on')&&typeof renderDashboard==='function')renderDashboard();
+}
+
+async function pollAllChatsOnce(){
+  var firstBoot=!_chatPushBootstrapDone;
+  for(const cab of cabinets){
+    if(!cab.portalId)continue;
+    if(!_canPollChat(cab.portalId))continue;
+    try{
+      const r=await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId),{headers:_portalApiHeaders()});
+      if(!r.ok){_noteChatPollResult(cab.portalId,false);continue;}
+      _noteChatPollResult(cab.portalId,true);
+      const rows=await r.json();
+      const msgs=(rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
+      processNewCabinetMessages(cab,msgs);
+    }catch(e){_noteChatPollResult(cab.portalId,false);}
+  }
+  if(firstBoot)_chatPushBootstrapDone=true;
+}
+
+function stopChatRealtimeAll(){
+  if(!_chatRealtimeChannels.length)return;
+  _chatRealtimeChannels.forEach(function(ch){
+    try{sbClient.removeChannel(ch);}catch(e){}
+  });
+  _chatRealtimeChannels=[];
+}
+
+function startChatRealtimeAll(){
+  stopChatRealtimeAll();
+  if(typeof sbClient==='undefined'||!sbClient)return;
+  cabinets.forEach(function(cab){
+    if(!cab.portalId)return;
+    var pid=cab.portalId;
+    var ch=sbClient
+      .channel('lab_chat_rt_'+pid)
+      .on('postgres_changes',{
+        event:'UPDATE',
+        schema:'public',
+        table:'labo_data',
+        filter:'id=eq.chat_'+pid
+      },function(payload){
+        try{
+          var data=payload.new&&payload.new.data;
+          var msgs=data&&data.messages?data.messages:[];
+          processNewCabinetMessages(cab,msgs);
+        }catch(e){console.warn('chat realtime',e);}
+      })
+      .subscribe();
+    _chatRealtimeChannels.push(ch);
+  });
+}
+
+function startChatBgPoll(){
+  if(_chatBgInterval)return;
+  pollAllChatsOnce();
+  _chatBgInterval=setInterval(pollAllChatsOnce,8000);
+}
+window.addEventListener('load',function(){setTimeout(startChatBgPoll,2000);});
+document.addEventListener('visibilitychange',function(){
+  if(!document.hidden&&typeof pollAllChatsOnce==='function')pollAllChatsOnce();
+});
 
 /* ══════════════════════════════════════════
    §36 — JOB DETAIL PANEL
@@ -13810,21 +13986,34 @@ function buildMapsDirectionsUrl(stops){
 
 function labDesktopNotify(title,body,tag){
   if(!('Notification' in window)||Notification.permission!=='granted')return;
-  if(document.visibilityState==='visible')return;
-  try{new Notification(title||'Labosync',{body:body,tag:tag||'labosync',icon:'/icon.svg'});}catch(e){}
+  var t=title||'Labosync';
+  var b=body||'';
+  var tg=tag||'labosync';
+  try{new Notification(t,{body:b,tag:tg,icon:'/icon.svg'});}catch(e){}
+  if(typeof LabosyncPush!=='undefined'&&typeof LabosyncPush.showAlert==='function'){
+    LabosyncPush.showAlert(t,b,tg).catch(function(){});
+  }
+}
+function lbPushNotifyServer(payload){
+  if(!_cachedAccessToken)return Promise.resolve();
+  return fetch('/.netlify/functions/onesignal-push',{
+    method:'POST',
+    headers:_portalApiHeaders(),
+    body:JSON.stringify(payload)
+  }).then(function(r){return r.json();}).catch(function(e){console.warn('lbPushNotifyServer',e);return null;});
 }
 function labCourierNotify(title,body,tag){
   labDesktopNotify(title,body,tag||'labosync-lab-courier');
 }
-var _chatNotifyAt={};
-function notifyLabNewChatMessages(cab,unseen){
-  if(!unseen||!unseen.length||!cab||!cab.portalId)return;
-  const latest=unseen[unseen.length-1];
-  if(_chatNotifyAt[cab.portalId]===latest.createdAt)return;
-  _chatNotifyAt[cab.portalId]=latest.createdAt;
-  const who=latest.senderName||cab.name||'Cabinet';
-  const body=(latest.content||'Nouveau message').slice(0,160);
-  labDesktopNotify('💬 '+who,body,'chat-'+cab.portalId+'-'+latest.createdAt);
+function notifyLabNewChatMessages(cab,unseen,skipIfActiveChat){
+  if(skipIfActiveChat||!unseen||!unseen.length||!cab||!cab.portalId)return;
+  unseen.forEach(function(msg){
+    var dedupeKey='lb_notif_'+cab.portalId+'_'+(msg.id||msg.createdAt||'');
+    try{if(localStorage.getItem(dedupeKey)==='1')return;localStorage.setItem(dedupeKey,'1');}catch(e){}
+    var who=msg.senderName||cab.name||'Cabinet';
+    var body=(msg.content||(msg.image?'📷 Photo':(msg.attachment?'📎 Fichier':'Nouveau message'))).slice(0,160);
+    labDesktopNotify('💬 '+who,body,'chat-'+dedupeKey);
+  });
 }
 
 function notifyLabCourierMissionChanges(all){
