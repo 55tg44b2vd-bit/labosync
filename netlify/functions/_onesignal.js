@@ -175,6 +175,64 @@ function formatOnesignalApiError(json, fallback) {
   return fallback || 'Erreur OneSignal';
 }
 
+function legacyDeviceType(pushType) {
+  if (pushType === 'FirefoxPush') return 8;
+  if (pushType === 'SafariPush' || pushType === 'SafariLegacyPush') return 7;
+  return 5;
+}
+
+/** API historique /players — souvent plus tolérante que l'API Users seule. */
+async function registerLegacyWebPlayer({ externalId, endpoint, auth, p256dh, pushType }) {
+  const appId = process.env.ONESIGNAL_APP_ID;
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY;
+  const body = {
+    app_id: appId,
+    device_type: legacyDeviceType(pushType),
+    identifier: endpoint,
+    external_user_id: externalId,
+    web_auth: auth,
+    web_p256: p256dh,
+    notification_types: 1,
+  };
+
+  const authModes = ['Key ' + apiKey, 'Basic ' + apiKey];
+  for (const authorization of authModes) {
+    const headers = { 'Content-Type': 'application/json', Authorization: authorization };
+    const resp = await fetch('https://onesignal.com/api/v1/players', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+    const json = parseJson(await resp.text());
+    if (resp.ok && json && json.id) {
+      return { ok: true, result: json, method: 'legacy_players' };
+    }
+
+    const listUrl =
+      'https://onesignal.com/api/v1/players?app_id=' +
+      encodeURIComponent(appId) +
+      '&external_user_id=' +
+      encodeURIComponent(externalId) +
+      '&limit=2';
+    const listResp = await fetch(listUrl, { headers: { Authorization: authorization } });
+    const listJson = parseJson(await listResp.text());
+    const playerId = listJson?.players?.[0]?.id;
+    if (playerId) {
+      const putResp = await fetch('https://onesignal.com/api/v1/players/' + encodeURIComponent(playerId), {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(body),
+      });
+      const putJson = parseJson(await putResp.text());
+      if (putResp.ok) {
+        return { ok: true, result: putJson, method: 'legacy_players_update' };
+      }
+    }
+  }
+
+  return { ok: false, reason: 'legacy_failed' };
+}
+
 /**
  * Enregistre un abonnement Web Push (Push API) pour un external_id via l'API Users OneSignal.
  */
@@ -245,15 +303,57 @@ async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, p
     }
   }
 
+  const legacy = await registerLegacyWebPlayer({
+    externalId: eid,
+    endpoint: token,
+    auth,
+    p256dh,
+    pushType: type,
+  });
+  if (legacy.ok) return legacy;
+
   const message = formatOnesignalApiError(json, 'OneSignal a refusé l\'enregistrement');
   console.warn('[onesignal] upsert subscription', resp.status, JSON.stringify(json));
   return { ok: false, status: resp.status, message, error: json };
+}
+
+async function hasLegacyWebPlayer(externalId) {
+  const appId = process.env.ONESIGNAL_APP_ID;
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY;
+  if (!appId || !apiKey) return false;
+  const url =
+    'https://onesignal.com/api/v1/players?app_id=' +
+    encodeURIComponent(appId) +
+    '&external_user_id=' +
+    encodeURIComponent(externalId) +
+    '&limit=5';
+  for (const authorization of ['Key ' + apiKey, 'Basic ' + apiKey]) {
+    try {
+      const resp = await fetch(url, { headers: { Authorization: authorization } });
+      if (!resp.ok) continue;
+      const json = parseJson(await resp.text());
+      const players = json?.players || [];
+      if (
+        players.some(
+          (p) =>
+            p &&
+            (p.invalid_identifier === false || p.invalid_identifier == null) &&
+            (p.notification_types === 1 || p.notification_types === '1' || p.identifier)
+        )
+      ) {
+        return true;
+      }
+    } catch (_) {}
+  }
+  return false;
 }
 
 module.exports = {
   isConfigured,
   sendToExternalUsers,
   upsertWebPushSubscription,
+  hasLegacyWebPlayer,
+  formatOnesignalApiError,
   cabinetExternalId,
   labExternalId,
   detectNewlySentInvoices,

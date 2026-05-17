@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Labo">
 <meta name="theme-color" content="#2563eb">
 <link rel="manifest" href="/manifest.json">
-<script src="/lb-push.js?v=4" defer></script>
+<script src="/lb-push.js?v=5" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>Labosync</title>
@@ -12021,10 +12021,26 @@ async function lbActivatePush(){
   if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
   try{
     var r=await LabosyncPush.activateOrFinalize();
-    showToast(r.message||(r.ok?'OK':'Échec'),r.ok?'#2563eb':'#c0392b',8000);
+    showToast(formatOsPushMsg(r,r.ok?'OK':'Échec'),r.ok?'#2563eb':'#c0392b',8000);
   }catch(e){
     showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);
   }
+}
+function formatOsPushMsg(j,fallback){
+  if(!j)return fallback||'Erreur';
+  if(typeof j.message==='string'&&j.message)return j.message;
+  if(j.hint)return String(j.hint);
+  if(j.reason)return String(j.reason);
+  var e=j.error;
+  if(e&&Array.isArray(e.errors)){
+    var parts=e.errors.map(function(x){
+      if(typeof x==='string')return x;
+      if(x&&typeof x==='object')return x.title||x.message||x.code||'';
+      return '';
+    }).filter(Boolean);
+    if(parts.length)return parts.join(' — ').slice(0,200);
+  }
+  return fallback||'Erreur';
 }
 async function testLabPushNotification(){
   if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
@@ -12032,11 +12048,11 @@ async function testLabPushNotification(){
     var st=await LabosyncPush.getStatus();
     if(!st.serverRegistered){
       var reg=await LabosyncPush.activateOrFinalize();
-      showToast(reg.message||'Enregistrement requis',reg.ok?'#2563eb':'#c0392b',8000);
+      showToast(formatOsPushMsg(reg,reg.ok?'OK':'Enregistrement requis'),reg.ok?'#2563eb':'#c0392b',8000);
       if(!reg.ok)return;
       st=await LabosyncPush.getStatus();
       if(!st.serverRegistered){
-        showToast('Enregistrement incomplet — Ctrl+F5, attendez 10 s, menu ⚙️ → Finaliser l\'enregistrement','#c0392b',9000);
+        showToast('Enregistrement incomplet — menu ⚙️ → Finaliser l\'enregistrement, puis réessayez.','#c0392b',9000);
         return;
       }
     }
@@ -12044,7 +12060,7 @@ async function testLabPushNotification(){
     var r=await fetch('/.netlify/functions/onesignal-test-push',{method:'POST',headers:_portalApiHeaders(),body:JSON.stringify({externalId:ext})});
     var j=await r.json();
     if(j.ok)showToast('Notification test envoyée — vérifiez la bannière Windows','#2563eb',8000);
-    else showToast((j.hint||j.reason||j.error?.errors?.[0]||'Échec envoi test').toString().slice(0,120),'#c0392b',9000);
+    else showToast(formatOsPushMsg(j,'Échec envoi test — finalisez l\'enregistrement d\'abord.'),'#c0392b',9000);
   }catch(e){
     showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);
   }

@@ -3,6 +3,7 @@
  * GET ?externalId=lab:uuid ou cabinet:portalId
  */
 const { buildCors } = require('./_labosync-auth');
+const { hasLegacyWebPlayer } = require('./_onesignal');
 
 const WEB_PUSH_TYPES = new Set([
   'web_push',
@@ -78,14 +79,15 @@ exports.handler = async (event) => {
     }
 
     if (!resp.ok) {
+      const legacyOk = resp.status === 404 ? await hasLegacyWebPlayer(externalId) : false;
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
           configured: true,
-          registered: false,
+          registered: legacyOk,
           externalId,
-          reason: resp.status === 404 ? 'user_not_found' : 'api_error',
+          reason: legacyOk ? 'legacy_player' : resp.status === 404 ? 'user_not_found' : 'api_error',
           status: resp.status,
         }),
       };

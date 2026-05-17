@@ -3,7 +3,7 @@
  * POST { externalId: "lab:..." }
  */
 const { buildCors, verifySupabaseUser } = require('./_labosync-auth');
-const { sendToExternalUsers, isConfigured } = require('./_onesignal');
+const { sendToExternalUsers, isConfigured, formatOnesignalApiError } = require('./_onesignal');
 
 exports.handler = async (event) => {
   const headers = buildCors(event);
@@ -43,6 +43,12 @@ exports.handler = async (event) => {
     url: (process.env.URL || 'https://labosync.app').replace(/\/$/, '') + '/app.html',
     data: { kind: 'test' },
   });
+
+  if (!result.ok) {
+    result.message =
+      result.hint ||
+      formatOnesignalApiError(result.error, 'Aucun appareil enregistré — menu Finaliser l\'enregistrement d\'abord.');
+  }
 
   return {
     statusCode: result.ok ? 200 : 502,
