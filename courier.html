@@ -132,14 +132,18 @@ input,select,textarea{font-size:16px;font-family:inherit;}
     <div id="view-stats" class="view">
       <div class="mcard" style="margin-bottom:12px;padding:14px;">
         <div style="font-weight:700;font-size:.9rem;margin-bottom:4px;">Relevé pour facturation</div>
-        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.4;">Comptez vos courses terminées par mois et par laboratoire pour facturer le labo.</p>
+        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.4;">Forfait pour le 1<sup>er</sup> arrêt, puis supplément par arrêt en plus (ex. 7&nbsp;€ + 3&nbsp;€/arrêt). Sans supplément = même prix quelle que soit la course.</p>
         <div class="field" style="margin-bottom:10px;">
           <label>Période</label>
           <select id="billing-month" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--bg);"></select>
         </div>
         <div class="field" style="margin-bottom:10px;">
-          <label>Tarif par course (€, optionnel)</label>
-          <input type="number" id="billing-rate" min="0" step="0.01" placeholder="ex. 12.50" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--bg);"/>
+          <label>Forfait course — 1<sup>er</sup> arrêt (€)</label>
+          <input type="number" id="billing-rate" min="0" step="0.01" placeholder="ex. 7" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--bg);"/>
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Supplément par arrêt supplémentaire (€)</label>
+          <input type="number" id="billing-rate-extra" min="0" step="0.01" placeholder="ex. 3" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--bg);"/>
         </div>
         <button type="button" class="btn btn-primary" id="btn-save-billing-rate" style="margin-bottom:8px;">Enregistrer le tarif</button>
         <button type="button" class="btn btn-secondary" id="btn-print-billing">🖨️ Imprimer le relevé</button>
@@ -421,7 +425,12 @@ async function loadBilling(){
   _billingSummary=j.summary||{};
   const b=_billingSummary;
   const rateEl=document.getElementById('billing-rate');
+  const extraEl=document.getElementById('billing-rate-extra');
   if(rateEl&&b.ratePerCourse!=null)rateEl.value=String(b.ratePerCourse);
+  if(extraEl){
+    if(b.ratePerExtraStop!=null&&b.ratePerExtraStop>0)extraEl.value=String(b.ratePerExtraStop);
+    else extraEl.value='';
+  }
   document.getElementById('billing-grid').innerHTML=
     '<div class="stat-box"><div class="stat-val">'+((b.totalCourses)||0)+'</div><div class="stat-lbl">Courses terminées</div></div>'+
     '<div class="stat-box"><div class="stat-val">'+((b.totalPickups)||0)+'</div><div class="stat-lbl">Récupérations</div></div>'+
@@ -440,8 +449,9 @@ async function loadBilling(){
   document.getElementById('billing-detail').innerHTML=missions.length
     ?'<div style="font-weight:700;margin-bottom:10px;">Détail des courses</div>'+
       missions.map(function(m,idx){
+        const amt=m.amount!=null?' · <b style="color:var(--accent);">'+m.amount.toFixed(2)+' €</b>':'';
         return '<div style="font-size:.78rem;padding:8px 0;border-bottom:1px solid var(--border);">'+
-          '<div style="font-weight:600;">'+(idx+1)+'. '+esc(m.label)+'</div>'+
+          '<div style="font-weight:600;">'+(idx+1)+'. '+esc(m.label)+amt+'</div>'+
           '<div style="color:var(--ink-soft);margin-top:2px;">'+esc(m.labName)+' · '+fmtBillingDate(m.completedAt)+
           (m.stopCount>1?' · '+m.stopCount+' arrêts':'')+'</div></div>';
       }).join('')
@@ -452,10 +462,12 @@ function printBillingReleve(){
   const b=_billingSummary;
   if(!b||!b.totalCourses){toast('Aucune course sur cette période');return;}
   const rate=b.ratePerCourse;
+  const extra=b.ratePerExtraStop;
   const w=window.open('','_blank');
   if(!w){toast('Autorisez les pop-ups pour imprimer');return;}
   const rows=(b.missions||[]).map(function(m,i){
-    return '<tr><td>'+(i+1)+'</td><td>'+esc(m.labName)+'</td><td>'+esc(m.label)+'</td><td>'+fmtBillingDate(m.completedAt)+'</td><td style="text-align:center;">'+m.pickups+'</td><td style="text-align:center;">'+m.deliveries+'</td></tr>';
+    const amt=m.amount!=null?m.amount.toFixed(2)+' €':'—';
+    return '<tr><td>'+(i+1)+'</td><td>'+esc(m.labName)+'</td><td>'+esc(m.label)+'</td><td>'+fmtBillingDate(m.completedAt)+'</td><td style="text-align:center;">'+(m.stopCount||1)+'</td><td style="text-align:center;">'+m.pickups+'</td><td style="text-align:center;">'+m.deliveries+'</td><td style="text-align:right;">'+amt+'</td></tr>';
   }).join('');
   const labRows=(b.byLab||[]).map(function(l){
     return '<tr><td>'+esc(l.labName)+'</td><td style="text-align:center;"><b>'+l.courses+'</b></td><td style="text-align:center;">'+l.pickups+'</td><td style="text-align:center;">'+l.deliveries+'</td></tr>';
@@ -465,9 +477,9 @@ function printBillingReleve(){
     '<p>Période : <b>'+esc(fmtMonthLabel(b.period&&b.period.month))+'</b></p>'+
     '<p class="tot">Total : <b>'+b.totalCourses+'</b> course'+(b.totalCourses>1?'s':'')+
     ' · '+b.totalPickups+' récup. · '+b.totalDeliveries+' livraisons'+
-    (b.estimatedTotal!=null?' · Montant indicatif : <b>'+b.estimatedTotal.toFixed(2)+' €</b>'+(rate!=null?' ('+rate+' €/course)':''):'')+'</p>'+
+    (b.estimatedTotal!=null?' · Montant indicatif : <b>'+b.estimatedTotal.toFixed(2)+' €</b>'+(rate!=null?' (forfait '+rate+' €'+(extra!=null&&extra>0?', +'+extra+' €/arrêt suppl.':'')+')':''):'')+'</p>'+
     '<h2>Par laboratoire</h2><table><thead><tr><th>Laboratoire</th><th>Courses</th><th>Récup.</th><th>Livr.</th></tr></thead><tbody>'+labRows+'</tbody></table>'+
-    '<h2>Détail</h2><table><thead><tr><th>#</th><th>Labo</th><th>Course</th><th>Terminée le</th><th>Récup.</th><th>Livr.</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<h2>Détail</h2><table><thead><tr><th>#</th><th>Labo</th><th>Course</th><th>Terminée le</th><th>Arrêts</th><th>Récup.</th><th>Livr.</th><th>Montant</th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<p style="font-size:.75rem;color:#666;margin-top:24px;">Document généré par Labosync Coursier — '+new Date().toLocaleString('fr-FR')+'</p></body></html>');
   w.document.close();
   w.focus();
@@ -505,7 +517,12 @@ async function loadProfile(){
   document.getElementById('prof-name').value=j.profile.displayName||'';
   document.getElementById('prof-phone').value=j.profile.phone||'';
   const rateEl=document.getElementById('billing-rate');
+  const extraEl=document.getElementById('billing-rate-extra');
   if(rateEl&&j.profile.billingRatePerCourse!=null)rateEl.value=String(j.profile.billingRatePerCourse);
+  if(extraEl){
+    if(j.profile.billingRatePerExtraStop!=null&&j.profile.billingRatePerExtraStop>0)extraEl.value=String(j.profile.billingRatePerExtraStop);
+    else extraEl.value='';
+  }
   const labs=await api('listLinkedLabs');
   document.getElementById('labs-list').innerHTML=(labs.labs||[]).length
     ?(labs.labs||[]).map(function(l){return '<div style="padding:6px 0;border-bottom:1px solid var(--border);">🏭 '+esc(l.labName)+'</div>';}).join('')
@@ -671,10 +688,12 @@ document.getElementById('btn-print-billing')?.addEventListener('click',printBill
 document.getElementById('btn-save-billing-rate')?.addEventListener('click',async function(){
   try{
     const rate=document.getElementById('billing-rate')?.value;
+    const extra=document.getElementById('billing-rate-extra')?.value;
     await api('saveProfile',{
       displayName:document.getElementById('prof-name')?.value.trim()||'',
       phone:document.getElementById('prof-phone')?.value.trim()||'',
       billingRatePerCourse:rate===''||rate==null?null:rate,
+      billingRatePerExtraStop:extra===''||extra==null?null:extra,
     });
     toast('Tarif enregistré');
     loadBilling().catch(function(){});
@@ -686,6 +705,7 @@ document.getElementById('btn-save-prof').onclick=async function(){
       displayName:document.getElementById('prof-name').value.trim(),
       phone:document.getElementById('prof-phone').value.trim(),
       billingRatePerCourse:document.getElementById('billing-rate')?.value||null,
+      billingRatePerExtraStop:document.getElementById('billing-rate-extra')?.value||null,
     });
     toast('Profil enregistré');
   }catch(e){toast(e.message);}

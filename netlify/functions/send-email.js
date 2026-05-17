@@ -1,18 +1,8 @@
+const { buildCors, verifySupabaseUser } = require('./_labosync-auth');
+
 exports.handler = async (event) => {
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const reqOrigin = event.headers.origin || event.headers.Origin || '';
-  const allowOrigin = allowedOrigins.length
-    ? (allowedOrigins.includes(reqOrigin) ? reqOrigin : allowedOrigins[0])
-    : '*';
-  const headers = {
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Content-Type': 'application/json',
-  };
+  const headers = buildCors(event);
+  headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
@@ -22,9 +12,18 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Méthode non autorisée' }) };
   }
 
-  const RESEND_KEY = process.env.RESEND_API_KEY;
+  const user = await verifySupabaseUser(event);
+  if (!user) {
+    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Connexion requise' }) };
+  }
+
+  const RESEND_KEY = (process.env.RESEND_API_KEY || '').trim();
   if (!RESEND_KEY) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: 'RESEND_API_KEY non configurée' }) };
+    return {
+      statusCode: 503,
+      headers,
+      body: JSON.stringify({ error: 'RESEND_API_KEY non configurée', code: 'RESEND_NOT_CONFIGURED' }),
+    };
   }
 
   let body;
@@ -37,9 +36,8 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Champs manquants : to, subject, html' }) };
   }
 
-  // Expéditeur : doit être un domaine vérifié dans Resend
-  // Remplacez "labosync.app" par votre domaine vérifié si besoin
-  const fromEmail = 'noreply@labosync.app';
+  // Expéditeur : domaine vérifié dans Resend (variable RESEND_FROM sur Netlify)
+  const fromEmail = (process.env.RESEND_FROM || process.env.RESEND_FROM_EMAIL || 'factures@labosync.app').trim();
   const fromLabel = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
   const resp = await fetch('https://api.resend.com/emails', {

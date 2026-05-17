@@ -48,9 +48,26 @@ async function sbGet(id) {
   return rows[0] || null;
 }
 
+function ownerIdForLaboRow(rowId, data) {
+  if (data && data.labUserId) return String(data.labUserId);
+  if (rowId.startsWith('cm_') && data && data.labUserId) return String(data.labUserId);
+  if (rowId.startsWith('courier_links_')) return rowId.slice('courier_links_'.length);
+  if (rowId.startsWith('lab_courier_idx_')) return rowId.slice('lab_courier_idx_'.length);
+  if (rowId.startsWith('courier_board_')) return rowId.slice('courier_board_'.length);
+  if (rowId.startsWith('courier_labs_')) return rowId.slice('courier_labs_'.length);
+  if (rowId.startsWith('courier_idx_')) return rowId.slice('courier_idx_'.length);
+  if (rowId.startsWith('courier_inbox_')) return rowId.slice('courier_inbox_'.length);
+  if (rowId.startsWith('courier_prof_')) return rowId.slice('courier_prof_'.length);
+  if (data && data.labUserId) return String(data.labUserId);
+  return null;
+}
+
 async function sbUpsert(id, data) {
   const key = SERVICE_KEY();
   if (!key) throw new Error('SUPABASE_SERVICE_KEY manquant');
+  const payload = Object.assign({}, data || {});
+  const ownerId = ownerIdForLaboRow(id, payload);
+  if (ownerId) payload.labUserId = ownerId;
   const r = await fetch(`${SB_URL}/rest/v1/labo_data`, {
     method: 'POST',
     headers: {
@@ -59,23 +76,55 @@ async function sbUpsert(id, data) {
       Authorization: `Bearer ${key}`,
       Prefer: 'resolution=merge-duplicates,return=minimal',
     },
-    body: JSON.stringify({ id, data, updated_at: new Date().toISOString() }),
+    body: JSON.stringify({ id, data: payload, updated_at: new Date().toISOString() }),
   });
   if (!r.ok) throw new Error(await r.text());
+}
+
+function parseAdminUsers(payload) {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.users)) return payload.users;
+  if (payload.id && payload.email) return [payload];
+  return [];
 }
 
 async function findUserByEmail(email) {
   const key = SERVICE_KEY();
   const norm = String(email || '').trim().toLowerCase();
   if (!norm) return null;
-  for (let page = 1; page <= 25; page += 1) {
+  if (!key) throw new Error('SUPABASE_SERVICE_KEY manquant');
+
+  const filterUrls = [
+    `${SB_URL}/auth/v1/admin/users?email=${encodeURIComponent(norm)}`,
+    `${SB_URL}/auth/v1/admin/users?filter=${encodeURIComponent('email.eq.' + norm)}`,
+  ];
+
+  for (const url of filterUrls) {
+    try {
+      const r = await fetch(url, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+      if (!r.ok) continue;
+      const payload = await r.json();
+      const found = parseAdminUsers(payload).find((u) => String(u.email || '').trim().toLowerCase() === norm);
+      if (found) return found;
+    } catch (_) {
+      /* essai suivant */
+    }
+  }
+
+  for (let page = 1; page <= 50; page += 1) {
     const r = await fetch(`${SB_URL}/auth/v1/admin/users?page=${page}&per_page=200`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
-    if (!r.ok) return null;
-    const payload = await r.json();
-    const users = Array.isArray(payload.users) ? payload.users : [];
-    const found = users.find((u) => (u.email || '').toLowerCase() === norm);
+    if (!r.ok) {
+      if (page === 1) {
+        const txt = await r.text().catch(() => '');
+        throw new Error('Recherche coursier impossible (Auth admin ' + r.status + '). Vérifiez SUPABASE_SERVICE_KEY sur Netlify.' + (txt ? ' ' + txt.slice(0, 120) : ''));
+      }
+      break;
+    }
+    const users = parseAdminUsers(await r.json());
+    const found = users.find((u) => String(u.email || '').trim().toLowerCase() === norm);
     if (found) return found;
     if (users.length < 200) break;
   }
@@ -384,10 +433,9 @@ async function fetchCourierMissions(courierUserId) {
 }
 
 async function requireLabUser(user) {
-  if ((await resolveMissionRole(user)) !== 'lab') {
-    return false;
-  }
-  return true;
+  if (isLab(user)) return true;
+  if (isCourier(user)) return false;
+  return (await resolveMissionRole(user)) === 'lab';
 }
 
 function filterMissionsByScope(missions, scope) {
@@ -450,6 +498,51 @@ function countMissionStopTypes(mission) {
     else pickups = 1;
   }
   return { pickups, deliveries, stopCount: stops.length || 1 };
+}
+
+function parseBillingRate(val) {
+  const rate = parseFloat(val);
+  return Number.isFinite(rate) && rate >= 0 ? Math.round(rate * 100) / 100 : null;
+}
+
+function readCourierBillingRates(prof) {
+  const base =
+    typeof prof?.billingRatePerCourse === 'number' && prof.billingRatePerCourse >= 0
+      ? prof.billingRatePerCourse
+      : null;
+  const extra =
+    typeof prof?.billingRatePerExtraStop === 'number' && prof.billingRatePerExtraStop >= 0
+      ? prof.billingRatePerExtraStop
+      : null;
+  return { base, extra };
+}
+
+/** Forfait 1er arrêt + supplément par arrêt au-delà (si extra défini), sinon forfait fixe par course. */
+function missionBillingAmount(stopCount, rates) {
+  const n = Math.max(1, stopCount || 1);
+  const { base, extra } = rates || {};
+  if (base == null) return null;
+  if (extra != null && extra > 0) {
+    return Math.round((base + Math.max(0, n - 1) * extra) * 100) / 100;
+  }
+  return Math.round(base * 100) / 100;
+}
+
+function applyBillingRatesToSummary(summary, rates) {
+  const { base, extra } = rates;
+  summary.ratePerCourse = base;
+  summary.ratePerExtraStop = extra;
+  let total = 0;
+  let hasAmount = false;
+  for (const m of summary.missions || []) {
+    m.amount = missionBillingAmount(m.stopCount, rates);
+    if (m.amount != null) {
+      hasAmount = true;
+      total += m.amount;
+    }
+  }
+  summary.estimatedTotal = hasAmount ? Math.round(total * 100) / 100 : null;
+  return summary;
 }
 
 function buildBillingSummary(missions, period) {
@@ -608,6 +701,10 @@ exports.handler = async (event) => {
               typeof prof.billingRatePerCourse === 'number' && prof.billingRatePerCourse >= 0
                 ? prof.billingRatePerCourse
                 : null,
+            billingRatePerExtraStop:
+              typeof prof.billingRatePerExtraStop === 'number' && prof.billingRatePerExtraStop >= 0
+                ? prof.billingRatePerExtraStop
+                : null,
           },
         }),
       };
@@ -622,8 +719,14 @@ exports.handler = async (event) => {
       prof.displayName = String(body.displayName || prof.displayName || '').slice(0, 120);
       prof.phone = String(body.phone || '').slice(0, 40);
       if (body.billingRatePerCourse !== undefined && body.billingRatePerCourse !== null && body.billingRatePerCourse !== '') {
-        const rate = parseFloat(body.billingRatePerCourse);
-        prof.billingRatePerCourse = Number.isFinite(rate) && rate >= 0 ? Math.round(rate * 100) / 100 : null;
+        prof.billingRatePerCourse = parseBillingRate(body.billingRatePerCourse);
+      }
+      if (
+        body.billingRatePerExtraStop !== undefined &&
+        body.billingRatePerExtraStop !== null &&
+        body.billingRatePerExtraStop !== ''
+      ) {
+        prof.billingRatePerExtraStop = parseBillingRate(body.billingRatePerExtraStop);
       }
       prof.updatedAt = new Date().toISOString();
       await sbUpsert(profileRowId(user.id), prof);
@@ -655,13 +758,32 @@ exports.handler = async (event) => {
       if (!email) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Email requis' }) };
       }
-      const found = await findUserByEmail(email);
+      let found;
+      try {
+        found = await findUserByEmail(email);
+      } catch (lookupErr) {
+        return {
+          statusCode: 503,
+          headers,
+          body: JSON.stringify({ error: lookupErr.message || 'Recherche du compte coursier impossible.' }),
+        };
+      }
       if (!found) {
         return {
           statusCode: 404,
           headers,
           body: JSON.stringify({
-            error: 'Aucun compte coursier trouvé avec cet email. Le coursier doit d\'abord s\'inscrire sur l\'app Coursier Labosync.',
+            error:
+              'Aucun compte trouvé avec cet email. Le coursier doit créer son compte sur labosync.app/courier (pas sur l\'app laboratoire), avec exactement la même adresse email, puis vous pourrez l\'ajouter ici.',
+          }),
+        };
+      }
+      if (found.id === user.id) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            error: 'Vous ne pouvez pas vous ajouter vous-même. Utilisez l\'email du compte coursier (inscrit sur labosync.app/courier).',
           }),
         };
       }
@@ -669,7 +791,10 @@ exports.handler = async (event) => {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ error: 'Ce compte est un laboratoire, pas un coursier. Utilisez l\'email d\'un compte créé sur l\'app Coursier.' }),
+          body: JSON.stringify({
+            error:
+              'Cet email est déjà un compte laboratoire. Le coursier doit s\'inscrire sur labosync.app/courier avec une autre adresse email (ou un email dédié coursier).',
+          }),
         };
       }
       const courierUser = (await ensureCourierAccount(found)) || found;
@@ -677,7 +802,10 @@ exports.handler = async (event) => {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ error: 'Ce compte n\'est pas un profil coursier.' }),
+          body: JSON.stringify({
+            error:
+              'Ce compte n\'est pas un profil coursier. Demandez au coursier de créer un compte sur labosync.app/courier (bouton « Créer un compte coursier »).',
+          }),
         };
       }
       const linksRow = await sbGet(linksRowId(user.id));
@@ -698,7 +826,7 @@ exports.handler = async (event) => {
         status: 'active',
         linkedAt: new Date().toISOString(),
       });
-      await sbUpsert(linksRowId(user.id), { links });
+      await sbUpsert(linksRowId(user.id), { links, labUserId: user.id });
       await ensureCourierLabLink(user.id, linkedId, labNameFrom(user));
 
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true, courier: { courierUserId: linkedId, email: courierUser.email, displayName } }) };
@@ -934,12 +1062,7 @@ exports.handler = async (event) => {
       const missions = await fetchCourierMissions(user.id);
       const summary = buildBillingSummary(missions, period);
       const row = await sbGet(profileRowId(user.id));
-      const rate = parseFloat(row?.data?.billingRatePerCourse);
-      summary.ratePerCourse = Number.isFinite(rate) && rate >= 0 ? rate : null;
-      summary.estimatedTotal =
-        summary.ratePerCourse != null
-          ? Math.round(summary.totalCourses * summary.ratePerCourse * 100) / 100
-          : null;
+      applyBillingRatesToSummary(summary, readCourierBillingRates(row?.data || {}));
       summary.courierName =
         row?.data?.displayName || user.user_metadata?.display_name || user.email?.split('@')[0] || 'Coursier';
       return { statusCode: 200, headers, body: JSON.stringify({ summary }) };
@@ -961,6 +1084,8 @@ exports.handler = async (event) => {
       const period = resolveBillingPeriod(body);
       const missions = await fetchLabCompletedMissionsForCourier(user.id, courierUserId);
       const summary = buildBillingSummary(missions, period);
+      const profRow = await sbGet(profileRowId(courierUserId));
+      applyBillingRatesToSummary(summary, readCourierBillingRates(profRow?.data || {}));
       summary.courier = {
         courierUserId,
         displayName: link.displayName,
