@@ -50,13 +50,15 @@ exports.handler = async (event) => {
     .filter(Boolean)
     .map(String);
 
+  const deviceOnly = playerIds.length > 0 || subscriptionIds.length > 0;
   const result = await sendToExternalUsers({
     externalUserIds: [externalId],
     playerIds,
     subscriptionIds,
+    deviceOnly,
     heading: 'Test Labosync',
     body: 'Si vous voyez ceci, les notifications push fonctionnent.',
-    url: (process.env.URL || 'https://labosync.app').replace(/\/$/, '') + '/app.html',
+    url: (process.env.URL || 'https://labosync.app').replace(/\/$/, '') + '/labo-mobile.html',
     data: { kind: 'test' },
   });
 

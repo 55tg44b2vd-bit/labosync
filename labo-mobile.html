@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Labosync"/>
 <meta name="theme-color" content="#ffffff"/>
 <link rel="manifest" href="/manifest-mobile.json"/>
-<script src="/lb-push.js?v=14" defer></script>
+<script src="/lb-push.js?v=15" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="/icon.svg"/>
 <script src="/lb-env-routing.js"></script>
@@ -1020,13 +1020,14 @@ async function lbRefreshPushMobileUI(){
     var lines=[
       '<strong>Cet appareil :</strong> '+perm,
       '<strong>Mode iPhone (icône écran d\'accueil) :</strong> '+(st.isStandalone?'oui ✓':'non — obligatoire'),
-      '<strong>Total compte Labosync :</strong> '+(st.activeDeviceCount||0)+' appareil(s)',
-      '<strong>Enregistré serveur (app fermée) :</strong> '+(st.serverRegistered?'oui ✓':'non'),
+      '<strong>Ce téléphone joignable :</strong> '+(st.thisDeviceRegistered||st.serverRegistered?'oui ✓':'non'),
+      '<strong>Total compte (tous PC/téléphones) :</strong> '+(st.accountDeviceCount||st.activeDeviceCount||0),
     ];
-    if(ids.playerId)lines.push('<strong>ID :</strong> '+String(ids.playerId).slice(0,12)+'…');
+    if(ids.subscriptionId)lines.push('<strong>ID abonnement :</strong> '+String(ids.subscriptionId).slice(0,14)+'…');
+    else if(ids.playerId)lines.push('<strong>ID appareil :</strong> '+String(ids.playerId).slice(0,14)+'…');
     if(perm!=='granted')lines.push('<span style="color:#b45309;">Autorisez les notifications quand Safari/Chrome le demande.</span>');
-    else if(!st.serverRegistered)lines.push('<span style="color:#c2410c;"><strong>Sans Finaliser : pas de notif si l\'app est fermée.</strong> Appuyez ci-dessous.</span>');
-    else lines.push('<span style="color:#059669;">Ce téléphone recevra les messages <strong>même app fermée</strong>. Faites pareil sur le PC.</span>');
+    else if(!(st.thisDeviceRegistered||st.serverRegistered))lines.push('<span style="color:#c2410c;"><strong>Ce téléphone n\'est pas reconnu par OneSignal.</strong> Appuyez sur Finaliser (attendez le message de succès).</span>');
+    else lines.push('<span style="color:#059669;">Ce téléphone peut recevoir les messages <strong>même app fermée</strong>. Testez « notification cloud ».</span>');
     el.innerHTML=lines.join('<br>');
   }catch(e){
     el.textContent=String(e&&e.message?e.message:e);
@@ -1057,13 +1058,13 @@ async function testLabPushCloudMobile(){
   if(typeof LabosyncPush==='undefined'){toast('Module notifications indisponible','var(--red)',4000);return;}
   try{
     var st=await LabosyncPush.getStatus();
-    if(!st.serverRegistered){
+    if(!(st.thisDeviceRegistered||st.serverRegistered)){
       var reg=await LabosyncPush.activateOrFinalize();
       toast(formatOsPushMsg(reg,reg.ok?'OK':'Enregistrement requis'),reg.ok?'var(--accent)':'#c0392b',6000);
       if(!reg.ok)return;
       st=await LabosyncPush.getStatus();
-      if(!st.serverRegistered){
-        toast('Enregistrement incomplet — finalisez puis réessayez.','#c0392b',7000);
+      if(!(st.thisDeviceRegistered||st.serverRegistered)){
+        toast('Ce téléphone n\'est pas reconnu — refaites Finaliser puis test cloud.','#c0392b',8000);
         return;
       }
     }
@@ -1128,36 +1129,41 @@ var _msgBgInterval=null;
 async function initMobileApp(){
   if(_mobileInitDone)return;
   _mobileInitDone=true;
-  await loadData();
+  document.getElementById('env-selector').classList.remove('on');
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  try{
+    await Promise.race([
+      loadData(),
+      new Promise(function(_,reject){setTimeout(function(){reject(new Error('timeout'));},25000);})
+    ]);
+  }catch(eLoad){
+    console.warn('loadData',eLoad);
+    toast('Connexion lente — réessayez dans un instant','#d97706',5000);
+  }
   try{lbMobHandlePushDeepLink();}catch(eDl){}
   startPoll();
   populateJobForm();
+  setTimeout(function(){
+    try{
+      const k='lb_mobile_onboard_seen';
+      if(localStorage.getItem(k)!=='1'){
+        localStorage.setItem(k,'1');
+        toast('👋 Bienvenue ! Ajoutez Labosync à l\'écran d\'accueil et acceptez les notifications pour les messages des cabinets.','var(--accent)');
+      }
+    }catch(e){}
+    initMobilePushDeferred();
+  },300);
+}
+
+function initMobilePushDeferred(){
   try{
-    const k='lb_mobile_onboard_seen';
-    if(localStorage.getItem(k)!=='1'){
-      localStorage.setItem(k,'1');
-      toast('👋 Bienvenue ! Ajoutez Labosync à l\'écran d\'accueil et acceptez les notifications pour les messages des cabinets.','var(--accent)');
-    }
-  }catch(e){}
-  try{
-    if(typeof LabosyncPush!=='undefined'&&currentUser){
-      LabosyncPush.prepare({role:'lab',externalId:'lab:'+currentUser.id,authHeaders:function(){return {'Content-Type':'application/json','Authorization':_token?'Bearer '+_token:''};}});
-      LabosyncPush.syncIfPermissionGranted().then(function(){
-        return LabosyncPush.getStatus();
-      }).then(function(st){
-        if(st.browserPermission==='default'){
-          setTimeout(function(){openPushSheet();},1200);
-        }else if(st.browserPermission==='granted'&&!st.serverRegistered){
-          toast('Activez les notifications sur ce téléphone (Profil → Notifications push) — messages même app fermée','var(--accent)',9000);
-          if(typeof LabosyncPush.ensureBackgroundPush==='function'){
-            LabosyncPush.ensureBackgroundPush({promptIfDefault:false}).catch(function(){});
-          }
-        }
-      }).catch(function(){});
-      var pushBanner=document.getElementById('lb-push-banner');
-      if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab_mobile',title:'Notifications sur ce téléphone'});
-      updateIosPushBanner();
-    }
+    if(typeof LabosyncPush==='undefined'||!currentUser)return;
+    LabosyncPush.prepare({role:'lab',externalId:'lab:'+currentUser.id,authHeaders:function(){return {'Content-Type':'application/json','Authorization':_token?'Bearer '+_token:''};}});
+    LabosyncPush.syncIfPermissionGranted().catch(function(){});
+    var pushBanner=document.getElementById('lb-push-banner');
+    if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab_mobile',title:'Notifications sur ce téléphone'});
+    updateIosPushBanner();
   }catch(ePush){console.warn('push init',ePush);}
   if(!_msgBgInterval){
     _msgBgInterval=setInterval(function(){
@@ -1192,6 +1198,12 @@ function _resolvedLbEnv(stored){
 }
 
 async function enterApp(env){
+  try{
+    if(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent||'')){
+      localStorage.setItem('lb_env','mobile');
+      env='mobile';
+    }
+  }catch(e){}
   env=_resolvedLbEnv(env);
   if(env==='mobile'){
     const ok=await checkMobilePaywall();

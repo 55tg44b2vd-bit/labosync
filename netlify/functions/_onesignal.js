@@ -130,6 +130,7 @@ async function getWebPushTargets(externalId) {
           p?.id &&
           p.identifier &&
           p.invalid_identifier !== true &&
+          p.invalid_identifier !== 't' &&
           (p.notification_types === 1 ||
             p.notification_types === '1' ||
             p.notification_types == null)
@@ -200,7 +201,16 @@ function notificationDelivered(result, targeting, targets) {
   return false;
 }
 
-async function sendToExternalUsers({ externalUserIds, heading, body, url, data, playerIds, subscriptionIds }) {
+async function sendToExternalUsers({
+  externalUserIds,
+  heading,
+  body,
+  url,
+  data,
+  playerIds,
+  subscriptionIds,
+  deviceOnly,
+}) {
   if (!isConfigured()) return { ok: false, skipped: true, reason: 'not_configured' };
   const ids = [...new Set((externalUserIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
   if (!ids.length) return { ok: false, skipped: true, reason: 'no_targets' };
@@ -219,14 +229,25 @@ async function sendToExternalUsers({ externalUserIds, heading, body, url, data, 
     delete base.data.collapseId;
   }
 
-  const targets = await getWebPushTargets(ids[0]);
-  if (Array.isArray(playerIds)) {
-    targets.playerIds = [...new Set([...targets.playerIds, ...playerIds.map(String).filter(Boolean)])];
-  }
-  if (Array.isArray(subscriptionIds)) {
-    targets.subscriptionIds = [
-      ...new Set([...targets.subscriptionIds, ...subscriptionIds.map(String).filter(Boolean)]),
-    ];
+  const providedPlayers = Array.isArray(playerIds)
+    ? [...new Set(playerIds.map(String).filter(Boolean))]
+    : [];
+  const providedSubs = Array.isArray(subscriptionIds)
+    ? [...new Set(subscriptionIds.map(String).filter(Boolean))]
+    : [];
+
+  let targets = { subscriptionIds: [], playerIds: [] };
+  if (deviceOnly && (providedPlayers.length || providedSubs.length)) {
+    targets = { subscriptionIds: providedSubs, playerIds: providedPlayers };
+  } else {
+    targets = await getWebPushTargets(ids[0]);
+    if (providedPlayers.length) {
+      targets.playerIds = [...new Set([...providedPlayers, ...targets.playerIds])].slice(0, 5);
+    }
+    if (providedSubs.length) {
+      targets.subscriptionIds = [...new Set([...providedSubs, ...targets.subscriptionIds])];
+    }
+    targets.playerIds = targets.playerIds.slice(0, 5);
   }
 
   const attempts = [];

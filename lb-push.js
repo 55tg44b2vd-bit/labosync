@@ -872,11 +872,12 @@
     var tries = 0;
     function attempt() {
       return checkServerRegistration().then(function (st) {
-        if (st && st.registered && (st.deliverable > 0 || st.activeWebPushCount > 0)) {
+        var ids = getStoredPushIds();
+        if (thisDeviceInTargets(st, ids)) {
           return {
             ok: true,
             registered: true,
-            deviceCount: st.deliverable || st.activeWebPushCount || st.activeDeviceCount || 1,
+            deviceCount: 1,
           };
         }
         return nativeRegister().then(function (res) {
@@ -1055,20 +1056,35 @@
     return _externalId;
   }
 
+  function thisDeviceInTargets(server, ids) {
+    ids = ids || getStoredPushIds();
+    if (!server) return false;
+    var subs = server.subscriptionIds || [];
+    var players = server.playerIds || [];
+    if (ids.subscriptionId && subs.indexOf(ids.subscriptionId) >= 0) return true;
+    if (ids.playerId && players.indexOf(ids.playerId) >= 0) return true;
+    return false;
+  }
+
   function getStatus() {
     return checkServerRegistration().then(function (server) {
-      var deviceCount =
-        typeof server.activeWebPushCount === 'number'
-          ? server.activeWebPushCount
-          : server.registered
-            ? 1
+      var ids = getStoredPushIds();
+      var accountTotal =
+        typeof server.deliverable === 'number'
+          ? server.deliverable
+          : typeof server.activeWebPushCount === 'number'
+            ? server.activeWebPushCount
             : 0;
+      var thisDevice = thisDeviceInTargets(server, ids);
       return {
         externalId: _externalId,
         browserPermission: nativePermission(),
-        serverRegistered: !!(server && server.registered),
-        activeDeviceCount: deviceCount,
-        playerId: getStoredPlayerId(),
+        serverRegistered: thisDevice,
+        accountDeviceCount: accountTotal,
+        activeDeviceCount: accountTotal,
+        thisDeviceRegistered: thisDevice,
+        playerId: ids.playerId,
+        subscriptionId: ids.subscriptionId,
         sdkReady: _sdkReady,
         isIos: isIos(),
         isStandalone: isStandalone(),
