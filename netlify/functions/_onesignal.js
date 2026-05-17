@@ -152,9 +152,108 @@ async function notifyInvoice({ portalId, facture, laboName, cabName }) {
   });
 }
 
+function parseJson(txt) {
+  try {
+    return txt ? JSON.parse(txt) : null;
+  } catch (_) {
+    return { raw: txt };
+  }
+}
+
+function formatOnesignalApiError(json, fallback) {
+  if (!json) return fallback || 'Erreur OneSignal';
+  const errors = json.errors;
+  if (Array.isArray(errors)) {
+    const parts = errors.map((e) => {
+      if (typeof e === 'string') return e;
+      if (e && typeof e === 'object') return e.title || e.message || e.code || JSON.stringify(e);
+      return String(e);
+    });
+    if (parts.length) return parts.join(' — ');
+  }
+  if (json.error && typeof json.error === 'string') return json.error;
+  return fallback || 'Erreur OneSignal';
+}
+
+/**
+ * Enregistre un abonnement Web Push (Push API) pour un external_id via l'API Users OneSignal.
+ */
+async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, pushType }) {
+  if (!isConfigured()) return { ok: false, reason: 'not_configured' };
+  const appId = process.env.ONESIGNAL_APP_ID;
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY;
+  const eid = String(externalId || '').trim();
+  const token = String(endpoint || '').trim();
+  if (!eid || !token || !auth || !p256dh) {
+    return { ok: false, reason: 'invalid_subscription' };
+  }
+
+  const type = String(pushType || 'ChromePush').trim() || 'ChromePush';
+  const subscription = {
+    type,
+    token,
+    enabled: true,
+    notification_types: 1,
+    web_auth: auth,
+    web_p256: p256dh,
+  };
+
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: 'Key ' + apiKey,
+    Accept: 'application/json',
+  };
+
+  const createSubUrl =
+    'https://api.onesignal.com/apps/' +
+    encodeURIComponent(appId) +
+    '/users/by/external_id/' +
+    encodeURIComponent(eid) +
+    '/subscriptions';
+
+  let resp = await fetch(createSubUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ subscription }),
+  });
+  let json = parseJson(await resp.text());
+
+  if (resp.ok || resp.status === 202) {
+    return { ok: true, result: json };
+  }
+
+  const userMissing =
+    resp.status === 404 ||
+    (Array.isArray(json?.errors) &&
+      json.errors.some((e) => {
+        const t = typeof e === 'object' ? e.title || e.code || '' : String(e);
+        return /not found|user/i.test(t);
+      }));
+
+  if (userMissing) {
+    resp = await fetch('https://api.onesignal.com/apps/' + encodeURIComponent(appId) + '/users', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identity: { external_id: eid },
+        subscriptions: [subscription],
+      }),
+    });
+    json = parseJson(await resp.text());
+    if (resp.ok || resp.status === 202) {
+      return { ok: true, result: json };
+    }
+  }
+
+  const message = formatOnesignalApiError(json, 'OneSignal a refusé l\'enregistrement');
+  console.warn('[onesignal] upsert subscription', resp.status, JSON.stringify(json));
+  return { ok: false, status: resp.status, message, error: json };
+}
+
 module.exports = {
   isConfigured,
   sendToExternalUsers,
+  upsertWebPushSubscription,
   cabinetExternalId,
   labExternalId,
   detectNewlySentInvoices,

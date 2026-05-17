@@ -1,11 +1,13 @@
 /**
- * Notifications push Labosync (OneSignal Web v16, PWA).
+ * Notifications push Labosync — enregistrement natif (Push API + API OneSignal).
+ * Le SDK page OneSignal n'est plus requis pour s'abonner (évite CSP / init bloqué).
  */
 (function (global) {
   var SDK_URL = '/vendor/onesignal-sdk.js';
   var _cfg = null;
   var _role = null;
   var _externalId = null;
+  var _authHeadersFn = null;
   var _sdkReady = false;
   var _initStarted = false;
   var _initPromise = null;
@@ -92,12 +94,93 @@
       return !!(
         global.OneSignal &&
         global.OneSignal.Kr &&
+        global.OneSignal.C &&
         global.OneSignal.User &&
         global.OneSignal.User.PushSubscription
       );
     } catch (e) {
       return false;
     }
+  }
+
+  /** Attend OneSignal.EVENTS.SDK_INITIALIZED (flag OneSignal.C). */
+  function waitForSdkInitialized(OneSignal, maxMs) {
+    maxMs = maxMs || 120000;
+    return new Promise(function (resolve, reject) {
+      function ok() {
+        resolve(OneSignal);
+      }
+      try {
+        if (OneSignal && OneSignal.C) {
+          ok();
+          return;
+        }
+        if (OneSignal && OneSignal.EVENTS && OneSignal.P && typeof OneSignal.P.once === 'function') {
+          var settled = false;
+          function finish() {
+            if (settled) return;
+            settled = true;
+            ok();
+          }
+          OneSignal.P.once(OneSignal.EVENTS.SDK_INITIALIZED, finish);
+          setTimeout(function () {
+            if (settled) return;
+            if (OneSignal && OneSignal.C) finish();
+            else {
+              settled = true;
+              reject(new Error('OneSignal initialisation incomplète — Ctrl+F5 puis réessayez.'));
+            }
+          }, maxMs);
+          return;
+        }
+      } catch (e) {}
+      var start = Date.now();
+      function tick() {
+        try {
+          if (OneSignal && OneSignal.C) {
+            ok();
+            return;
+          }
+        } catch (e2) {}
+        if (Date.now() - start > maxMs) {
+          reject(new Error('OneSignal initialisation incomplète — Ctrl+F5 puis réessayez.'));
+          return;
+        }
+        setTimeout(tick, 150);
+      }
+      tick();
+    });
+  }
+
+  function readExternalId(OneSignal) {
+    try {
+      if (OneSignal.User && OneSignal.User.externalId) return OneSignal.User.externalId;
+      if (OneSignal.ye && typeof OneSignal.ye.Qe === 'function') {
+        var id = OneSignal.ye.Qe();
+        if (id && id.qe) return id.qe;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function waitForIdentityReady(OneSignal, externalId, maxMs) {
+    return new Promise(function (resolve, reject) {
+      var start = Date.now();
+      function tick() {
+        try {
+          if (readExternalId(OneSignal) === externalId) {
+            resolve(OneSignal);
+            return;
+          }
+        } catch (e) {}
+        if (Date.now() - start > (maxMs || 60000)) {
+          reject(new Error('Liaison compte OneSignal incomplète — réessayez.'));
+          return;
+        }
+        setTimeout(tick, 250);
+      }
+      tick();
+    });
   }
 
   function waitForUserModule(OneSignal, maxMs) {
@@ -125,8 +208,40 @@
     });
   }
 
+  function formatApiResponseError(j, fallback) {
+    if (!j) return fallback || 'Erreur serveur';
+    if (j.message && typeof j.message === 'string') return j.message;
+    var err = j.error;
+    if (err && typeof err === 'object' && Array.isArray(err.errors)) {
+      return err.errors
+        .map(function (e) {
+          if (typeof e === 'string') return e;
+          if (e && typeof e === 'object') return e.title || e.message || e.code || '';
+          return '';
+        })
+        .filter(Boolean)
+        .join(' — ') || fallback;
+    }
+    if (j.reason) return String(j.reason);
+    return fallback || 'Erreur serveur';
+  }
+
+  function detectWebPushType() {
+    try {
+      var ua = global.navigator && global.navigator.userAgent ? global.navigator.userAgent : '';
+      if (/firefox|fxios/i.test(ua)) return 'FirefoxPush';
+      if (/safari/i.test(ua) && !/chrome|crios|crmo|edg/i.test(ua)) return 'SafariPush';
+    } catch (e) {}
+    return 'ChromePush';
+  }
+
   function formatPushError(err) {
-    var msg = String((err && err.message) || err || 'Erreur activation.');
+    var msg =
+      err && err.message
+        ? String(err.message)
+        : err && typeof err === 'object'
+          ? formatApiResponseError(err, 'Erreur activation.')
+          : String(err || 'Erreur activation.');
     if (/^timeout$/i.test(msg.trim())) {
       return (
         'Le navigateur autorise déjà les notifications. Ctrl+F5, attendez 10 s, puis menu ⚙️ → « Finaliser l\'enregistrement ».'
@@ -134,8 +249,14 @@
     }
     if (/Cannot read properties of undefined|reading 'Qe'/i.test(msg)) {
       return (
-        'OneSignal n\'est pas prêt. Attendez 15 s après le chargement, puis menu ⚙️ → Finaliser l\'enregistrement.'
+        'Enregistrement interrompu. Ctrl+F5 puis menu ⚙️ → Finaliser l\'enregistrement.'
       );
+    }
+    if (/Clé push manquante|VAPID|Service Worker|service worker|AbortError/i.test(msg)) {
+      return msg + ' — Ctrl+F5 puis réessayez.';
+    }
+    if (/Non autorisé|403/i.test(msg)) {
+      return 'Session expirée — reconnectez-vous à Labosync, puis réessayez.';
     }
     if (/SDK OneSignal non chargé|Module notifications/i.test(msg)) {
       return (
@@ -330,10 +451,16 @@
 
         return chain
           .then(function () {
+            return waitForSdkInitialized(OneSignal, 120000);
+          })
+          .then(function () {
             return waitForUserModule(OneSignal, 60000);
           })
           .then(function () {
             return OneSignal.login(_externalId);
+          })
+          .then(function () {
+            return waitForIdentityReady(OneSignal, _externalId, 60000);
           })
           .then(function () {
             bindClickHandler(OneSignal);
@@ -345,9 +472,15 @@
         var msg = String((err && err.message) || err || '');
         if (/already initialized|init.*already/i.test(msg)) {
           var OS = global.OneSignal;
-          return waitForUserModule(OS, 30000)
+          return waitForSdkInitialized(OS, 90000)
+            .then(function () {
+              return waitForUserModule(OS, 30000);
+            })
             .then(function () {
               return OS.login(_externalId);
+            })
+            .then(function () {
+              return waitForIdentityReady(OS, _externalId, 45000);
             })
             .then(function () {
               bindClickHandler(OS);
@@ -391,22 +524,60 @@
     if (!_externalId) {
       return Promise.reject(new Error('Connectez-vous d\'abord à Labosync.'));
     }
-    if (_sdkReady && isOneSignalInitialized()) {
-      return Promise.resolve(global.OneSignal);
+    if (options.forceRetry) resetSdkState();
+    if (_sdkReady && isOneSignalInitialized() && !options.forceRetry) {
+      return waitForSdkInitialized(global.OneSignal, 30000).then(function (OS) {
+        if (readExternalId(OS) === _externalId) return OS;
+        return OS.login(_externalId).then(function () {
+          return waitForIdentityReady(OS, _externalId, 45000);
+        });
+      });
     }
     return startInit(options).then(function (os) {
       return os || global.OneSignal;
     });
   }
 
-  function runOptIn(OneSignal) {
-    return waitForUserModule(OneSignal, 15000).then(function (OS) {
-      var sub = OS.User.PushSubscription;
-      if (nativePermission() !== 'granted') {
-        return OS.Notifications.requestPermission();
-      }
-      return sub.optIn();
-    });
+  function runOptIn(OneSignal, attempt) {
+    attempt = attempt || 0;
+    return waitForSdkInitialized(OneSignal, 120000)
+      .then(function (OS) {
+        return waitForUserModule(OS, 60000);
+      })
+      .then(function (OS) {
+        if (readExternalId(OS) !== _externalId) {
+          return OS.login(_externalId).then(function () {
+            return waitForIdentityReady(OS, _externalId, 60000);
+          });
+        }
+        return OS;
+      })
+      .then(function (OS) {
+        var sub = OS.User.PushSubscription;
+        if (sub.optedIn === true) return OS;
+        if (nativePermission() !== 'granted') {
+          return OS.Notifications.requestPermission();
+        }
+        return sub.optIn().then(function () {
+          return OS;
+        });
+      })
+      .catch(function (err) {
+        var msg = String((err && err.message) || err || '');
+        if (
+          attempt < 4 &&
+          /Cannot read properties of undefined|reading 'Qe'|initialisation incomplète|Liaison compte/i.test(
+            msg
+          )
+        ) {
+          return new Promise(function (r) {
+            setTimeout(r, 1200 * (attempt + 1));
+          }).then(function () {
+            return runOptIn(OneSignal, attempt + 1);
+          });
+        }
+        throw err;
+      });
   }
 
   function checkServerRegistration() {
@@ -422,51 +593,121 @@
       });
   }
 
-  function syncIfPermissionGranted() {
-    if (!_externalId || isPrivateBrowsingSync()) return Promise.resolve();
-    if (nativePermission() !== 'granted') return Promise.resolve();
-    return checkServerRegistration()
-      .then(function (st) {
-        if (st && st.registered) return null;
-        return ensureSdkReady({ skipSwReset: true })
-          .then(function (OS) {
-            return runOptIn(OS);
-          })
-          .catch(function (e) {
-            console.warn('[push] sync', e);
+  function getApiHeaders() {
+    var h = { 'Content-Type': 'application/json' };
+    if (typeof _authHeadersFn === 'function') {
+      try {
+        var extra = _authHeadersFn();
+        if (extra && typeof extra === 'object') {
+          Object.keys(extra).forEach(function (k) {
+            h[k] = extra[k];
           });
+        }
+      } catch (e) {}
+    }
+    return h;
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    var padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    var rawData = global.atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  function pickVapidKey(cfg) {
+    return (cfg && (cfg.onesignalVapidPublicKey || cfg.vapidPublicKey)) || '';
+  }
+
+  function ensurePushServiceWorker() {
+    if (!global.navigator.serviceWorker) {
+      return Promise.reject(new Error('Service Worker non supporté par ce navigateur.'));
+    }
+    return global.navigator.serviceWorker
+      .register('/OneSignalSDKWorker.js', { scope: '/' })
+      .catch(function () {
+        return resetServiceWorkers().then(function () {
+          return global.navigator.serviceWorker.register('/OneSignalSDKWorker.js', { scope: '/' });
+        });
+      })
+      .then(function () {
+        return global.navigator.serviceWorker.ready;
       });
   }
 
-  function prepare(opts) {
-    if (!opts || !opts.externalId) return;
-    if (_externalId && _externalId !== opts.externalId) resetSdkState();
-    _role = opts.role || null;
-    _externalId = opts.externalId;
-    global.OneSignalDeferred = global.OneSignalDeferred || [];
-    if (nativePermission() === 'granted') {
-      startInit({ skipSwReset: true }).catch(function (e) {
-        console.warn('[push] init', e);
+  function subscribeNativePush(registration, vapidKey) {
+    return registration.pushManager.getSubscription().then(function (existing) {
+      if (existing) return existing;
+      return registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
       });
-      return;
-    }
-    startInit().catch(function (e) {
-      console.warn('[push] init', e);
     });
   }
 
-  function init(opts) {
-    prepare(opts);
-    return Promise.resolve({ ok: true });
+  function sendSubscriptionToServer(subscription) {
+    var json = subscription.toJSON ? subscription.toJSON() : subscription;
+    var keys = (json && json.keys) || {};
+    if (!json.endpoint || !keys.auth || !keys.p256dh) {
+      return Promise.reject(new Error('Abonnement navigateur incomplet.'));
+    }
+    return fetch('/.netlify/functions/onesignal-register', {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({
+        externalId: _externalId,
+        endpoint: json.endpoint,
+        auth: keys.auth,
+        p256dh: keys.p256dh,
+        pushType: detectWebPushType(),
+      }),
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok || !j.ok) {
+          throw new Error(formatApiResponseError(j, 'Enregistrement serveur refusé (HTTP ' + r.status + ')'));
+        }
+        return j;
+      });
+    });
   }
 
-  function finalizeRegistration() {
-    if (nativePermission() !== 'granted') {
-      return promptForNotifications();
+  /** Chemin fiable : SW + Push API + API REST OneSignal (sans SDK page). */
+  function nativeRegister() {
+    if (!_externalId) {
+      return Promise.reject(new Error('Connectez-vous d\'abord à Labosync.'));
     }
-    return ensureSdkReady({ skipSwReset: true })
-      .then(function (OneSignal) {
-        return raceTimeout(runOptIn(OneSignal), 90000, 'Timeout');
+    if (!supportsWebPush()) {
+      return Promise.reject(new Error('Notifications non supportées.'));
+    }
+    if (isPrivateBrowsingSync()) {
+      return Promise.reject(new Error(privateModeMessage()));
+    }
+    if (nativePermission() !== 'granted') {
+      return requestBrowserPermission().then(function (perm) {
+        if (perm !== 'granted') {
+          throw new Error(perm === 'denied' ? deniedMessage() : edgeQuietMessage());
+        }
+        return nativeRegister();
+      });
+    }
+
+    return fetchConfig()
+      .then(function (cfg) {
+        if (!cfg.enabled || !cfg.appId) {
+          throw new Error('Notifications non configurées côté serveur.');
+        }
+        var vapid = pickVapidKey(cfg);
+        if (!vapid) {
+          throw new Error('Clé push manquante — réessayez dans une minute.');
+        }
+        return ensurePushServiceWorker().then(function (reg) {
+          return subscribeNativePush(reg, vapid);
+        });
+      })
+      .then(function (sub) {
+        return sendSubscriptionToServer(sub);
       })
       .then(function () {
         return checkServerRegistration();
@@ -478,15 +719,62 @@
             message: 'Appareil enregistré. Testez via ⚙️ → Tester une notification.',
           };
         }
-        return {
-          ok: false,
-          message:
-            'Autorisation navigateur OK, enregistrement OneSignal incomplet. Ctrl+F5, attendez 10 s, réessayez.',
-        };
-      })
-      .catch(function (err) {
-        return { ok: false, message: formatPushError(err) };
+        throw new Error(
+          'Autorisation navigateur OK, enregistrement serveur incomplet — réessayez.'
+        );
       });
+  }
+
+  function requestBrowserPermission() {
+    return new Promise(function (resolve) {
+      try {
+        if (!global.Notification || !global.Notification.requestPermission) {
+          resolve('denied');
+          return;
+        }
+        var p = global.Notification.requestPermission();
+        if (p && typeof p.then === 'function') {
+          p.then(resolve).catch(function () {
+            resolve('denied');
+          });
+        } else {
+          resolve(global.Notification.permission || 'default');
+        }
+      } catch (e) {
+        resolve('denied');
+      }
+    });
+  }
+
+  function syncIfPermissionGranted() {
+    if (!_externalId || isPrivateBrowsingSync()) return Promise.resolve();
+    if (nativePermission() !== 'granted') return Promise.resolve();
+    return checkServerRegistration()
+      .then(function (st) {
+        if (st && st.registered) return null;
+        return nativeRegister().catch(function (e) {
+          console.warn('[push] sync', e);
+        });
+      });
+  }
+
+  function prepare(opts) {
+    if (!opts || !opts.externalId) return;
+    if (_externalId && _externalId !== opts.externalId) resetSdkState();
+    _role = opts.role || null;
+    _externalId = opts.externalId;
+    if (typeof opts.authHeaders === 'function') _authHeadersFn = opts.authHeaders;
+  }
+
+  function init(opts) {
+    prepare(opts);
+    return Promise.resolve({ ok: true });
+  }
+
+  function finalizeRegistration() {
+    return nativeRegister().catch(function (err) {
+      return { ok: false, message: formatPushError(err) };
+    });
   }
 
   /** Menu ⚙️ ou bannière : autoriser OU finaliser si le cadenas est déjà vert. */
@@ -516,29 +804,9 @@
     if (nativePermission() === 'denied') {
       return Promise.resolve({ ok: false, message: deniedMessage() });
     }
-    if (nativePermission() === 'granted') {
-      return finalizeRegistration();
-    }
-
-    return ensureSdkReady()
-      .then(function (OneSignal) {
-        return raceTimeout(runOptIn(OneSignal), 60000, 'Timeout');
-      })
-      .then(function () {
-        return checkServerRegistration();
-      })
-      .then(function (st) {
-        if (st && st.registered) {
-          return {
-            ok: true,
-            message: 'Notifications activées. Testez via ⚙️ → Tester une notification.',
-          };
-        }
-        return { ok: false, message: edgeQuietMessage() };
-      })
-      .catch(function (err) {
-        return { ok: false, message: formatPushError(err) };
-      });
+    return nativeRegister().catch(function (err) {
+      return { ok: false, message: formatPushError(err) };
+    });
   }
 
   function showInstallBanner(targetEl, opts) {

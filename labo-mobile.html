@@ -8,8 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Labosync"/>
 <meta name="theme-color" content="#ffffff"/>
 <link rel="manifest" href="/manifest.json"/>
-<script src="/vendor/onesignal-sdk.js" id="onesignal-sdk"></script>
-<script src="/lb-push.js" defer></script>
+<script src="/lb-push.js?v=4" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="/icon.svg"/>
 <script src="/lb-env-routing.js"></script>
@@ -994,7 +993,7 @@ async function initMobileApp(){
   }catch(e){}
   try{
     if(typeof LabosyncPush!=='undefined'&&currentUser){
-      LabosyncPush.prepare({role:'lab',externalId:'lab:'+currentUser.id});
+      LabosyncPush.prepare({role:'lab',externalId:'lab:'+currentUser.id,authHeaders:function(){return {'Content-Type':'application/json','Authorization':_token?'Bearer '+_token:''};}});
       var pushBanner=document.getElementById('lb-push-banner');
       if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab_mobile'});
     }

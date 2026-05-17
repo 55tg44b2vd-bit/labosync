@@ -8,8 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Labo">
 <meta name="theme-color" content="#2563eb">
 <link rel="manifest" href="/manifest.json">
-<script src="/vendor/onesignal-sdk.js" id="onesignal-sdk"></script>
-<script src="/lb-push.js" defer></script>
+<script src="/lb-push.js?v=4" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>Labosync</title>
@@ -10362,6 +10361,8 @@ function resetCabPassword(cabId){
 }
 
 function showToast(msg,color,duration){
+  if(msg!=null&&typeof msg==='object')msg=msg.message||msg.title||'Erreur';
+  msg=String(msg==null?'':msg);
   const t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);opacity:0;background:'+(color||'#2a6049')+';color:#fff;padding:12px 24px;border-radius:10px;font-family:monospace;font-size:.84rem;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.2);white-space:nowrap;max-width:90vw;text-align:center;transition:opacity .2s ease, transform .2s ease;';
   t.textContent=msg;document.body.appendChild(t);
@@ -12132,7 +12133,7 @@ async function completeLabBoot(session){
     try{_maybeRunOnboarding();}catch(e4){console.warn('onboarding',e4);}
     try{
       if(typeof LabosyncPush!=='undefined'&&session&&session.user){
-        LabosyncPush.prepare({role:'lab',externalId:'lab:'+session.user.id});
+        LabosyncPush.prepare({role:'lab',externalId:'lab:'+session.user.id,authHeaders:function(){return _portalApiHeaders();}});
         lbUpdatePushMenuLabel();
         var pushBanner=document.getElementById('lb-push-banner');
         if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab'});

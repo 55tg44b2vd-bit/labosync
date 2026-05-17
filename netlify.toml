@@ -52,7 +52,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=(), notifications=(self)"
-    Content-Security-Policy = "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' https://cdn.onesignal.com 'unsafe-inline'; script-src-attr 'unsafe-inline'; connect-src 'self' https: wss:; worker-src 'self' https://cdn.onesignal.com https://cdnjs.cloudflare.com blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
+    Content-Security-Policy = "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' https://cdn.onesignal.com https://onesignal.com https://media.onesignal.com 'unsafe-inline'; script-src-attr 'unsafe-inline'; style-src 'self' https://onesignal.com https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https: wss:; worker-src 'self' https://cdn.onesignal.com https://onesignal.com https://media.onesignal.com https://cdnjs.cloudflare.com blob:; img-src 'self' https: data: blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
 
 [[headers]]
   for = "/OneSignalSDKWorker.js"
