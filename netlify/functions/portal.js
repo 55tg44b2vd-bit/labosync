@@ -54,9 +54,6 @@ exports.handler = async (event) => {
     if (!SERVICE_KEY) {
       // En local sans clé serveur, on évite les 500 en boucle sur le polling chat.
       if (type === 'chat') {
-        // #region agent log
-        fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-post-fix',hypothesisId:'H10',location:'netlify/functions/portal.js',message:'Degraded chat GET without service key',data:{portalId:portalId},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         return {
           statusCode: 200,
           headers,
@@ -87,9 +84,6 @@ exports.handler = async (event) => {
   // ── POST : écrire les données d'un portail ou ajouter un message chat ──
   if (event.httpMethod === 'POST') {
     if (!SERVICE_KEY) {
-      // #region agent log
-      fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-post-fix',hypothesisId:'H10',location:'netlify/functions/portal.js',message:'POST blocked without service key',data:{},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return { statusCode: 503, headers, body: JSON.stringify({ error: 'Configuration locale incomplète: SUPABASE_SERVICE_KEY requis' }) };
     }
     let body;

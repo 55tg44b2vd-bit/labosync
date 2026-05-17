@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Labosync — Logiciel de gestion pour laboratoires de prothèse dentaire</title>
-<meta name="description" content="Planification, bons de livraison, factures, portail cabinet. L'outil métier pensé par des prothésistes, pour des prothésistes. Essai gratuit 14 jours."/>
+<meta name="description" content="Planification, bons de livraison, factures, portail cabinet. Prévu compatible facturation électronique B2B (PDP) 2026–2027. Essai gratuit 14 jours."/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -30,6 +30,12 @@
   .hero-trust{margin-top:24px;font-size:.82rem;color:var(--ink-soft);}
   .hero-proof{margin-top:26px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
   .pill{background:#fff;border:1px solid var(--border);border-radius:99px;padding:7px 14px;font-size:.78rem;color:#334155;box-shadow:0 2px 8px rgba(15,23,42,.05);}
+  .pill-fe{background:linear-gradient(135deg,#eff6ff 0%,#fff 100%);border-color:#bfdbfe;color:#1e40af;}
+  .compliance-banner{display:flex;align-items:flex-start;gap:18px;background:linear-gradient(135deg,#eff6ff 0%,#fff 55%);border:1.5px solid #bfdbfe;border-radius:16px;padding:22px 24px;box-shadow:0 4px 20px rgba(37,99,235,.08);text-align:left;}
+  .compliance-banner .compliance-icon{font-size:1.75rem;line-height:1;flex-shrink:0;}
+  .compliance-banner strong{display:block;font-size:1rem;color:var(--ink);margin-bottom:6px;}
+  .compliance-banner p{font-size:.88rem;color:var(--ink-soft);line-height:1.55;margin:0;}
+  .feature.feature-fe{border-color:#93c5fd;background:linear-gradient(180deg,#f8fbff 0%,#fff 100%);}
   .hero-mock{margin:34px auto 0;max-width:920px;background:#fff;border:1px solid var(--border);border-radius:18px;box-shadow:0 18px 45px rgba(37,99,235,.15);padding:18px;}
   .hero-mock-inner{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;}
   .mock-card{border:1px solid var(--border);border-radius:12px;padding:14px;background:#f8fafc;text-align:left;}
@@ -90,6 +96,7 @@
     .section{padding:56px 0;}
     nav a:not(.btn){display:none;}
     .hero-mock-inner,.how-grid,.testi-grid{grid-template-columns:1fr;}
+    .compliance-banner{flex-direction:column;gap:12px;padding:18px;}
   }
 </style>
 </head>
@@ -102,7 +109,7 @@
       <a href="#features">Fonctionnalités</a>
       <a href="#pricing">Tarif</a>
       <a href="#faq">FAQ</a>
-      <a href="app.html" class="btn btn-ghost" style="padding:8px 16px;">Se connecter</a>
+      <a href="connexion.html" class="btn btn-ghost" style="padding:8px 16px;">Se connecter</a>
     </nav>
   </div>
 </header>
@@ -120,6 +127,7 @@
       <div class="pill">✅ Essai complet, pas une version bridée</div>
       <div class="pill">📱 Mobile + Desktop synchronisés</div>
       <div class="pill">💳 Paiement Stripe intégré</div>
+      <div class="pill pill-fe">📨 Facturation électronique 2026–2027</div>
     </div>
     <div class="hero-mock" aria-hidden="true">
       <div class="hero-mock-inner">
@@ -143,6 +151,18 @@
           <div class="mock-line"></div>
           <div class="mock-line w30"></div>
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="padding-top:0;padding-bottom:48px;">
+  <div class="container">
+    <div class="compliance-banner" role="note">
+      <div class="compliance-icon" aria-hidden="true">📨</div>
+      <div>
+        <strong>Prévu compatible avec la facturation électronique obligatoire (France)</strong>
+        <p>À partir de 2026–2027, les laboratoires qui facturent les cabinets en B2B devront émettre leurs factures via des <strong>plateformes de dématérialisation agréées (PDP)</strong> par l'État. Labosync est pensé pour cette évolution : feuille de route d'intégration avec une PDP agréée dans les 6 à 12 prochains mois, pour que vous restiez conformes sans changer d'outil.</p>
       </div>
     </div>
   </div>
@@ -180,6 +200,11 @@
         <div class="feature-icon">💰</div>
         <h3>Facturation et encaissement intégrés</h3>
         <p>Factures prêtes en quelques clics, lien de paiement immédiat, suivi du règlement sans ressaisie.</p>
+      </div>
+      <div class="feature feature-fe">
+        <div class="feature-icon">📨</div>
+        <h3>Facturation électronique B2B (à venir)</h3>
+        <p>Prévu compatible avec la réforme française : émission via PDP agréée pour vos factures labo → cabinets, dans la continuité de votre flux actuel sur Labosync.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">🏥</div>
@@ -259,6 +284,7 @@
         <div class="plan-note">Soit <strong>39,20 €/mois</strong> — 2 mois offerts</div>
         <ul>
           <li>Tout du plan mensuel</li>
+          <li>Feuille de route PDP incluse</li>
           <li>Économie de 117,60 €</li>
           <li>Support prioritaire</li>
           <li>Accès anticipé aux nouveautés</li>
@@ -281,10 +307,11 @@
       <details><summary>Puis-je essayer avant de m'engager ?</summary><p>Oui, 14 jours d'essai gratuit, sans carte bancaire. Vous accédez à 100% des fonctionnalités. Si ça ne vous convient pas, vous ne payez rien.</p></details>
       <details><summary>Est-ce que je peux résilier à tout moment ?</summary><p>Oui. Le plan mensuel est sans engagement — vous résiliez depuis votre espace client Stripe et gardez l'accès jusqu'à la fin du mois payé. Le plan annuel est résiliable en fin de période (pas de remboursement partiel).</p></details>
       <details><summary>Mes données sont-elles sauvegardées ?</summary><p>Oui, toutes vos données sont stockées sur Supabase (hébergement européen, conforme RGPD) avec sauvegardes automatiques. Vous pouvez exporter à tout moment.</p></details>
-      <details><summary>Est-ce compatible avec mon logiciel de compta ?</summary><p>Vous pouvez exporter vos factures en PDF. L'export comptable au format FEC est en préparation. L'intégration avec les plateformes de dématérialisation (PDP) pour la facturation électronique 2026/2027 est également prévue.</p></details>
+      <details><summary>Labosync sera-t-il compatible avec la facturation électronique obligatoire ?</summary><p>Oui, c'est prévu. En France, les laboratoires qui facturent les cabinets en B2B devront progressivement émettre leurs factures via des plateformes agréées par l'État (PDP), avec des échéances autour de 2026–2027. Labosync intègre cette évolution dans sa feuille de route : connexion à une PDP agréée prévue dans les 6 à 12 prochains mois, pour continuer à facturer depuis le même outil.</p></details>
+      <details><summary>Est-ce compatible avec mon logiciel de compta ?</summary><p>Vous pouvez exporter vos factures en PDF. L'export comptable au format FEC est en préparation, en complément de la future émission PDP.</p></details>
       <details><summary>Combien d'utilisateurs peuvent se connecter ?</summary><p>Illimité. Le prix est par laboratoire, pas par utilisateur. Tous vos techniciens et l'administration peuvent utiliser Labosync.</p></details>
       <details><summary>Y a-t-il une version mobile ?</summary><p>Oui, une version mobile optimisée pour iPhone et Android, synchronisée avec le desktop. Créez des travaux, générez des BL, facturez — depuis votre téléphone.</p></details>
-      <details><summary>Les cabinets dentaires doivent-ils payer pour accéder à leur portail ?</summary><p>Non. Le portail cabinet est inclus gratuitement dans votre abonnement. Vos dentistes y accèdent avec un code + mot de passe que vous leur partagez.</p></details>
+      <details><summary>Les cabinets dentaires doivent-ils payer pour accéder à leur portail ?</summary><p>Non. Le portail cabinet est inclus gratuitement dans votre abonnement. Vos dentistes se connectent sur labosync.app (→ Cabinet) avec le code et le mot de passe que vous leur transmettez — sans lien personnalisé obligatoire.</p></details>
       <details><summary>Puis-je changer de formule en cours de route ?</summary><p>Oui, vous pouvez passer du mensuel à l'annuel (ou inversement) à tout moment depuis votre espace client Stripe. Le calcul est fait au prorata.</p></details>
     </div>
   </div>
@@ -310,7 +337,7 @@
       <h4>Produit</h4>
       <a href="#features">Fonctionnalités</a>
       <a href="#pricing">Tarifs</a>
-      <a href="app.html">Se connecter</a>
+      <a href="connexion.html">Se connecter</a>
     </div>
     <div>
       <h4>Légal</h4>

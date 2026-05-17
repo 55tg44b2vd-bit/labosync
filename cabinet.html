@@ -62,6 +62,8 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
 .cab-name-header strong{color:var(--ink);font-weight:700;}
 .btn-logout{background:var(--bg);border:1px solid var(--border);color:var(--ink-soft);border-radius:7px;padding:6px 12px;font-family:'Inter',sans-serif;font-size:.74rem;cursor:pointer;transition:background .15s;}
 .btn-logout:hover{background:var(--border);}
+.btn-refresh{background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:7px;padding:6px 12px;font-family:'Inter',sans-serif;font-size:.74rem;cursor:pointer;transition:background .15s;}
+.btn-refresh:hover{background:#dbeafe;}
 
 .portal-body{flex:1;max-width:1100px;margin:0 auto;width:100%;padding:28px 24px 60px;}
 
@@ -76,6 +78,27 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
 
 /* Tabs */
 .tabs{display:flex;gap:4px;background:rgba(28,23,20,.06);border-radius:12px;padding:4px;width:fit-content;margin-bottom:24px;}
+.portal-btn-new-order{width:100%;padding:16px 20px;font-size:1.05rem;font-weight:700;border-radius:14px;background:var(--accent);color:#fff;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.35);}
+.portal-btn-new-order:hover{background:var(--accent-hover);}
+.portal-hero-hint{font-size:.76rem;color:var(--ink-soft);margin:10px 0 0;text-align:center;}
+.portal-tabs-simple .tab{font-size:.82rem;padding:8px 14px;}
+@media(max-width:640px){.portal-tabs-simple{flex-wrap:wrap;width:100%;}.portal-tabs-simple .tab{flex:1;min-width:0;text-align:center;font-size:.76rem;padding:8px 6px;}}
+.portal-btn-new-order{width:100%;padding:16px 20px;font-size:1.05rem;font-weight:700;border-radius:14px;background:var(--accent);color:#fff;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.35);}
+.portal-btn-new-order:hover{background:var(--accent-hover);}
+.portal-hero-hint{font-size:.76rem;color:var(--ink-soft);margin:10px 0 0;text-align:center;}
+.portal-tabs-simple .tab{font-size:.82rem;padding:8px 14px;}
+.portal-stats-fold{margin-bottom:16px;}
+.portal-stats-fold summary{cursor:pointer;font-size:.78rem;font-weight:600;color:var(--ink-soft);padding:8px 0;list-style:none;}
+.portal-stats-fold summary::-webkit-details-marker{display:none;}
+.portal-stats-fold[open] summary{margin-bottom:10px;color:var(--accent);}
+.portal-draft-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:.86rem;color:#1e40af;}
+.portal-draft-resume{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:.86rem;font-weight:700;cursor:pointer;white-space:nowrap;}
+.empty-state-hero{padding:48px 20px;}
+.empty-state-hero .portal-btn-new-order{max-width:340px;margin:0 auto;display:block;}
+#order-form-container input[type=text],#order-form-container input[type=number],#order-form-container input[type=date],#order-form-container input[type=search],#order-form-container select,#order-form-container textarea{min-height:48px;font-size:16px;}
+#order-form-container button{min-height:48px;}
+#order-form-container .tab,#ptab-orders input,#ptab-bls input{min-height:48px;font-size:16px;}
+@media(max-width:640px){.portal-tabs-simple{flex-wrap:wrap;width:100%;}.portal-tabs-simple .tab{flex:1;min-width:0;text-align:center;font-size:.76rem;padding:8px 6px;}.portal-stats-fold .stats-bar{grid-template-columns:1fr 1fr;}}
 .tab{border:none;background:none;border-radius:8px;padding:8px 20px;font-family:'Inter',sans-serif;font-size:.82rem;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all .15s;}
 .tab.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}
 .mention-item:hover,.mention-item.active{background:var(--accent-soft);}
@@ -180,7 +203,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
       </div>
     </div>
     <div class="login-title">Connexion</div>
-    <div class="login-sub">Entrez vos identifiants transmis par votre laboratoire.</div>
+    <div class="login-sub">Utilisez le code et le mot de passe transmis par votre laboratoire. Connexion depuis labosync.app → Cabinet, sans lien personnalisé.</div>
     <div class="fl"><label>Code d'accès</label><input type="text" id="inp-code" placeholder="Ex : AB12CD" autocomplete="username" style="text-transform:uppercase;letter-spacing:.1em;"/></div>
     <div class="fl">
       <label>Mot de passe</label>
@@ -191,7 +214,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
     </div>
     <button class="btn btn-a" id="btn-login" style="width:100%;margin-top:6px;">Se connecter →</button>
     <div id="login-err"></div>
-    <div class="login-footer">Votre laboratoire vous a transmis ces identifiants.<br/>Pour toute question, contactez directement votre laboratoire.</div>
+    <div class="login-footer">Votre laboratoire vous a transmis ces identifiants.<br/><a href="connexion.html" style="color:var(--accent);">← Laboratoire ou cabinet</a> · Questions : contactez votre laboratoire.</div>
   </div>
 </div>
 
@@ -201,6 +224,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
     <div class="header-inner">
       <div class="brand">🔬 Labosync <span class="brand-pill">Espace Cabinet</span></div>
       <div class="cab-name-header" id="hdr-cab-name"></div>
+      <button class="btn-refresh" id="btn-refresh-now">Actualiser</button>
       <button class="btn-logout" id="btn-logout">Déconnexion</button>
     </div>
   </header>
@@ -216,7 +240,9 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
     </div>
 
     <!-- Stats -->
-    <div class="stats-bar">
+    <details class="portal-stats-fold" id="portal-stats-fold">
+      <summary>Résumé livraisons &amp; factures (optionnel)</summary>
+      <div class="stats-bar">
       <div class="stat-card">
         <div class="stat-val" id="stat-bl-total">0</div>
         <div class="stat-lbl">Bons de livraison</div>
@@ -234,18 +260,23 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
         <div class="stat-lbl">Factures</div>
       </div>
     </div>
+    </details>
 
+    <div class="portal-hero-cta" style="margin-bottom:16px;">
+      <button type="button" class="portal-btn-new-order" onclick="openPortalTab('neworder')">+ Nouvelle commande</button>
+      <p class="portal-hero-hint">Le labo reçoit votre fiche en quelques minutes</p>
+    </div>
+    <div id="portal-draft-banner" style="display:none;"></div>
     <!-- Tabs -->
-    <div class="tabs">
-      <button class="tab on" data-ptab="bls">📋 Mes bons de livraison</button>
-      <button class="tab" data-ptab="orders">📝 Mes commandes en cours</button>
-      <button class="tab" data-ptab="neworder" style="background:#dbeafe;color:#1d4ed8;border:1.5px solid #3b82f6;">+ Nouvelle commande</button>
-      <button class="tab" data-ptab="factures">💰 Mes factures</button>
-      <button class="tab" data-ptab="messages" id="tab-messages">💬 Messages<span id="chat-notif" style="display:none;margin-left:5px;background:#e53935;color:#fff;border-radius:99px;padding:1px 7px;font-size:.6rem;font-weight:700;">●</span></button>
+    <div class="tabs portal-tabs-simple">
+      <button class="tab on" data-ptab="orders">Commandes</button>
+      <button class="tab" data-ptab="bls">Livraisons</button>
+      <button class="tab" data-ptab="factures">Factures</button>
+      <button class="tab" data-ptab="messages" id="tab-messages">Messages<span id="chat-notif" style="display:none;margin-left:5px;background:#e53935;color:#fff;border-radius:99px;padding:1px 7px;font-size:.6rem;font-weight:700;">●</span></button>
     </div>
 
     <!-- BLs pane -->
-    <div id="ptab-bls">
+    <div id="ptab-bls" style="display:none;">
       <!-- Filter / search -->
       <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
         <input type="text" id="bl-search" placeholder="Rechercher un patient..." style="flex:1;min-width:180px;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-family:'Inter',sans-serif;font-size:.82rem;background:var(--bg);color:var(--ink);outline:none;"/>
@@ -259,7 +290,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
     </div>
 
     <!-- Orders pane (fiches de commande envoyées) -->
-    <div id="ptab-orders" style="display:none;">
+    <div id="ptab-orders">
       <div style="position:relative;margin-bottom:14px;">
         <input type="search" id="orders-search" oninput="renderOrdersList(true)" placeholder="🔍 Rechercher par patient, type de prothèse, description…" autocomplete="off" style="width:100%;padding:11px 14px;font-size:.94rem;border:1.5px solid var(--border);border-radius:10px;outline:none;background:var(--surface);"/>
       </div>
@@ -330,9 +361,7 @@ function reportClientError(payload){
   fetch('/.netlify/functions/log-client-error',{method:'POST',headers:{'Content-Type':'application/json'},body:body}).catch(function(){});
 }
 function _debugAuditLogCab(hypothesisId,message,data){
-  // #region agent log
-  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-baseline',hypothesisId:hypothesisId,location:'cabinet.html',message:message,data:data||{},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
+  // debug instrumentation removed
 }
 window.addEventListener('error',function(ev){
   reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:ev&&ev.error&&ev.error.stack?ev.error.stack:''});
@@ -396,11 +425,6 @@ window.addEventListener('unhandledrejection',function(ev){
     }catch(e){}
   })();
 
-  // If we have portalId in URL, pre-fill hint
-  if(id){
-    document.querySelector('.login-sub').textContent = 'Entrez le code et le mot de passe transmis par votre laboratoire.';
-  }
-
   async function doLogin(){
     const code = document.getElementById('inp-code').value.trim().toUpperCase();
     const pwd  = document.getElementById('inp-pwd').value.trim();
@@ -411,16 +435,7 @@ window.addEventListener('unhandledrejection',function(ev){
     const btn = document.getElementById('btn-login');
     btn.textContent = 'Connexion…'; btn.disabled = true;
 
-    let portalId = id;
-
-    // If no portalId in URL, we need to search by code
-    // For simplicity: try to load by code scan (limited query)
-    // Better approach: always share URL with id. But support login without URL too.
-    if(!portalId){
-      err.textContent = 'Lien incomplet — utilisez le lien complet fourni par votre laboratoire.';
-      btn.textContent = 'Se connecter →'; btn.disabled = false;
-      return;
-    }
+    const portalId = id || null;
 
     try{
       await Promise.race([
@@ -428,7 +443,10 @@ window.addEventListener('unhandledrejection',function(ev){
         new Promise(function(_,reject){setTimeout(function(){reject(new Error('Connexion trop longue'));},12000);})
       ]);
     }catch(e){
-      err.textContent = e && e.message ? e.message : 'Erreur de connexion.';
+      var m=e&&e.message?String(e.message):'';
+      if(!m||m.indexOf('<!DOCTYPE')>=0||m.indexOf('<html')>=0)m='Connexion impossible. Réessayez ou contactez votre laboratoire.';
+      if(m.length>200)m=m.slice(0,197)+'…';
+      err.textContent=m||'Erreur de connexion.';
     }finally{
       btn.textContent = 'Se connecter →'; btn.disabled = false;
     }
@@ -445,7 +463,7 @@ async function loadPortal(portalId, code, pwd, fromSession){
     const r = await fetch('/.netlify/functions/portal-login',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({portalId:portalId, code:code, pwd:pwd}),
+      body: JSON.stringify(Object.assign({code:code, pwd:pwd}, portalId ? {portalId: portalId} : {})),
     });
     const payload = await r.json().catch(function(){return {};});
     if(!r.ok){
@@ -456,11 +474,11 @@ async function loadPortal(portalId, code, pwd, fromSession){
       throw new Error('Portail indisponible.');
     }
     portalData._updatedAt = payload.updatedAt || null;
-    sessionPortalId = portalId;
-    _debugAuditLogCab('H5','Cabinet loadPortal success',{portalId:portalId,hasPortalData:!!portalData});
+    sessionPortalId = payload.portalId || portalId;
+    _debugAuditLogCab('H5','Cabinet loadPortal success',{portalId:sessionPortalId,hasPortalData:!!portalData});
     // Save session (4h expiry) avec snapshot sanitizé
     sessionStorage.setItem('ls_portal_session', JSON.stringify({
-      portalId: portalId,
+      portalId: sessionPortalId,
       portalData: portalData,
       updatedAt: payload.updatedAt || null,
       expiry: Date.now() + 4*3600*1000
@@ -471,6 +489,21 @@ async function loadPortal(portalId, code, pwd, fromSession){
     if(err) err.textContent = e&&e.message ? e.message : 'Connexion impossible pour le moment.';
     console.error(e);
   }
+}
+
+function renderPortalDraftBanner(){
+  var el=document.getElementById('portal-draft-banner');
+  if(!el)return;
+  try{
+    var raw=localStorage.getItem(_draftKey());
+    if(!raw){el.style.display='none';el.innerHTML='';return;}
+    var d=JSON.parse(raw);
+    var name=((d.patient&&d.patient.name)||'').trim();
+    var hasContent=name||((d.finalGoal||'').trim())||Object.keys(d.teeth||{}).length;
+    if(!hasContent){el.style.display='none';return;}
+    el.style.display='block';
+    el.innerHTML='<div class="portal-draft-bar"><div><strong>Brouillon en cours</strong>'+(name?' — patient '+esc(name):' — fiche non terminée')+'</div><button type="button" class="portal-draft-resume" onclick="openPortalTab(\'neworder\')">Reprendre la fiche</button></div>';
+  }catch(e){el.style.display='none';}
 }
 
 function showPortal(){
@@ -504,10 +537,26 @@ function showPortal(){
 
   // Check for unread chat messages
   setTimeout(checkPortalChatNotif, 1000);
+  renderPortalDraftBanner();
   showPortalWelcomeHint();
 
-  // Auto-refresh des données toutes les 30s (factures, BDL)
+  // Sync immédiat pour éviter d'afficher un snapshot session trop ancien.
+  refreshPortalDataOnce(true);
+  // Auto-refresh des données (factures, BDL)
   startPortalDataPoll();
+  const refreshBtn=document.getElementById('btn-refresh-now');
+  if(refreshBtn){
+    refreshBtn.addEventListener('click',async function(){
+      if(refreshBtn.disabled) return;
+      const prev=refreshBtn.textContent;
+      refreshBtn.disabled=true;
+      refreshBtn.textContent='Actualisation...';
+      await refreshPortalDataOnce(true);
+      refreshBtn.textContent=prev;
+      refreshBtn.disabled=false;
+      showToast('Données actualisées.');
+    });
+  }
 
   document.getElementById('btn-logout').addEventListener('click', function(){
     sessionStorage.removeItem('ls_portal_session');
@@ -516,8 +565,19 @@ function showPortal(){
 }
 
 function openPortalTab(id){
+  document.querySelectorAll('.portal-tabs-simple .tab').forEach(function(t){t.classList.toggle('on',t.dataset.ptab===id);});
   const btn=document.querySelector('[data-ptab="'+id+'"]');
-  if(btn)btn.click();
+  if(btn){btn.click();return;}
+  if(id==='neworder'){
+    document.querySelectorAll('[data-ptab]').forEach(function(b){b.classList.remove('on');});
+    ['bls','orders','neworder','factures','messages'].forEach(function(k){
+      var el=document.getElementById('ptab-'+k);
+      if(el)el.style.display=(k===id)?'block':'none';
+    });
+    if(typeof _cabDraftBannerPending!=='undefined'){_cabDraftBannerPending=typeof _loadDraft==='function'?_loadDraft():null;}
+    if(typeof renderOrderForm==='function')renderOrderForm();
+    if(sessionPortalId){try{localStorage.setItem('cab_last_tab_'+sessionPortalId,id);}catch(e){}}
+  }
 }
 
 function restoreLastPortalTab(){
@@ -536,31 +596,49 @@ function showPortalWelcomeHint(){
     const key='cab_onboard_seen_'+sessionPortalId;
     if(localStorage.getItem(key)==='1')return;
     localStorage.setItem(key,'1');
-    showToast('👋 Bienvenue ! Commencez par "Mes commandes", puis "Mes factures".');
+    showToast('👋 Bienvenue ! Appuyez sur « Nouvelle commande » pour envoyer une fiche au labo.');
   }catch(e){}
 }
 
-function startPortalDataPoll(){
-  setInterval(async function(){
-    if(!sessionPortalId) return;
+async function refreshPortalDataOnce(force){
+  if(!sessionPortalId) return;
+  try{
+    const sbPortal = supabase.createClient(SB_URL, SB_ANON);
+    const { data: rows } = await sbPortal.from('labo_data').select('data,updated_at').eq('id','portal_'+sessionPortalId);
+    if(!rows||!rows.length) return;
+    const newUpdatedAt = rows[0].updated_at;
+    const toMs = function(v){
+      const t = Date.parse(v||'');
+      return Number.isFinite(t) ? t : 0;
+    };
+    const currentMs = toMs(portalData && portalData._updatedAt);
+    const incomingMs = toMs(newUpdatedAt);
+    // Empêche un refresh de réinjecter un snapshot plus ancien (BL qui "disparaît puis revient").
+    if(currentMs && incomingMs && incomingMs < currentMs) return;
+    if(!force && newUpdatedAt === portalData._updatedAt) return;
+    portalData = rows[0].data || portalData;
+    portalData._updatedAt = newUpdatedAt || portalData._updatedAt;
+    // Met à jour la session cache pour que les prochains reloads repartent avec des données fraîches.
     try{
-      const sbPortal = supabase.createClient(SB_URL, SB_ANON);
-      const { data: rows } = await sbPortal.from('labo_data').select('data,updated_at').eq('id','portal_'+sessionPortalId);
-      if(!rows||!rows.length) return;
-      const newUpdatedAt = rows[0].updated_at;
-      // Ne mettre à jour que si les données ont changé
-      if(newUpdatedAt === portalData._updatedAt) return;
-      portalData = rows[0].data;
-      portalData._updatedAt = newUpdatedAt;
-      // Rafraîchir silencieusement tous les panneaux
-      renderStats();
-      renderBLs();
-      renderFactures();
-      const d = new Date(newUpdatedAt);
-      const el = document.getElementById('portal-updated');
-      if(el) el.textContent = 'Mis à jour le '+d.toLocaleDateString('fr-FR')+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-    }catch(e){ /* silencieux */ }
-  }, 30000);
+      sessionStorage.setItem('ls_portal_session', JSON.stringify({
+        portalId: sessionPortalId,
+        portalData: portalData,
+        updatedAt: portalData._updatedAt || null,
+        expiry: Date.now() + 4*3600*1000
+      }));
+    }catch(e){}
+    renderStats();
+    renderBLs();
+    renderFactures();
+    const d = portalData._updatedAt ? new Date(portalData._updatedAt) : null;
+    const el = document.getElementById('portal-updated');
+    if(el && d) el.textContent = 'Mis à jour le '+d.toLocaleDateString('fr-FR')+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){ /* silencieux */ }
+}
+
+function startPortalDataPoll(){
+  if(window._portalDataPollHandle) clearInterval(window._portalDataPollHandle);
+  window._portalDataPollHandle = setInterval(function(){ refreshPortalDataOnce(false); }, 10000);
 }
 
 function renderStats(){
@@ -709,6 +787,8 @@ let _orderForm={
   }
 };
 let _orderStep=1; // étape courante du wizard (1-4)
+let _orderValMsgs=[]; // erreurs de validation (affichage inline, pas d'alert)
+var _cabDraftBannerPending=false; // true une fois à l'ouverture de l'onglet si brouillon restauré
 
 // Migration : convertit une ancienne commande (single-fiche) en "cas" avec 1 étape
 function _migrateOrderToCase(o){
@@ -750,12 +830,51 @@ function _loadDraft(){
 }
 function _clearDraft(){try{localStorage.removeItem(_draftKey());}catch(e){}}
 
+function _validateStepsUpTo(targetStep){
+  _orderValMsgs=[];
+  if(targetStep>=2&&!_orderForm.patient.name.trim()){_orderValMsgs.push('Étape 1 : renseignez le code patient.');return false;}
+  if(targetStep>=3&&!_orderForm.finalGoal.trim()&&!Object.keys(_orderForm.teeth).length){
+    _orderValMsgs.push('Étape 2 : décrivez l\'objectif final ou sélectionnez au moins une dent.');
+    return false;
+  }
+  return true;
+}
+
+function _insertDemandTemplate(line){
+  var cur=(_orderForm.firstStep.description||'').trim();
+  _orderForm.firstStep.description=cur?cur+'\n'+line:line;
+  _saveDraft();
+  renderOrderForm();
+  var ta=document.getElementById('of-firststep-desc');if(ta){ta.focus();try{ta.setSelectionRange(ta.value.length,ta.value.length);}catch(e){}}
+}
+
+function manualSaveOrderDraft(){
+  _saveDraft();
+  showToast('Brouillon enregistré sur cet appareil','#059669');
+}
+
+function showOrderSuccessAfterSubmit(){
+  var ex=document.getElementById('order-success-overlay');if(ex)ex.remove();
+  var o=document.createElement('div');
+  o.id='order-success-overlay';
+  o.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.78);z-index:10003;display:flex;align-items:center;justify-content:center;padding:20px;';
+  o.innerHTML=
+    '<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;padding:28px 26px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.25);">'+
+      '<div style="font-size:2.4rem;line-height:1;margin-bottom:10px;">✅</div>'+
+      '<div style="font-size:1.12rem;font-weight:800;color:var(--ink);margin-bottom:8px;">Fiche envoyée</div>'+
+      '<p style="font-size:.86rem;color:#64748b;margin:0 0 22px;line-height:1.55;">Le laboratoire va recevoir votre demande. Vous pouvez suivre l\'avancement dans l\'onglet <strong>Mes commandes</strong>.</p>'+
+      '<button type="button" onclick="document.getElementById(\'order-success-overlay\').remove();document.querySelector(\'[data-ptab=&quot;orders&quot;]\').click();" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px 16px;font-size:.9rem;font-weight:700;cursor:pointer;margin-bottom:10px;">Voir mes commandes</button>'+
+      '<button type="button" onclick="document.getElementById(\'order-success-overlay\').remove();document.querySelector(\'[data-ptab=&quot;neworder&quot;]\').click();" style="width:100%;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;font-size:.88rem;font-weight:600;cursor:pointer;color:#334155;">Nouvelle fiche</button>'+
+    '</div>';
+  document.body.appendChild(o);
+}
+
 function _stepIndicator(){
   const steps=[
-    {n:1,lbl:'Code patient'},
-    {n:2,lbl:'Travail'},
+    {n:1,lbl:'Patient'},
+    {n:2,lbl:'Prothèse'},
     {n:3,lbl:'Teinte'},
-    {n:4,lbl:'Notes'}
+    {n:4,lbl:'Envoi'}
   ];
   return '<div style="display:flex;align-items:center;justify-content:center;margin-bottom:24px;gap:0;">'+
     steps.map(function(s,i){
@@ -775,12 +894,10 @@ function _stepIndicator(){
 }
 
 function _goToStep(n){
-  if(n>_orderStep){
-    if(_orderStep===1&&!_orderForm.patient.name.trim()){alert('Veuillez renseigner le code patient.');return;}
-    if(_orderStep===2&&!_orderForm.finalGoal.trim()&&!Object.keys(_orderForm.teeth).length){alert('Décrivez l\'objectif final ou sélectionnez au moins une dent.');return;}
-    if(_orderStep===4&&!_orderForm.firstStep.description.trim()){alert('Décrivez la demande actuelle (ce que vous attendez à cette étape).');return;}
-  }
-  _orderStep=Math.max(1,Math.min(4,n));
+  n=Math.max(1,Math.min(4,n));
+  if(n<_orderStep)_orderValMsgs=[];
+  if(n>_orderStep&&!_validateStepsUpTo(n)){renderOrderForm();return;}
+  _orderStep=n;
   renderOrderForm();
   setTimeout(function(){window.scrollTo({top:0,behavior:'smooth'});},10);
 }
@@ -790,8 +907,8 @@ function _stepContent(){
     // PATIENT
     const sexes=[{id:'F',lbl:'♀ Femme'},{id:'M',lbl:'♂ Homme'},{id:'',lbl:'— Non précisé'}];
     return '<div>'+
-      '<div style="font-size:1.05rem;font-weight:700;margin-bottom:4px;">👤 Informations patient</div>'+
-      '<div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;">Étape 1 sur 4 — Code patient et coordonnées.</div>'+
+      '<div style="font-size:1.05rem;font-weight:700;margin-bottom:4px;">👤 Qui est le patient ?</div>'+
+      '<div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;">Code interne uniquement (RGPD).</div>'+
       // Bouton "Reprendre un patient existant"
       '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:.82rem;color:#1e40af;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'+
         '<div>💡 Vous avez déjà commandé un travail pour ce patient ?</div>'+
@@ -869,6 +986,11 @@ function _stepContent(){
     '<div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;">Étape 4 sur 4 — Précisez ce que vous attendez du laboratoire <strong>pour cette livraison-ci</strong>. Vous pourrez ajouter d\'autres étapes plus tard sur la même fiche (PEI → châssis → montage → finition…).</div>'+
     '<div style="margin-bottom:14px;">'+
       '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Que demandez-vous au labo cette fois-ci ? *</label>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">'+
+        ['PEI / stéréo','Châssis métallique','Montage','Finition','Essai esthétique','Couronne unitaire'].map(function(lbl){
+          return '<button type="button" onclick="_insertDemandTemplate('+JSON.stringify(lbl)+')" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:5px 11px;font-size:.72rem;font-weight:600;color:#475569;cursor:pointer;">'+esc(lbl)+'</button>';
+        }).join('')+
+      '</div>'+
       '<textarea id="of-firststep-desc" placeholder="Ex: PEI · Châssis métallique avec bourrelets d\'occlusion · Montage des dents · Finition…" oninput="_orderForm.firstStep.description=this.value;_saveDraft();" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:80px;resize:vertical;">'+esc(_orderForm.firstStep.description)+'</textarea>'+
     '</div>'+
     '<div style="margin-bottom:14px;max-width:50%;">'+
@@ -885,7 +1007,8 @@ function _stepContent(){
 
 function renderOrderForm(){
   const el=document.getElementById('order-form-container');if(!el)return;
-  const hadDraft=_loadDraft();
+  const hadDraft=_cabDraftBannerPending;
+  _cabDraftBannerPending=false;
   const cabName=portalData.cabName||'';
   const cabPhone=portalData.cabPhone||'';
   const cabEmail=portalData.cabEmail||'';
@@ -903,16 +1026,24 @@ function renderOrderForm(){
       '</div>':'')+
 
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;gap:10px;">'+
-        '<h2 style="font-size:1.2rem;font-weight:700;">📝 Nouvelle fiche de commande</h2>'+
+        '<div><h2 style="font-size:1.2rem;font-weight:700;margin:0 0 4px;">📝 Nouvelle fiche de commande</h2>'+
+        '<div style="font-size:.72rem;color:var(--ink-soft);">Brouillon sauvegardé automatiquement sur cet appareil.</div></div>'+
         '<div style="font-size:.74rem;color:var(--ink-soft);text-align:right;">'+esc(cabName)+(cabPhone?' · '+esc(cabPhone):'')+'</div>'+
       '</div>'+
 
       _stepIndicator()+
+      (_orderValMsgs.length?'<div role="alert" style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:.82rem;color:#991b1b;">'+
+        '<div style="font-weight:700;margin-bottom:6px;">À compléter avant de continuer</div>'+
+        _orderValMsgs.map(function(m){return '<div style="margin-top:2px;">• '+esc(m)+'</div>';}).join('')+
+      '</div>':'')+
 
       '<div style="min-height:280px;">'+_stepContent()+'</div>'+
 
       '<div style="display:flex;gap:10px;justify-content:space-between;margin-top:24px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:18px;">'+
-        '<button onclick="resetOrderForm()" style="background:none;border:1.5px solid var(--border);color:var(--ink-soft);border-radius:8px;padding:10px 16px;font-size:.84rem;cursor:pointer;">🗑️ Vider</button>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+
+        '<button type="button" onclick="resetOrderForm()" style="background:none;border:1.5px solid var(--border);color:var(--ink-soft);border-radius:8px;padding:10px 16px;font-size:.84rem;cursor:pointer;">🗑️ Vider</button>'+
+        '<button type="button" onclick="manualSaveOrderDraft()" style="background:#f0fdf4;border:1.5px solid #bbf7d0;color:#166534;border-radius:8px;padding:10px 16px;font-size:.84rem;font-weight:600;cursor:pointer;">💾 Enregistrer le brouillon</button>'+
+        '</div>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
           (isFirstStep?'':'<button onclick="_goToStep('+(_orderStep-1)+')" style="background:none;border:1.5px solid var(--border);color:var(--ink);border-radius:8px;padding:10px 18px;font-size:.86rem;cursor:pointer;">← Précédent</button>')+
           (isLastStep?
@@ -929,8 +1060,9 @@ function renderOrderForm(){
 function renderToothChart(){
   const el=document.getElementById('of-chart');if(!el)return;
   // Tableau combiné côté droit + côté gauche, avec un index "milieu" à 8
+  // flex-wrap:nowrap + zone scroll : une seule ligne par arcade (18–11 | 21–28, etc.)
   function row(arr){
-    let html='<div style="display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;">';
+    let html='<div style="display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:nowrap;width:max-content;margin:0 auto;">';
     arr.forEach(function(num,i){
       const sel=!!_orderForm.teeth[num];
       // Espace de séparation au milieu entre côté droit et côté gauche
@@ -938,16 +1070,18 @@ function renderToothChart(){
       // Bord arrondi : début/fin de chaque demi-arcade
       const radius=(i===0||i===8)?'7px 2px 2px 7px':(i===7||i===arr.length-1)?'2px 7px 7px 2px':'2px';
       html+='<button type="button" onclick="toggleTooth('+num+')" style="width:36px;height:42px;border:1.5px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'var(--surface)')+';color:'+(sel?'#fff':'var(--ink)')+';font-family:monospace;font-size:.76rem;font-weight:'+(sel?700:500)+';cursor:pointer;border-radius:'+radius+';margin:0 1px;flex-shrink:0;">'+num+'</button>';
-      // Pas de rond entre 11-21 ni 41-31 (ligne médiane = pas de solidarisation)
-      if(i<arr.length-1&&i!==7){
+      // Solidarisation possible y compris sur la ligne médiane (11-21 et 41-31)
+      if(i<arr.length-1){
         const a=num,b=arr[i+1];
         const key=Math.min(a,b)+'-'+Math.max(a,b);
         const lk=!!_orderForm.links[key];
+        const mid=i===7;
+        const midMargin=mid?'margin:0 6px;':'margin:0 3px;';
         if(lk){
           // Bridge visuel : barre verte arrondie qui relie les 2 dents
-          html+='<button type="button" onclick="toggleLink('+a+','+b+')" title="Solidarisation '+a+'-'+b+' (cliquez pour retirer)" style="width:22px;height:8px;border:none;background:linear-gradient(180deg,#10b981,#059669);border-radius:4px;cursor:pointer;flex-shrink:0;box-shadow:0 1px 2px rgba(16,185,129,.4);margin:0 -1px;"></button>';
+          html+='<button type="button" onclick="toggleLink('+a+','+b+')" title="Solidarisation '+a+'-'+b+' (cliquez pour retirer)" style="width:'+(mid?28:22)+'px;height:8px;border:none;background:linear-gradient(180deg,#10b981,#059669);border-radius:4px;cursor:pointer;flex-shrink:0;box-shadow:0 1px 2px rgba(16,185,129,.4);'+(mid?'margin:0 3px;':'margin:0 -1px;')+'"></button>';
         } else {
-          html+='<button type="button" onclick="toggleLink('+a+','+b+')" title="Cliquez pour solidariser '+a+'-'+b+'" style="width:11px;height:11px;border:1.5px solid #cbd5e1;background:#fff;border-radius:50%;cursor:pointer;flex-shrink:0;margin:0 3px;padding:0;"></button>';
+          html+='<button type="button" onclick="toggleLink('+a+','+b+')" title="Cliquez pour solidariser '+a+'-'+b+'" style="width:11px;height:11px;border:1.5px solid #cbd5e1;background:#fff;border-radius:50%;cursor:pointer;flex-shrink:0;'+midMargin+'padding:0;"></button>';
         }
       }
     });
@@ -958,11 +1092,15 @@ function renderToothChart(){
   const upper=[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
   const lower=[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
   el.innerHTML=
-    '<div style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:8px;text-align:center;">Maxillaire supérieur</div>'+
-    row(upper)+
-    '<div style="height:18px;"></div>'+
-    row(lower)+
-    '<div style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-top:8px;text-align:center;">Mandibule inférieure</div>';
+    '<div style="overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;padding-bottom:4px;">'+
+      '<div style="width:max-content;margin:0 auto;">'+
+        '<div style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:8px;text-align:center;">Maxillaire supérieur</div>'+
+        row(upper)+
+        '<div style="height:18px;"></div>'+
+        row(lower)+
+        '<div style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-top:8px;text-align:center;">Mandibule inférieure</div>'+
+      '</div>'+
+    '</div>';
 }
 
 function toggleTooth(num){
@@ -980,6 +1118,7 @@ function toggleLink(a,b){
 
 function resetOrderForm(){
   if(!confirm('Effacer la fiche en cours et repartir vierge ?'))return;
+  _orderValMsgs=[];
   _orderForm={patient:{name:'',sexe:'',age:''},finalGoal:'',teeth:{},links:{},shadeType:'vita',shadeValue:'',firstStep:{description:'',deliveryDate:'',notes:''}};
   _orderStep=1;
   _clearDraft();
@@ -990,27 +1129,31 @@ function _renderToothChartReadonlyCabinet(teeth,links){
   const upper=[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
   const lower=[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
   function row(arr){
-    let html='<div style="display:flex;align-items:center;justify-content:center;gap:0;">';
+    let html='<div style="display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:nowrap;width:max-content;margin:0 auto;">';
     arr.forEach(function(num,i){
       if(i===8)html+='<div style="width:14px;flex-shrink:0;"></div>';
       const sel=teeth.indexOf(num)>=0;
-      html+='<div style="width:30px;height:34px;border:1.5px solid '+(sel?'var(--accent)':'#e2e8f0')+';background:'+(sel?'var(--accent)':'#fff')+';color:'+(sel?'#fff':'#64748b')+';font-family:monospace;font-size:.7rem;font-weight:'+(sel?700:500)+';display:flex;align-items:center;justify-content:center;border-radius:5px;margin:0 1px;">'+num+'</div>';
-      if(i<arr.length-1&&i!==7){
+      html+='<div style="width:30px;height:34px;flex-shrink:0;border:1.5px solid '+(sel?'var(--accent)':'#e2e8f0')+';background:'+(sel?'var(--accent)':'#fff')+';color:'+(sel?'#fff':'#64748b')+';font-family:monospace;font-size:.7rem;font-weight:'+(sel?700:500)+';display:flex;align-items:center;justify-content:center;border-radius:5px;margin:0 1px;">'+num+'</div>';
+      if(i<arr.length-1){
         const a=num,b=arr[i+1];
         const key=Math.min(a,b)+'-'+Math.max(a,b);
         const lk=(links||[]).indexOf(key)>=0;
-        if(lk){html+='<div style="width:18px;height:6px;background:#10b981;border-radius:3px;flex-shrink:0;margin:0 -1px;"></div>';}
-        else{html+='<div style="width:7px;height:7px;border:1px solid #cbd5e1;background:#fff;border-radius:50%;flex-shrink:0;margin:0 3px;"></div>';}
+        const mid=i===7;
+        if(lk){html+='<div style="width:'+(mid?22:18)+'px;height:6px;background:#10b981;border-radius:3px;flex-shrink:0;'+(mid?'margin:0 3px;':'margin:0 -1px;')+'"></div>';}
+        else{html+='<div style="width:7px;height:7px;border:1px solid #cbd5e1;background:#fff;border-radius:50%;flex-shrink:0;'+(mid?'margin:0 6px;':'margin:0 3px;')+'"></div>';}
       }
     });
     html+='</div>';
     return html;
   }
-  return '<div style="font-size:.62rem;color:#64748b;text-align:center;margin-bottom:6px;">Maxillaire supérieur</div>'+
+  return '<div style="overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;">'+
+    '<div style="width:max-content;margin:0 auto;">'+
+    '<div style="font-size:.62rem;color:#64748b;text-align:center;margin-bottom:6px;">Maxillaire supérieur</div>'+
     row(upper)+
     '<div style="height:14px;"></div>'+
     row(lower)+
-    '<div style="font-size:.62rem;color:#64748b;text-align:center;margin-top:6px;">Mandibule inférieure</div>';
+    '<div style="font-size:.62rem;color:#64748b;text-align:center;margin-top:6px;">Mandibule inférieure</div>'+
+    '</div></div>';
 }
 
 // Cache des fiches précédentes du cabinet pour recherche rapide
@@ -1121,15 +1264,17 @@ function pickPatient(code){
 }
 
 function showToast(msg,color){
+  var m=String(msg||'');
+  if(m.length>64)m=m.slice(0,61)+'…';
   let t=document.getElementById('cab-toast');
   if(!t){
     t=document.createElement('div');
     t.id='cab-toast';
-    t.style.cssText='position:fixed;top:20px;right:20px;background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:.86rem;z-index:10001;box-shadow:0 4px 20px rgba(0,0,0,.3);opacity:0;transform:translateY(-6px);transition:opacity .22s ease,transform .22s ease;';
+    t.style.cssText='position:fixed;top:20px;right:20px;background:#1e293b;color:#fff;padding:10px 16px;border-radius:10px;font-size:.84rem;z-index:10001;box-shadow:0 4px 20px rgba(0,0,0,.3);opacity:0;transform:translateY(-6px);transition:opacity .22s ease,transform .22s ease;max-width:min(92vw,360px);';
     document.body.appendChild(t);
   }
   t.style.background=color||'#1e293b';
-  t.textContent=msg;
+  t.textContent=m;
   t.style.display='block';
   requestAnimationFrame(function(){t.style.opacity='1';t.style.transform='translateY(0)';});
   clearTimeout(t._h);
@@ -1157,11 +1302,21 @@ function _checkPatientHistory(){
 }
 
 function showOrderPreview(){
-  if(!_orderForm.patient.name.trim()){alert('Le code patient est manquant (étape 1).');_goToStep(1);return;}
+  if(!_validateStepsUpTo(3)){
+    _orderStep=_orderValMsgs.length&&_orderValMsgs[0].indexOf('Étape 2')>=0?2:1;
+    renderOrderForm();
+    return;
+  }
   if(!_orderForm.finalGoal.trim()&&!Object.keys(_orderForm.teeth).length){
     if(!confirm('Aucun objectif final ni dent sélectionnée. Voulez-vous continuer quand même ?'))return;
   }
-  if(!_orderForm.firstStep.description.trim()){alert('Décrivez la demande actuelle (étape 4).');_goToStep(4);return;}
+  if(!_orderForm.firstStep.description.trim()){
+    _orderValMsgs=['Étape 4 : décrivez ce que vous attendez du laboratoire pour cette livraison.'];
+    _orderStep=4;
+    renderOrderForm();
+    return;
+  }
+  _orderValMsgs=[];
   const o=_orderForm;
   const teeth=Object.keys(o.teeth).map(Number).sort(function(a,b){return a-b;});
   const links=Object.keys(o.links);
@@ -1219,8 +1374,8 @@ function showOrderPreview(){
 }
 
 async function submitOrder(){
-  if(!_orderForm.patient.name.trim()){alert('Veuillez renseigner le code patient.');return;}
-  if(!_orderForm.firstStep.description.trim()){alert('Décrivez la demande actuelle (étape 4).');return;}
+  if(!_orderForm.patient.name.trim()){showToast('Renseignez le code patient (étape 1).','#c2410c');_orderValMsgs=['Étape 1 : renseignez le code patient.'];_orderStep=1;renderOrderForm();return;}
+  if(!_orderForm.firstStep.description.trim()){showToast('Décrivez la demande actuelle (étape 4).','#c2410c');_orderValMsgs=['Étape 4 : décrivez la demande pour cette livraison.'];_orderStep=4;renderOrderForm();return;}
   if(!Object.keys(_orderForm.teeth).length&&!_orderForm.finalGoal.trim()){
     if(!confirm('Aucun objectif final ni dent sélectionnée. Continuer quand même ?'))return;
   }
@@ -1264,14 +1419,15 @@ async function submitOrder(){
     await sb.from('labo_data').upsert({id:'orders_'+sessionPortalId,data:{list:existing,portalId:sessionPortalId,cabId:portalData.cabId},updated_at:now});
     _clearDraft();
     _portalOrdersCache=null;
+    _orderValMsgs=[];
     _orderForm={patient:{name:'',sexe:'',age:''},finalGoal:'',teeth:{},links:{},shadeType:'vita',shadeValue:'',firstStep:{description:'',deliveryDate:'',notes:''}};
     _orderStep=1;
     var pv=document.getElementById('order-preview-overlay');if(pv)pv.remove();
-    alert('✅ Fiche de commande envoyée au laboratoire !');
-    document.querySelector('[data-ptab="orders"]').click();
+    renderOrderForm();
+    showOrderSuccessAfterSubmit();
   }catch(e){
     console.error(e);
-    alert('❌ Erreur lors de l\'envoi : '+e.message);
+    showToast('Erreur lors de l\'envoi : '+e.message,'#b91c1c');
   }
 }
 
@@ -1279,7 +1435,7 @@ async function submitOrder(){
 async function addStepToCase(caseId){
   const list=await _loadCabinetOrders();
   const c=list.find(function(x){return x.id===caseId;});
-  if(!c){alert('Cas introuvable');return;}
+  if(!c){showToast('Cas introuvable','#c2410c');return;}
   // Dernière teinte connue (étape ou cas) à proposer comme défaut
   const lastShadeStep=(c.steps||[]).slice().reverse().find(function(s){return s.shadeValue;});
   const lastShade=lastShadeStep?lastShadeStep.shadeValue:(c.shadeValue||'');
@@ -1336,13 +1492,13 @@ async function confirmAddStep(caseId){
   const date=(document.getElementById('as-date').value||'').trim();
   const notes=(document.getElementById('as-notes').value||'').trim();
   const shade=(document.getElementById('as-shade')?document.getElementById('as-shade').value||'':'').trim();
-  if(!desc){alert('Décrivez ce que vous demandez au labo.');return;}
+  if(!desc){showToast('Décrivez ce que vous demandez au labo.','#c2410c');return;}
   try{
     const sb=supabase.createClient(SB_URL,SB_ANON);
     const{data:rows}=await sb.from('labo_data').select('data').eq('id','orders_'+sessionPortalId);
     const list=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
     const idx=list.findIndex(function(x){return x.id===caseId;});
-    if(idx<0){alert('Cas introuvable');return;}
+    if(idx<0){showToast('Cas introuvable','#c2410c');return;}
     _migrateOrderToCase(list[idx]);
     const stepId='step_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
     const now=new Date().toISOString();
@@ -1364,7 +1520,7 @@ async function confirmAddStep(caseId){
     document.getElementById('add-step-overlay').remove();
     showToast('✅ Nouvelle étape envoyée au laboratoire','#10b981');
     renderOrdersList();
-  }catch(e){console.error(e);alert('❌ Erreur : '+e.message);}
+  }catch(e){console.error(e);showToast('Erreur : '+e.message,'#b91c1c');}
 }
 
 async function requestRetouche(blId){
@@ -1406,29 +1562,72 @@ function viewBLOrder(blId){
   if(!bl||!bl.orderData){alert('Aucune fiche associée à ce BL.');return;}
   const o=bl.orderData;
   _migrateOrderToCase(o);
-  const teethStr=(o.teeth||[]).join(', ')||'—';
+  const patientName=(o.patient&&o.patient.name)||bl.patient||'';
+  const patientAge=(o.patient&&o.patient.age)||'';
+  const teethArr=(o.teeth||[]);
+  const teethStr=teethArr.join(', ')||'—';
+  const linksArr=Array.isArray(o.links)?o.links:Object.keys(o.links||{});
+  const linksStr=linksArr&&linksArr.length?linksArr.join(', '):'';
+  const finalGoal=o.finalGoal||o.prosthesis||bl.typeLabel||'—';
+  const shade=o.shadeValue||o.shade||o.shadeType||'';
+  const shadeStr=o.shadeValue||'—';
+
+  const stepsSorted=(o.steps||[]).slice().sort(function(a,b){return (a.requestedAt||'').localeCompare(b.requestedAt||'');});
+  const stepsHtml=stepsSorted.map(function(s,i){return _renderFicheBlockCabHTML(s,i);}).join('');
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;max-width:680px;width:100%;max-height:90vh;overflow-y:auto;">'+
-    '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:14px;">'+
-      '<div style="font-size:1.15rem;font-weight:700;">📝 Fiche de commande — '+esc(o.patient&&o.patient.name||bl.patient||'')+'</div>'+
-      '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:#64748b;">×</button>'+
+
+  const sig=(portalData&&portalData.signatures)||{};
+  const laboSig=sig.labo||sig.laboSig||sig.laboSignature||sig.signatureLabo||null;
+  const cabSig=sig.cabinet||sig.cabSig||sig.cabinetSig||sig.signatureCab||null;
+
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;max-width:760px;width:100%;max-height:92vh;overflow-y:auto;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:14px;gap:12px;">'+
+      '<div style="min-width:0;">'+
+        '<div style="font-size:1.15rem;font-weight:700;">📝 Fiche de commande — '+esc(patientName)+'</div>'+
+        '<div style="font-size:.78rem;color:#64748b;margin-top:4px;">Envoyée le '+(o.createdAt?new Date(o.createdAt).toLocaleDateString('fr-FR'):'—')+' · BL associé : <strong>'+esc(bl.num)+'</strong></div>'+
+      '</div>'+
+      '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:#64748b;flex-shrink:0;">×</button>'+
     '</div>'+
-    '<div style="font-size:.78rem;color:#64748b;margin-bottom:12px;">Envoyée le '+(o.createdAt?new Date(o.createdAt).toLocaleDateString('fr-FR'):'—')+' · BL associé : <strong>'+esc(bl.num)+'</strong></div>'+
-    '<div style="background:#f8fafc;padding:10px 12px;border-radius:7px;margin-bottom:10px;font-size:.84rem;">'+
-      (o.patient&&o.patient.age?'<div><strong>Âge :</strong> '+esc(o.patient.age)+' ans</div>':'')+
+
+    '<div style="background:#f8fafc;padding:12px 14px;border-radius:10px;margin-bottom:14px;font-size:.88rem;">'+
+      (patientAge?'<div><strong>Âge :</strong> '+esc(patientAge)+' ans</div>':'')+
       (o.deliveryDate?'<div><strong>Livraison demandée :</strong> '+new Date(o.deliveryDate+'T12:00:00').toLocaleDateString('fr-FR')+'</div>':'')+
+      '<div style="margin-top:8px;"><strong>🎯 Objectif final :</strong> <div style="margin-top:4px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;white-space:pre-wrap;">'+esc(finalGoal)+'</div></div>'+
+      '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;">'+
+        '<div style="flex:1;min-width:220px;"><strong>🦷 Dents :</strong> <span style="font-family:monospace;">'+esc(teethStr)+'</span></div>'+
+        '<div style="flex:1;min-width:180px;"><strong>🎨 Teinte :</strong> <span style="font-family:monospace;">'+esc(shadeStr)+'</span></div>'+
+      '</div>'+
+      (linksStr?'<div style="margin-top:10px;"><strong>🔗 Solidarisation (bridges) :</strong> <div style="margin-top:4px;font-family:monospace;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;">'+esc(linksStr)+'</div></div>':'')+
     '</div>'+
-    '<div style="margin-bottom:12px;"><strong style="font-size:.78rem;">Type :</strong><div style="font-size:.86rem;background:#f8fafc;padding:8px 12px;border-radius:7px;margin-top:4px;white-space:pre-wrap;">'+esc(o.prosthesis||'—')+'</div></div>'+
-    '<div style="margin-bottom:12px;"><strong style="font-size:.78rem;">Dents :</strong> <span style="font-family:monospace;">'+esc(teethStr)+'</span></div>'+
-    '<div style="margin-bottom:12px;"><strong style="font-size:.78rem;">Teinte :</strong> <span style="font-family:monospace;">'+esc(o.shadeValue||'—')+'</span></div>'+
-    (o.notes?'<div style="margin-bottom:12px;"><strong style="font-size:.78rem;">📝 Notes :</strong><div style="font-size:.84rem;background:#fff7ed;border:1px solid #fed7aa;padding:8px 12px;border-radius:7px;margin-top:4px;white-space:pre-wrap;">'+esc(o.notes)+'</div></div>':'')+
+
+    '<div style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:6px;">📜 Carnet de demandes ('+(o.steps||[]).length+')</div>'+
+    '<div style="margin-bottom:16px;">'+
+      (stepsHtml?stepsHtml:'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;color:#92400e;font-size:.84rem;">Aucune étape enregistrée.</div>')+
+    '</div>'+
+
+    (o.notes?'<div style="margin-bottom:16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;font-size:.84rem;color:#92400e;"><strong>📝 Notes :</strong><div style="margin-top:6px;white-space:pre-wrap;">'+esc(o.notes)+'</div></div>':'')+
+
+    '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:10px;">'+
+      '<div style="font-weight:800;color:#475569;margin-bottom:10px;">✍️ Signature électronique</div>'+
+      '<div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;">'+
+        '<div style="flex:1;min-width:240px;">'+
+          '<div style="font-size:.74rem;color:#64748b;font-weight:700;margin-bottom:6px;">Laboratoire — Signature</div>'+
+          (laboSig?'<img src=\"'+laboSig+'\" alt=\"Signature labo\" style=\"max-width:280px;max-height:80px;border:1px dashed #cbd5e1;border-radius:8px;display:block;\"/>':'<div style=\"color:#94a3b8;font-size:.76rem;background:#fff;border:1px dashed #e2e8f0;border-radius:10px;padding:14px;\">Signature labo non configurée</div>')+
+        '</div>'+
+        '<div style="flex:1;min-width:220px;">'+
+          '<div style="font-size:.74rem;color:#64748b;font-weight:700;margin-bottom:6px;">Cabinet — Signature à réception</div>'+
+          (cabSig?'<img src=\"'+cabSig+'\" alt=\"Signature cabinet\" style=\"max-width:240px;max-height:80px;border:1px dashed #cbd5e1;border-radius:8px;display:block;\"/>':'<div style=\"color:#94a3b8;font-size:.76rem;background:#fff;border:1px dashed #e2e8f0;border-radius:10px;padding:14px;\">Signature cabinet non configurée</div>')+
+          '<div style=\"margin-top:10px;font-size:.74rem;color:#64748b;\">Date de réception : _______________</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
   '</div>';
   document.body.appendChild(overlay);
 }
 
 function _renderFicheBlockCabHTML(s,idx){
-  const stepStatusLbl={pending:'En attente',accepted:'Acceptée',in_progress:'En production',delivered:'Livrée',rejected:'Refusée'};
+  const stepStatusLbl={pending:'Envoyée au labo',accepted:'Prise en charge',in_progress:'En cours de fabrication',delivered:'Livrée',rejected:'Refusée'};
   const stepStatusBg={pending:'#fef3c7',accepted:'#dbeafe',in_progress:'#dbeafe',delivered:'#d1fae5',rejected:'#fce7e7'};
   const stepStatusFg={pending:'#a16207',accepted:'#1d4ed8',in_progress:'#1d4ed8',delivered:'#047857',rejected:'#991b1b'};
   const dateStr=s.requestedAt?new Date(s.requestedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'—';
@@ -1495,7 +1694,7 @@ async function renderOrdersList(useCache){
       if(q){
         el.innerHTML='<div class="empty-state"><div class="empty-icon">🔍</div>Aucune commande ne correspond à « '+esc(q)+' ».<br/><button onclick="document.getElementById(\'orders-search\').value=\'\';renderOrdersList(true);" style="margin-top:10px;background:transparent;border:none;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:.86rem;">Effacer la recherche</button></div>';
       }else if(!list.length){
-        el.innerHTML='<div class="empty-state"><div class="empty-icon">📝</div>Aucune commande envoyée.<br/>Cliquez sur « + Nouvelle commande » pour en créer une.</div>';
+        el.innerHTML='<div class="empty-state empty-state-hero"><div class="empty-icon">📝</div><div style="font-size:1.05rem;font-weight:700;color:var(--ink);margin:12px 0 6px;">Aucune commande en cours</div><p style="margin:0 0 20px;font-size:.9rem;line-height:1.5;">Envoyez une fiche au labo en quelques clics.</p><button type="button" class="portal-btn-new-order" onclick="openPortalTab(\'neworder\')">+ Nouvelle commande</button></div>';
       }else{
         el.innerHTML='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:1rem;font-weight:600;color:var(--ink);margin-bottom:6px;">Toutes vos commandes ont été livrées !</div><div style="font-size:.9rem;color:var(--ink-soft);">Vous les retrouvez dans l\'onglet « Mes bons de livraison ».</div></div>';
       }
@@ -1542,7 +1741,7 @@ function setupTabs(){
       document.getElementById('ptab-neworder').style.display=id==='neworder'?'block':'none';
       document.getElementById('ptab-factures').style.display=id==='factures'?'block':'none';
       document.getElementById('ptab-messages').style.display=id==='messages'?'block':'none';
-      if(id==='neworder')renderOrderForm();
+      if(id==='neworder'){_cabDraftBannerPending=_loadDraft();renderOrderForm();}
       if(id==='orders')renderOrdersList();
       if(id==='messages'){
         // Mark as read
@@ -1579,6 +1778,11 @@ function printBLPortal(blId){
   const nb = bl.nb||1;
   const materiaux = bl.materiaux||'—';
   const ref = bl.prothesisId||bl.trackCode||bl.num;
+  const _sig=(portalData&&portalData.signatures)||{};
+  const _laboImgUrl=_sig.labo&&String(_sig.labo).indexOf('data:image')===0?_sig.labo:'';
+  const _cabImgUrl=_sig.cabinet&&String(_sig.cabinet).indexOf('data:image')===0?_sig.cabinet:'';
+  const laboSigImg=_laboImgUrl?'<div style="margin-top:8px;"><img src="'+_laboImgUrl+'" alt="" style="max-height:72px;max-width:260px;"/></div>':'';
+  const cabSigImg=_cabImgUrl?'<div style="margin-top:8px;"><img src="'+_cabImgUrl+'" alt="" style="max-height:72px;max-width:220px;"/></div>':'';
 
   const html=`<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8"/><title>BL ${esc(bl.num)} — ${esc(patient)}</title>
@@ -1684,8 +1888,8 @@ ${bl.note?'<div style="background:#fff8f5;border:1px solid #f0cfc0;border-radius
   <div class="ce-body" style="margin-top:12px;font-size:8pt;color:#555;">Ce dispositif médical sur mesure est destiné exclusivement au patient mentionné ci-dessus sur prescription du praticien, et n'est pas destiné à la vente au public.</div>
 </div>
 <div class="sig-area">
-  <div class="sig-box"><div class="sig-label">Laboratoire — Signature & Cachet</div><div class="sig-detail">${esc(labo.raisonSociale||portalData.laboName||'')}<br/>${labo.directeur?esc(labo.directeur):''}</div></div>
-  <div class="sig-box"><div class="sig-label">Cabinet — Signature à la réception</div><div class="sig-detail">${esc(cab.name)}<br/>Date de réception : _______________</div></div>
+  <div class="sig-box"><div class="sig-label">Laboratoire — Signature & Cachet</div><div class="sig-detail">${esc(labo.raisonSociale||portalData.laboName||'')}<br/>${labo.directeur?esc(labo.directeur):''}${laboSigImg}</div></div>
+  <div class="sig-box"><div class="sig-label">Cabinet — Signature à la réception</div><div class="sig-detail">${esc(cab.name)}<br/>Date de réception : _______________${cabSigImg}</div></div>
 </div>
 <div class="footer">${esc(labo.raisonSociale||portalData.laboName||'')} ${labo.siret?'— SIRET : '+esc(labo.siret):''} ${labo.adresse?'— '+esc(labo.adresse):''} — EU MDR 2017/745</div>
 </div></body></html>`;
@@ -1708,12 +1912,21 @@ function printFacturePortal(facId){
   const echFormatted=ech.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
   function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
   function fmtC(v){return (parseFloat(v)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+'\u00a0€';}
-  const linesHTML=(fac.lines||[]).map(function(l){
-    const pu=parseFloat(l.prix)||0;const qty=parseFloat(l.qty)||1;
+  var _rawLines=(fac.lines||[]).map(function(l){
+    return {label:l.label||'',ref:l.ref||null,patient:l.patient||'',qty:parseFloat(l.qty)||1,pu:parseFloat(l.prix)||0};
+  });
+  var _sumQtyPu=_rawLines.reduce(function(s,l){return s+(l.qty*(l.pu||0));},0);
+  var _docTotal=parseFloat(fac.total)||0;
+  var _puIsLineTotal=(_docTotal>0 && _sumQtyPu>_docTotal*1.5);
+  const linesHTML=_rawLines.map(function(l){
+    var qty=l.qty||1;
+    var pu=l.pu||0;
+    var displayPu=_puIsLineTotal ? (qty?pu/qty:pu) : pu;
+    var lineTotal=_puIsLineTotal ? pu : (qty*pu);
     return '<tr>'+
       '<td>'+e(l.label||'')+(l.patient?'<br/><span style="font-size:7.5pt;color:#475569;font-style:italic;">'+e(l.patient)+'</span>':'')+(l.ref?'<br/><span style="font-size:7.5pt;color:#475569;">Réf. '+e(l.ref)+'</span>':'')+'</td>'+
       '<td style="text-align:center;">'+qty+'</td>'+
-      (pu?'<td style="text-align:right;">'+fmtC(pu)+'</td><td style="text-align:right;font-weight:700;">'+fmtC(qty*pu)+'</td>':'<td colspan="2" style="text-align:right;font-weight:700;">'+fmtC(qty*(pu||fac.total/(fac.lines.length||1)))+'</td>')+
+      '<td style="text-align:right;">'+fmtC(displayPu)+'</td><td style="text-align:right;font-weight:700;">'+fmtC(lineTotal)+'</td>'+
     '</tr>';
   }).join('');
   const bdlRefsHtml=(fac.bdlRefs&&fac.bdlRefs.length)?'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:8px 12px;margin-bottom:14px;font-size:8.5pt;color:#1d4ed8;"><strong>Bons de livraison associés :</strong> '+e(fac.bdlRefs.join(', '))+'</div>':'';

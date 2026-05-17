@@ -9,12 +9,33 @@
 
 [[redirects]]
   from = "/login"
-  to = "/app.html"
+  to = "/connexion.html"
+  status = 200
+
+[[redirects]]
+  from = "/connexion"
+  to = "/connexion.html"
+  status = 200
+
+[[redirects]]
+  from = "/cabinet"
+  to = "/cabinet.html"
   status = 200
 
 [[redirects]]
   from = "/signup"
   to = "/app.html?signup=1"
+  status = 200
+
+# Lien direct console admin (après connexion : même compte Labosync si email dans ADMIN_EMAILS)
+[[redirects]]
+  from = "/admin"
+  to = "/app.html?admin=1"
+  status = 200
+
+[[redirects]]
+  from = "/mobile"
+  to = "/labo-mobile.html"
   status = 200
 
 [[headers]]
@@ -24,7 +45,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-    Content-Security-Policy = "default-src 'self' https: data: blob: 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
+    Content-Security-Policy = "default-src 'self' https: data: blob: 'unsafe-inline'; script-src-attr 'unsafe-inline'; worker-src 'self' https://cdnjs.cloudflare.com blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
 
 [[headers]]
   for = "/manifest.json"

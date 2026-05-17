@@ -1,0 +1,186 @@
+
+/* ── Livraison : date demandée / date labo / créneau coursier ── */
+var LAB_DELIVERY_SLOTS={9:'9h coursier',12:'12h coursier',18:'18h coursier'};
+function _labSlotHour(slot){var h=parseInt(slot,10);return h===9||h===18?h:12;}
+function migrateJobDelivery(j){
+  if(!j)return;
+  if(!j.labDeliveryDate&&j.deliveryDate)j.labDeliveryDate=j.deliveryDate;
+  if(!j.requestedDeliveryDate)j.requestedDeliveryDate=j.labDeliveryDate||j.deliveryDate||'';
+  if(!j.labDeliverySlot)j.labDeliverySlot='12';
+  j.deliveryDate=j.labDeliveryDate||j.deliveryDate||'';
+  if(!j.attachments)j.attachments=[];
+}
+function migrateAllJobsDelivery(){jobs.forEach(migrateJobDelivery);if(typeof queue!=='undefined'&&queue)queue.forEach(migrateJobDelivery);}
+function _jobLabDeliveryDate(j){migrateJobDelivery(j);return j.labDeliveryDate||'';}
+function _jobRequestedDeliveryDate(j){migrateJobDelivery(j);return j.requestedDeliveryDate||'';}
+function _fmtDeliverySlot(slot){return LAB_DELIVERY_SLOTS[slot]||LAB_DELIVERY_SLOTS['12'];}
+function _suggestLabDateFromRequested(iso){
+  if(!iso)return '';
+  var d=new Date(iso+'T12:00:00');d.setDate(d.getDate()-1);return fmtISO(d);
+}
+function _deliveryDeadline(j){
+  migrateJobDelivery(j);
+  var d=j.labDeliveryDate;if(!d)return null;
+  return new Date(d+'T'+String(_labSlotHour(j.labDeliverySlot)).padStart(2,'0')+':00:00');
+}
+function _isJobLate(j){
+  if(!j||j.urgent)return false;
+  var dl=_deliveryDeadline(j);if(!dl)return false;
+  if(typeof bdl!=='undefined'&&bdl&&bdl.find(function(b){return b.jobId===j.id;}))return false;
+  return Date.now()>dl.getTime();
+}
+function _fmtJobDeliveryLine(j){
+  migrateJobDelivery(j);
+  var lab=_jobLabDeliveryDate(j),req=_jobRequestedDeliveryDate(j),slot=_fmtDeliverySlot(j.labDeliverySlot);
+  if(!lab&&!req)return '';
+  var parts=[];
+  if(lab)parts.push('📦 '+new Date(lab+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' · '+slot);
+  if(req&&req!==lab)parts.push('dem. '+new Date(req+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'}));
+  return parts.join(' · ');
+}
+function readSaisieDeliveryFields(){
+  return{requestedDeliveryDate:document.getElementById('saisie-ireq-delivery')?.value||'',labDeliveryDate:document.getElementById('saisie-ilab-delivery')?.value||'',labDeliverySlot:document.getElementById('saisie-idelivery-slot')?.value||'12'};
+}
+function applyDeliveryFieldsToObject(obj,fields){
+  obj.requestedDeliveryDate=fields.requestedDeliveryDate||'';
+  obj.labDeliveryDate=fields.labDeliveryDate||fields.requestedDeliveryDate||'';
+  obj.labDeliverySlot=fields.labDeliverySlot||'12';
+  obj.deliveryDate=obj.labDeliveryDate;return obj;
+}
+function resetSaisieDeliveryFields(){
+  ['saisie-ireq-delivery','saisie-ilab-delivery'].forEach(function(id){var el=document.getElementById(id);if(el){el.value='';delete el.dataset.userSet;}});
+  var slot=document.getElementById('saisie-idelivery-slot');if(slot)slot.value='12';
+}
+function onSaisieRequestedDateChange(){
+  var req=document.getElementById('saisie-ireq-delivery'),lab=document.getElementById('saisie-ilab-delivery');
+  if(!req||!lab||lab.dataset.userSet)return;
+  if(req.value)lab.value=_suggestLabDateFromRequested(req.value);
+}
+function onSaisieLabDateChange(){var lab=document.getElementById('saisie-ilab-delivery');if(lab&&lab.value)lab.dataset.userSet='1';}
+function _deliverySlotOptionsHtml(cur){
+  return [['9','9h — coursier'],['12','12h — coursier'],['18','18h — coursier']].map(function(s){
+    return '<option value="'+s[0]+'"'+(String(cur||'12')===s[0]?' selected':'')+'>'+s[1]+'</option>';
+  }).join('');
+}
+function ensureJobAttachments(job){migrateJobDelivery(job);if(!job.attachments)job.attachments=[];}
+function _compressImageDataUrl(dataUrl,cb){
+  var img=new Image();
+  img.onload=function(){
+    var maxW=1200,w=img.width,h=img.height;
+    if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+    var c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    cb(c.toDataURL('image/jpeg',0.72));
+  };
+  img.onerror=function(){cb(dataUrl);};
+  img.src=dataUrl;
+}
+function addJobAttachmentFromFile(jobId,file,type,cb){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job||!file)return;
+  if(file.size>4*1024*1024){alert('Fichier trop volumineux (max 4 Mo).');return;}
+  var reader=new FileReader();
+  reader.onload=function(){
+    var save=function(dataUrl){
+      ensureJobAttachments(job);
+      job.attachments.push({id:'att'+Date.now(),type:type,name:file.name||'document',mime:file.type||'application/octet-stream',data:dataUrl,createdAt:new Date().toISOString()});
+      saveJobs();if(cb)cb();
+    };
+    if(file.type&&file.type.indexOf('image/')===0)_compressImageDataUrl(reader.result,save);
+    else save(reader.result);
+  };
+  reader.readAsDataURL(file);
+}
+function removeJobAttachment(jobId,attId){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job||!job.attachments)return;
+  job.attachments=job.attachments.filter(function(a){return a.id!==attId;});
+  saveJobs();
+}
+function generateLabSheetHTML(job){
+  migrateJobDelivery(job);
+  var cab=job.cabinet?cabinets.find(function(c){return c.id===job.cabinet;}):null;
+  var labName=localStorage.getItem('lb_name')||'Laboratoire';
+  var deliv=_fmtJobDeliveryLine(job)||'—';
+  var tasksRows='';
+  if(job.tasks&&job.tasks.length){
+    tasksRows=job.tasks.map(function(t){
+      return '<tr><td style="padding:6px 8px;border-bottom:1px solid #e8e0d8;">'+escH2(t.label)+'</td><td style="padding:6px 8px;border-bottom:1px solid #e8e0d8;">'+escH2((typeof getTech==='function'?getTech(t.tech).label:t.tech)||'')+'</td><td style="padding:6px 8px;border-bottom:1px solid #e8e0d8;">'+(t.dueDate?fmtL(t.dueDate):'—')+'</td><td style="padding:6px 8px;border-bottom:1px solid #e8e0d8;">'+(t.done?'✓':'')+'</td></tr>';
+    }).join('');
+  }
+  var itemsLbl=(typeof getJobTypeLabel==='function')?getJobTypeLabel(job):(job.type||'');
+  var reqD=_jobRequestedDeliveryDate(job);
+  return '<div class="print-wrap" style="font-family:Georgia,serif;max-width:720px;margin:0 auto;padding:24px;color:#1e293b;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #2a6049;padding-bottom:12px;margin-bottom:18px;">'+
+      '<div><div style="font-size:1.35rem;font-weight:700;color:#2a6049;">'+escH2(labName)+'</div><div style="font-size:.85rem;color:#64748b;margin-top:4px;">Fiche de travail — laboratoire</div></div>'+
+      '<div style="text-align:right;font-size:.8rem;color:#64748b;">Généré le '+new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})+'</div>'+
+    '</div>'+
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:.92rem;">'+
+      '<tr><td style="padding:6px 0;color:#64748b;width:140px;">Code patient</td><td style="font-weight:700;font-size:1.1rem;">'+escH2(job.patient)+(job.urgent?' <span style="color:#dc2626;">🔴 URGENT</span>':'')+'</td></tr>'+
+      '<tr><td style="padding:6px 0;color:#64748b;">Type</td><td><strong>'+escH2(itemsLbl)+'</strong>'+(job.nb>1?' × '+job.nb:'')+'</td></tr>'+
+      (cab?'<tr><td style="padding:6px 0;color:#64748b;">Cabinet</td><td>'+escH2(cab.name)+'</td></tr>':'')+
+      (job.prothesisId?'<tr><td style="padding:6px 0;color:#64748b;">Réf. prothèse</td><td>'+escH2(job.prothesisId)+'</td></tr>':'')+
+      '<tr><td style="padding:6px 0;color:#64748b;">Livraison labo</td><td style="color:#2a6049;font-weight:600;">'+escH2(deliv)+'</td></tr>'+
+      (reqD&&reqD!==_jobLabDeliveryDate(j)?'<tr><td style="padding:6px 0;color:#64748b;">Date demandée</td><td>'+new Date(reqD+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})+'</td></tr>':'')+
+    '</table>'+
+    (job.note?'<div style="background:#fef9c3;border-left:3px solid #facc15;padding:12px 14px;margin-bottom:16px;white-space:pre-wrap;font-size:.9rem;line-height:1.55;"><strong>Instructions</strong><br/>'+escH2(job.note)+'</div>':'')+
+    (tasksRows?'<div style="margin-top:12px;"><div style="font-size:.78rem;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:8px;">Étapes</div><table style="width:100%;border-collapse:collapse;font-size:.85rem;"><thead><tr style="background:#f1f5f9;"><th style="text-align:left;padding:6px 8px;">Étape</th><th style="text-align:left;padding:6px 8px;">Technicien</th><th style="text-align:left;padding:6px 8px;">Date</th><th style="padding:6px 8px;">Fait</th></tr></thead><tbody>'+tasksRows+'</tbody></table></div>':'')+
+    '<div style="margin-top:28px;padding-top:12px;border-top:1px dashed #cbd5e1;font-size:.72rem;color:#94a3b8;">Document interne — '+escH2(job.trackCode||job.id)+'</div>'+
+  '</div>';
+}
+function printJobLabSheet(jobId){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job){alert('Travail introuvable');return;}
+  var html=generateLabSheetHTML(job);
+  var w=window.open('','_blank','width=900,height=700');
+  if(!w){alert('Autorisez les pop-ups pour imprimer la fiche.');return;}
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fiche labo</title><style>body{margin:0;padding:16px;}@media print{body{padding:0;}}</style></head><body>'+html+'</body></html>');
+  w.document.close();w.focus();
+  setTimeout(function(){w.print();},300);
+}
+function saveGeneratedLabSheet(jobId){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job)return;
+  var html=generateLabSheetHTML(job);
+  ensureJobAttachments(job);
+  job.attachments=job.attachments.filter(function(a){return !(a.type==='lab_sheet'&&a.autoGenerated);});
+  job.attachments.push({id:'ls'+Date.now(),type:'lab_sheet',name:'Fiche labo — '+job.patient+'.html',mime:'text/html',html:html,autoGenerated:true,createdAt:new Date().toISOString()});
+  saveJobs();
+  printJobLabSheet(jobId);
+}
+function viewJobAttachment(jobId,attId){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job)return;
+  var att=(job.attachments||[]).find(function(a){return a.id===attId;});
+  if(!att)return;
+  var w=window.open('','_blank');
+  if(!w)return;
+  if(att.html){w.document.write(att.html);w.document.close();return;}
+  if(att.data&&att.mime&&att.mime.indexOf('image/')===0){
+    w.document.write('<html><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111;"><img src="'+att.data+'" style="max-width:100%;max-height:100vh;"/></body></html>');
+    w.document.close();return;
+  }
+  if(att.data)w.location.href=att.data;
+}
+function _renderJobAttachmentsSection(jobId){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job)return '';
+  ensureJobAttachments(job);
+  var list=job.attachments.length?job.attachments.map(function(a){
+    var lbl=a.type==='prescription'?'📄 Prescription':(a.type==='lab_sheet'?'📋 Fiche labo':'📎 '+escH2(a.name));
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;margin-bottom:6px;">'+
+      '<span style="flex:1;font-size:.8rem;">'+lbl+'</span>'+
+      '<button type="button" onclick="viewJobAttachment(\''+jobId+'\',\''+a.id+'\')" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:5px;padding:4px 10px;font-size:.72rem;cursor:pointer;">Voir</button>'+
+      '<button type="button" onclick="removeJobAttachment(\''+jobId+'\',\''+a.id+'\');editJob(\''+jobId+'\')" style="background:none;border:none;color:#c0392b;cursor:pointer;font-size:.9rem;">×</button>'+
+    '</div>';
+  }).join(''):'<div style="font-size:.78rem;color:#94a3b8;font-style:italic;margin-bottom:8px;">Aucune pièce jointe</div>';
+  return '<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e2e8f0;">'+
+    '<div style="font-size:.74rem;font-weight:600;color:#64748b;margin-bottom:8px;">📎 Documents du dossier</div>'+
+    list+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">'+
+      '<label style="background:#fff;border:1.5px solid #cbd5e1;border-radius:7px;padding:8px 12px;font-size:.78rem;cursor:pointer;font-weight:600;color:#475569;">📷 Scanner prescription<input type="file" accept="image/*,.pdf" style="display:none;" onchange="if(this.files[0]){addJobAttachmentFromFile(\''+jobId+'\',this.files[0],\'prescription\',function(){editJob(\''+jobId+'\');});this.value=\'\';}"/></label>'+
+      '<button type="button" onclick="saveGeneratedLabSheet(\''+jobId+'\')" style="background:#2a6049;color:#fff;border:none;border-radius:7px;padding:8px 14px;font-size:.78rem;font-weight:600;cursor:pointer;">📋 Générer fiche labo</button>'+
+    '</div>'+
+  '</div>';
+}
+migrateAllJobsDelivery();

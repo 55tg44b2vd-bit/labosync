@@ -1,0 +1,100 @@
+// ── Mode opérations (volume élevé) ──
+var LB_OPS_PAGE=50;
+var _opsLimits={jobs:LB_OPS_PAGE,livrPret:40,livrCours:25,livrBlP:50,livrBlD:30};
+function _resetOpsLimits(){_opsLimits={jobs:LB_OPS_PAGE,livrPret:40,livrCours:25,livrBlP:50,livrBlD:30};}
+function _opsLoadMore(key,step){
+  var n=_opsLimits[key]||LB_OPS_PAGE;
+  _opsLimits[key]=n+(step||LB_OPS_PAGE);
+  if(key==='jobs')renderTable();else renderLivraisons();
+}
+function _jobRefDate(j){
+  if(j.deliveryDate)return new Date(j.deliveryDate+'T12:00:00');
+  if(j.tasks&&j.tasks.length){
+    var pend=j.tasks.filter(function(t){return !t.done&&t.dueDate;});
+    if(pend.length)return new Date(Math.min.apply(null,pend.map(function(t){return new Date(t.dueDate).getTime();})));
+    var all=j.tasks.filter(function(t){return t.dueDate;});
+    if(all.length)return new Date(Math.max.apply(null,all.map(function(t){return new Date(t.dueDate).getTime();})));
+  }
+  return j.createdAt?new Date(j.createdAt):new Date();
+}
+function _sameDay(a,b){
+  return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+}
+function _inWeek(d,today){
+  var start=new Date(today);start.setDate(start.getDate()-((start.getDay()+6)%7));
+  var end=new Date(start);end.setDate(end.getDate()+6);end.setHours(23,59,59,999);
+  return d>=start&&d<=end;
+}
+function _jobInActionMode(j){
+  if(getMissingItems(j).some(function(it){return !it.resolved;}))return true;
+  if(j.urgent)return true;
+  if(j.tasks&&j.tasks.length)return !isJobComplete(j);
+  if(j.deliveryDate)return false;
+  if(bdl.find(function(b){return b.jobId===j.id;}))return false;
+  return true;
+}
+function _jobMatchesSearch(j,q){
+  if(!q)return true;
+  var hay=[j.patient,j.note,j.trackCode,j.prothesisId,getJobTypeLabel(j)].join(' ').toLowerCase();
+  return hay.includes(q);
+}
+function _getFilteredJobs(){
+  var q=(document.getElementById('jobs-search')?.value||'').toLowerCase().trim();
+  var mode=document.getElementById('jobs-filter-mode')?.value||'action';
+  var cab=document.getElementById('jobs-filter-cab')?.value||'';
+  var today=new Date();today.setHours(0,0,0,0);
+  var list=jobs.filter(function(j){
+    if(cab&&j.cabinet!==cab)return false;
+    if(!_jobMatchesSearch(j,q))return false;
+    if(mode==='all')return true;
+    if(mode==='action')return _jobInActionMode(j);
+    var ref=_jobRefDate(j);
+    if(mode==='today')return _sameDay(ref,today);
+    if(mode==='week')return _inWeek(ref,today);
+    return true;
+  });
+  list.sort(function(a,b){return _jobRefDate(b)-_jobRefDate(a);});
+  return list;
+}
+function _fmtJobGroupLabel(d){
+  var today=new Date();today.setHours(0,0,0,0);
+  var yest=new Date(today);yest.setDate(yest.getDate()-1);
+  if(_sameDay(d,today))return "Aujourd'hui";
+  if(_sameDay(d,yest))return 'Hier';
+  return d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+}
+function syncJobsFilterCab(){
+  var sel=document.getElementById('jobs-filter-cab');if(!sel)return;
+  var cur=sel.value;
+  sel.innerHTML='<option value="">Tous les cabinets</option>'+
+    cabinets.map(function(c){return '<option value="'+c.id+'"'+(c.id===cur?' selected':'')+'>'+c.name+'</option>';}).join('');
+}
+function _updateJobsFilterSummary(shown,total){
+  var el=document.getElementById('jobs-filter-summary');if(!el)return;
+  if(total===shown)el.textContent=shown?shown+' affiché'+(shown>1?'s':''):'';
+  else el.textContent=shown+' / '+total+' travaux';
+}
+
+// Rendu de la table des travaux (avec rowspan par job)
+function renderTable(){
+  const tbody=document.getElementById('jtbody');
+  const cntEl=document.getElementById('jobs-cnt-saisie');
+  const filtered=_getFilteredJobs();
+  const limit=_opsLimits.jobs||LB_OPS_PAGE;
+  const slice=filtered.slice(0,limit);
+  if(cntEl)cntEl.textContent=filtered.length===jobs.length?String(jobs.length):filtered.length+'/'+jobs.length;
+  _updateJobsFilterSummary(slice.length,filtered.length);
+  const today=new Date();today.setHours(0,0,0,0);
+  if(!jobs.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#a09080;font-style:italic;">'+t('empty.jobs')+'</td></tr>';return;}
+  if(!filtered.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#a09080;font-style:italic;">Aucun travail pour ce filtre. Essayez « Tout voir » ou élargissez la recherche.</td></tr>';
+    return;
+  }
+  const rows=[];
+  var lastGroup='';
+  slice.forEach(j=>{
+    var gLabel=_fmtJobGroupLabel(_jobRefDate(j));
+    if(gLabel!==lastGroup){
+      lastGroup=gLabel;
+      rows.push('<tr class="job-group-hd"><td colspan="6">'+gLabel+'</td></tr>');
+    }

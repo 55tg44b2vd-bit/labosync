@@ -10,6 +10,7 @@
 <link rel="manifest" href="/manifest.json"/>
 <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="/icon.svg"/>
+<script src="/lb-env-routing.js"></script>
 <title>Labosync Mobile</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -270,7 +271,24 @@ input,select,textarea{font-size:16px;font-family:inherit;}
         </div>
       </div>
       <button class="btn btn-primary" id="btn-login">Se connecter</button>
+      <div style="text-align:center;margin-top:12px;">
+        <button type="button" id="btn-mob-forgot" style="background:none;border:none;color:var(--accent);font-size:.8rem;font-weight:600;cursor:pointer;padding:0;font-family:inherit;">Mot de passe oublié ?</button>
+      </div>
       <div id="auth-err"></div>
+    </div>
+    <div id="auth-forgot-form-m" style="display:none;">
+      <p style="font-size:.78rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.45;">Indiquez votre e-mail : nous vous enverrons un lien pour choisir un nouveau mot de passe.</p>
+      <div class="field"><label>Email</label><input type="email" id="inp-forgot-email" placeholder="email@labo.fr" autocomplete="email"/></div>
+      <button class="btn btn-primary" type="button" id="btn-forgot-send">Envoyer le lien</button>
+      <div style="text-align:center;margin-top:14px;">
+        <button type="button" id="btn-forgot-back-m" style="background:none;border:none;color:var(--ink-soft);font-size:.78rem;cursor:pointer;padding:0;font-family:inherit;">← Retour à la connexion</button>
+      </div>
+    </div>
+    <div id="auth-recovery-form-m" style="display:none;">
+      <p style="font-size:.78rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.45;">Choisissez un nouveau mot de passe pour votre compte.</p>
+      <div class="field"><label>Nouveau mot de passe</label><input type="password" id="inp-recovery-pass" placeholder="Minimum 6 caractères" autocomplete="new-password"/></div>
+      <div class="field"><label>Confirmer</label><input type="password" id="inp-recovery-pass2" placeholder="••••••••" autocomplete="new-password"/></div>
+      <button class="btn btn-primary" type="button" id="btn-recovery-save">Enregistrer le mot de passe</button>
     </div>
   </div>
 </div>
@@ -488,7 +506,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
   <nav class="bottom-nav">
     <button class="nav-item on" data-view="home"><span class="nav-icon">🏠</span>Accueil</button>
     <button class="nav-item" data-view="travaux" style="position:relative;"><span class="nav-icon">🦷</span>Travaux<span id="jobs-nav-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 20px);background:var(--accent);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;"></span></button>
-    <button class="nav-item" data-view="livraisons" style="position:relative;"><span class="nav-icon">📦</span>Livrer<span id="livr-nav-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 20px);background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;"></span></button>
+    <button class="nav-item" data-view="livraisons" style="position:relative;"><span class="nav-icon">📦</span>Livraisons<span id="livr-nav-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 20px);background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;"></span></button>
     <button class="nav-item" data-view="docs" style="position:relative;"><span class="nav-icon">💰</span>Factures<span id="docs-nav-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 20px);background:var(--orange);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;"></span></button>
     <button class="nav-item" data-view="messages" style="position:relative;"><span class="nav-icon">💬</span>Messages<span id="msg-nav-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 20px);background:var(--green);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;"></span></button>
   </nav>
@@ -542,9 +560,7 @@ function reportClientError(payload){
   fetch('/.netlify/functions/log-client-error',{method:'POST',headers:{'Content-Type':'application/json'},body:body}).catch(function(){});
 }
 function _debugAuditLogMobile(hypothesisId,message,data){
-  // #region agent log
-  fetch('http://127.0.0.1:7687/ingest/aea19bce-9029-4481-9962-13d314321f91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f23a1'},body:JSON.stringify({sessionId:'5f23a1',runId:'site-audit-baseline',hypothesisId:hypothesisId,location:'labo-mobile.html',message:message,data:data||{},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
+  // debug instrumentation removed
 }
 window.addEventListener('error',function(ev){
   reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:ev&&ev.error&&ev.error.stack?ev.error.stack:''});
@@ -647,16 +663,146 @@ async function doLogin(){
   }
 }
 
-function _doLogout(){
-  sbClient.auth.signOut();
-  currentUser=null;_token='';
-  localStorage.removeItem('lb_env');
-  document.getElementById('app').style.display='none';
-  document.getElementById('env-selector').classList.remove('on');
-  document.getElementById('auth-screen').style.display='flex';
-  stopPoll();
+function _purgeLaboStorageLogoutMobile(){
+  try{
+    var lang=localStorage.getItem('lb_lang');
+    var lastEm=localStorage.getItem('lb_last_email');
+    var lastMob=localStorage.getItem('lb_last_email_mobile');
+    Object.keys(localStorage).forEach(function(k){
+      if(k.indexOf('lb_')===0&&k.indexOf('lb_onb_')!==0)localStorage.removeItem(k);
+      if(k.indexOf('chat_seen_')===0)localStorage.removeItem(k);
+    });
+    if(lang)localStorage.setItem('lb_lang',lang);
+    if(lastEm)localStorage.setItem('lb_last_email',lastEm);
+    if(lastMob)localStorage.setItem('lb_last_email_mobile',lastMob);
+  }catch(e){}
 }
 
+function _doLogout(){
+  _purgeLaboStorageLogoutMobile();
+  localStorage.removeItem('lb_env');
+  stopPoll();
+  sbClient.auth.signOut().finally(function(){
+    currentUser=null;_token='';_mobileInitDone=false;_initDoneByIIFE=false;
+    window.location.reload();
+  });
+}
+
+function lbMobilePwdResetRedirectUrl(){
+  try{return (window.location.origin||'')+'/labo-mobile.html';}catch(e){return '';}
+}
+function showMobileAuthMode(mode){
+  var login=document.getElementById('auth-login-form');
+  var forgot=document.getElementById('auth-forgot-form-m');
+  var recovery=document.getElementById('auth-recovery-form-m');
+  var err=document.getElementById('auth-err');
+  if(login)login.style.display=(mode==='login')?'block':'none';
+  if(forgot)forgot.style.display=(mode==='forgot')?'block':'none';
+  if(recovery)recovery.style.display=(mode==='recovery')?'block':'none';
+  if(err){err.textContent='';err.style.color='';}
+}
+document.getElementById('btn-mob-forgot').addEventListener('click',function(){
+  var em=document.getElementById('inp-email');
+  var fe=document.getElementById('inp-forgot-email');
+  showMobileAuthMode('forgot');
+  if(fe&&em)fe.value=(em.value||'').trim();
+  if(fe)fe.focus();
+});
+document.getElementById('btn-forgot-back-m').addEventListener('click',function(){showMobileAuthMode('login');});
+document.getElementById('btn-forgot-send').addEventListener('click',async function(){
+  var fe=document.getElementById('inp-forgot-email');
+  var err=document.getElementById('auth-err');
+  var email=(fe&&fe.value||'').trim();
+  if(!email){if(err)err.textContent='Renseignez votre e-mail.';return;}
+  if(err)err.textContent='';
+  this.disabled=true;
+  var prev=this.textContent;
+  this.textContent='Envoi…';
+  try{
+    var res=await sbClient.auth.resetPasswordForEmail(email,{redirectTo:lbMobilePwdResetRedirectUrl()});
+    if(res.error){if(err)err.textContent=res.error.message;}
+    else{
+      showMobileAuthMode('login');
+      if(err){err.textContent='Si cette adresse correspond à un compte, un e-mail avec un lien a été envoyé.';err.style.color='#059669';}
+    }
+  }catch(e){
+    if(err)err.textContent=(e&&e.message)?e.message:'Erreur réseau';
+  }finally{
+    this.disabled=false;
+    this.textContent=prev;
+  }
+});
+document.getElementById('btn-recovery-save').addEventListener('click',async function(){
+  var a=document.getElementById('inp-recovery-pass');
+  var b=document.getElementById('inp-recovery-pass2');
+  var err=document.getElementById('auth-err');
+  var p1=(a&&a.value||'').trim();
+  var p2=(b&&b.value||'').trim();
+  if(!p1||!p2){if(err)err.textContent='Remplissez tous les champs.';return;}
+  if(p1.length<6){if(err)err.textContent='Au moins 6 caractères.';return;}
+  if(p1!==p2){if(err)err.textContent='Les mots de passe ne correspondent pas.';return;}
+  if(err)err.textContent='';
+  this.disabled=true;
+  var prev=this.textContent;
+  this.textContent='Enregistrement…';
+  try{
+    var res=await sbClient.auth.updateUser({password:p1});
+    if(res.error){if(err)err.textContent=res.error.message;}
+    else{
+      _mobilePwdRecovery=false;
+      if(err){err.textContent='Mot de passe mis à jour. Redirection…';err.style.color='#059669';}
+      try{location.replace((location.origin||'')+(location.pathname||'/'));}catch(e2){location.reload();}
+    }
+  }catch(e){
+    if(err)err.textContent=(e&&e.message)?e.message:'Erreur';
+  }finally{
+    this.disabled=false;
+    this.textContent=prev;
+  }
+});
+
+function openPasswordSheet(){
+  if(document.getElementById('pwd-sheet'))return;
+  closeProfileSheet();
+  var wrap=document.createElement('div');
+  wrap.id='pwd-sheet';
+  wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5600;display:flex;align-items:flex-end;justify-content:center;';
+  wrap.innerHTML=
+    '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:20px 16px calc(24px + env(safe-area-inset-bottom));max-height:85vh;overflow-y:auto;">'+
+      '<div style="font-weight:700;font-size:1.05rem;margin-bottom:6px;">Mot de passe du compte</div>'+
+      '<p style="font-size:.78rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.45;">Nouveau mot de passe pour vous connecter à Labosync.</p>'+
+      '<div class="field"><label>Nouveau mot de passe</label><input type="password" id="pwd-sheet-a" autocomplete="new-password" placeholder="Minimum 6 caractères"/></div>'+
+      '<div class="field"><label>Confirmer</label><input type="password" id="pwd-sheet-b" autocomplete="new-password" placeholder="••••••••"/></div>'+
+      '<div id="pwd-sheet-msg" style="font-size:.78rem;min-height:20px;margin-bottom:10px;"></div>'+
+      '<button type="button" class="btn btn-primary" id="pwd-sheet-save" style="width:100%;">Enregistrer</button>'+
+      '<button type="button" style="width:100%;margin-top:10px;background:none;border:none;color:var(--ink-soft);font-size:.82rem;cursor:pointer;padding:10px;font-family:inherit;" id="pwd-sheet-close">Annuler</button>'+
+    '</div>';
+  document.body.appendChild(wrap);
+  var msgEl=document.getElementById('pwd-sheet-msg');
+  function closePwd(){var p=document.getElementById('pwd-sheet');if(p)p.remove();}
+  document.getElementById('pwd-sheet-close').addEventListener('click',closePwd);
+  wrap.addEventListener('click',function(e){if(e.target===wrap)closePwd();});
+  document.getElementById('pwd-sheet-save').addEventListener('click',async function(){
+    var a=document.getElementById('pwd-sheet-a');
+    var b=document.getElementById('pwd-sheet-b');
+    var p1=(a&&a.value||'').trim();
+    var p2=(b&&b.value||'').trim();
+    if(!p1||!p2){if(msgEl)msgEl.textContent='Remplissez les champs.';return;}
+    if(p1.length<6){if(msgEl)msgEl.textContent='Au moins 6 caractères.';return;}
+    if(p1!==p2){if(msgEl)msgEl.textContent='Les mots de passe ne correspondent pas.';return;}
+    if(msgEl)msgEl.textContent='';
+    this.disabled=true;
+    try{
+      var res=await sbClient.auth.updateUser({password:p1});
+      if(res.error){if(msgEl){msgEl.style.color='var(--red)';msgEl.textContent=res.error.message;}}
+      else{toast('Mot de passe enregistré','#059669');closePwd();}
+    }catch(e){
+      if(msgEl){msgEl.style.color='var(--red)';msgEl.textContent=(e&&e.message)?e.message:'Erreur';}
+    }finally{
+      this.disabled=false;
+    }
+  });
+}
 /* Bottom-sheet profil/menu — accès aux réglages, mode desktop, déconnexion */
 function openProfileSheet(){
   if(document.getElementById('profile-sheet'))return;
@@ -681,14 +827,22 @@ function openProfileSheet(){
         '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🏥</span>'+
         '<span style="font-size:.94rem;font-weight:500;">Mes cabinets</span>'+
       '</button>'+
-      '<button class="ps-item" onclick="closeProfileSheet();var cab=cabinets&&cabinets[0];if(cab){showView(\'cabinets\');}" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
+      '<button class="ps-item" onclick="closeProfileSheet();showView(\'home\');" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
         '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">📊</span>'+
-        '<span style="font-size:.94rem;font-weight:500;">Statistiques</span>'+
+        '<span style="font-size:.94rem;font-weight:500;">Résumé du jour</span>'+
+      '</button>'+
+      '<button class="ps-item" onclick="closeProfileSheet();openStripeSheet();" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
+        '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">💳</span>'+
+        '<span style="font-size:.94rem;font-weight:500;">Stripe — paiements en ligne</span>'+
+      '</button>'+
+      '<button class="ps-item" onclick="openPasswordSheet();" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
+        '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🔑</span>'+
+        '<span style="font-size:.94rem;font-weight:500;">Changer le mot de passe</span>'+
       '</button>'+
       '<div style="height:1px;background:var(--border);margin:8px 6px;"></div>'+
       '<button class="ps-item" onclick="closeProfileSheet();localStorage.setItem(\'lb_env\',\'desktop\');window.location.href=\'app.html\';" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
         '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🖥️</span>'+
-        '<span style="font-size:.94rem;font-weight:500;">Passer en mode bureau</span>'+
+        '<span style="font-size:.94rem;font-weight:500;">Réglages complets (bureau)</span>'+
       '</button>'+
       '<button class="ps-item" onclick="closeProfileSheet();window.open(\'confidentialite.html\',\'_blank\');" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
         '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🛡️</span>'+
@@ -705,6 +859,109 @@ function openProfileSheet(){
 }
 function closeProfileSheet(){var s=document.getElementById('profile-sheet');if(s)s.remove();}
 
+function mobileStripeHeaders(){
+  var h={'Content-Type':'application/json'};
+  if(_token)h.Authorization='Bearer '+_token;
+  return h;
+}
+async function refreshStripeMobileStatus(){
+  var el=document.getElementById('stripe-m-status');
+  if(!el)return;
+  if(!_token){el.innerHTML='<span style="color:var(--red);">Connectez-vous pour lier Stripe.</span>';return;}
+  el.textContent='Vérification…';
+  try{
+    var resp=await fetch('/.netlify/functions/stripe-connect-status',{method:'POST',headers:mobileStripeHeaders(),body:'{}'});
+    var data=await resp.json().catch(function(){return {};});
+    if(!resp.ok){el.textContent=data.error||'Erreur';return;}
+    if(data.connected){
+      el.innerHTML='<span style="color:#059669;">✓ Compte connecté</span> · <code style="font-size:.7rem;">'+esc(data.stripeAccountId||'')+'</code>';
+      var dc=document.getElementById('stripe-m-disconnect');if(dc)dc.style.display='inline-flex';
+      var cn=document.getElementById('stripe-m-connect');if(cn)cn.style.display='none';
+    }else{
+      el.textContent='Aucun compte Stripe lié.';
+      var dc2=document.getElementById('stripe-m-disconnect');if(dc2)dc2.style.display='none';
+      var cn2=document.getElementById('stripe-m-connect');if(cn2)cn2.style.display='inline-flex';
+    }
+  }catch(e){el.textContent='Réseau indisponible.';}
+}
+async function startStripeConnectMobile(){
+  if(!_token){toast('Connectez-vous d’abord','var(--red)');return;}
+  var btn=document.getElementById('stripe-m-connect');
+  if(btn){btn.disabled=true;btn.textContent='Redirection…';}
+  try{
+    var resp=await fetch('/.netlify/functions/stripe-connect-start',{
+      method:'POST',headers:mobileStripeHeaders(),
+      body:JSON.stringify({appUrl:window.location.origin+'/labo-mobile.html'})
+    });
+    var data=await resp.json().catch(function(){return {};});
+    if(!resp.ok||!data.url){toast(data.error||'Connexion impossible','var(--red)');if(btn){btn.disabled=false;btn.textContent='Connecter Stripe';}return;}
+    window.location.href=data.url;
+  }catch(e){toast('Erreur réseau','var(--red)');if(btn){btn.disabled=false;btn.textContent='Connecter Stripe';}}
+}
+async function disconnectStripeMobile(){
+  if(!confirm('Déconnecter Stripe ?'))return;
+  try{
+    var resp=await fetch('/.netlify/functions/stripe-connect-disconnect',{method:'POST',headers:mobileStripeHeaders(),body:'{}'});
+    if(!resp.ok){toast('Déconnexion impossible','var(--red)');return;}
+    toast('Stripe déconnecté','var(--ink-soft)');
+    refreshStripeMobileStatus();
+  }catch(e){toast('Erreur réseau','var(--red)');}
+}
+function handleStripeConnectReturnMobile(){
+  var sc,msg;
+  try{var sp=new URLSearchParams(location.search||'');sc=sp.get('stripe_connect');msg=sp.get('stripe_connect_msg')||'';}catch(e){return;}
+  if(!sc)return;
+  history.replaceState({},'',location.pathname);
+  if(sc==='success')toast('Compte Stripe connecté','#059669');
+  else toast('Stripe : '+(msg||'erreur'),'var(--red)');
+}
+
+function openStripeSheet(){
+  if(document.getElementById('stripe-mobile-sheet'))return;
+  var has=/^sk_(live|test)_/.test((localStorage.getItem('lb_stripe_key')||'').trim());
+  var sh=document.createElement('div');
+  sh.id='stripe-mobile-sheet';
+  sh.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5600;display:flex;align-items:flex-end;justify-content:center;';
+  sh.innerHTML=
+    '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:18px 16px calc(18px + env(safe-area-inset-bottom));">'+
+      '<div style="font-weight:700;margin-bottom:6px;">💳 Paiements Stripe</div>'+
+      '<p style="font-size:.76rem;color:var(--ink-soft);margin:0 0 12px;line-height:1.45;">Connectez le compte Stripe du laboratoire. L’argent des factures va directement chez vous.</p>'+
+      '<div id="stripe-m-status" style="font-size:.78rem;margin-bottom:12px;color:var(--ink-soft);">Vérification…</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">'+
+        '<button type="button" class="btn btn-primary" id="stripe-m-connect" onclick="startStripeConnectMobile()" style="flex:1;min-width:140px;background:#635bff;border:none;">Connecter Stripe</button>'+
+        '<button type="button" class="btn btn-secondary" id="stripe-m-disconnect" onclick="disconnectStripeMobile()" style="display:none;min-width:100px;">Déconnecter</button>'+
+      '</div>'+
+      '<details style="font-size:.74rem;color:var(--ink-soft);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">'+
+        '<summary style="cursor:pointer;font-weight:600;color:var(--ink);">Mode avancé : clé manuelle</summary>'+
+        (has?'<div style="font-size:.75rem;color:#059669;margin:10px 0 6px;">✓ Clé sur cet appareil</div>':'<p style="margin:10px 0 6px;">Réservé aux cas particuliers.</p>')+
+        '<input type="password" id="stripe-m-inp" placeholder="sk_live_… ou sk_test_…" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-family:monospace;font-size:.84rem;margin-bottom:10px;"/>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+          '<button type="button" class="btn btn-secondary" onclick="saveStripeMobile()" style="flex:1;">Enregistrer clé</button>'+
+          '<button type="button" class="btn btn-secondary" onclick="clearStripeMobile()" style="min-width:72px;">Effacer</button>'+
+        '</div>'+
+      '</details>'+
+      '<button type="button" class="btn btn-secondary" onclick="document.getElementById(\'stripe-mobile-sheet\').remove();" style="width:100%;margin-top:14px;">Fermer</button>'+
+    '</div>';
+  document.body.appendChild(sh);
+  sh.addEventListener('click',function(e){if(e.target===sh)sh.remove();});
+  refreshStripeMobileStatus();
+}
+function saveStripeMobile(){
+  var inp=document.getElementById('stripe-m-inp');if(!inp)return;
+  var v=(inp.value||'').trim();
+  if(!v){toast('Collez votre clé secrète','var(--red)');return;}
+  if(!/^sk_(live|test)_/.test(v)||v.length<20||v.length>500){toast('Clé invalide (sk_live_… ou sk_test_… )','var(--red)');return;}
+  localStorage.setItem('lb_stripe_key',v);
+  var sh=document.getElementById('stripe-mobile-sheet');if(sh)sh.remove();
+  toast('✅ Clé Stripe enregistrée sur cet appareil','#059669');
+}
+function clearStripeMobile(){
+  if(!confirm('Effacer la clé Stripe sur cet appareil ?'))return;
+  localStorage.removeItem('lb_stripe_key');
+  var sh=document.getElementById('stripe-mobile-sheet');if(sh)sh.remove();
+  toast('Clé effacée','var(--ink-soft)');
+}
+
 document.getElementById('env-desktop').addEventListener('click',function(){
   localStorage.setItem('lb_env','desktop');
   window.location.href='app.html';
@@ -717,6 +974,7 @@ document.getElementById('env-mobile').addEventListener('click',function(){
 });
 
 var _mobileInitDone=false;
+var _mobilePwdRecovery=false;
 async function initMobileApp(){
   if(_mobileInitDone)return;
   _mobileInitDone=true;
@@ -738,7 +996,14 @@ function showEnvSelector(){
   document.getElementById('env-selector').classList.add('on');
 }
 
+function _resolvedLbEnv(stored){
+  if(stored==='mobile'||stored==='desktop')return stored;
+  if(typeof lbEnvDetect==='function')return lbEnvDetect();
+  return 'mobile';
+}
+
 async function enterApp(env){
+  env=_resolvedLbEnv(env);
   if(env==='mobile'){
     const ok=await checkMobilePaywall();
     if(!ok)return;
@@ -746,6 +1011,7 @@ async function enterApp(env){
     document.getElementById('env-selector').classList.remove('on');
     document.getElementById('app').style.display='flex';
     initMobileApp();
+    try{handleStripeConnectReturnMobile();}catch(e){}
   } else if(env==='desktop'){
     window.location.href='app.html';
   } else {
@@ -806,6 +1072,16 @@ function showMobilePaywall(sub){
 var _initDoneByIIFE=false;
 
 sbClient.auth.onAuthStateChange(async function(event,session){
+  if(event==='PASSWORD_RECOVERY'&&session){
+    _mobilePwdRecovery=true;
+    _token=session.access_token;
+    currentUser=session.user;
+    document.getElementById('auth-screen').style.display='flex';
+    document.getElementById('env-selector').classList.remove('on');
+    document.getElementById('app').style.display='none';
+    showMobileAuthMode('recovery');
+    return;
+  }
   if(event==='SIGNED_OUT'){
     currentUser=null;_token='';_mobileInitDone=false;_initDoneByIIFE=false;
     document.getElementById('app').style.display='none';
@@ -815,6 +1091,15 @@ sbClient.auth.onAuthStateChange(async function(event,session){
   } else if(event==='TOKEN_REFRESHED'&&session){
     _token=session.access_token;
   } else if(event==='SIGNED_IN'&&session){
+    if(_mobilePwdRecovery){
+      _token=session.access_token;
+      currentUser=session.user;
+      document.getElementById('auth-screen').style.display='flex';
+      document.getElementById('env-selector').classList.remove('on');
+      document.getElementById('app').style.display='none';
+      showMobileAuthMode('recovery');
+      return;
+    }
     _token=session.access_token;
     currentUser=session.user;
     if(_initDoneByIIFE){
@@ -828,7 +1113,18 @@ sbClient.auth.onAuthStateChange(async function(event,session){
 
 (async function(){
   try{
+    var recHash=false;
+    try{recHash=/type=recovery|type%3[Dd]recovery/i.test(location.hash||'');}catch(e){}
     const{data:{session}}=await sbClient.auth.getSession();
+    if(session&&(recHash||_mobilePwdRecovery)){
+      _mobilePwdRecovery=true;
+      _initDoneByIIFE=true;
+      currentUser=session.user;
+      _token=session.access_token;
+      document.getElementById('auth-screen').style.display='flex';
+      showMobileAuthMode('recovery');
+      return;
+    }
     if(session){
       _initDoneByIIFE=true;
       currentUser=session.user;_token=session.access_token;
@@ -1039,9 +1335,11 @@ function renderHomeRecentDocs(){
   if(!recent.length){el.innerHTML='<div class="empty"><div class="empty-icon">💰</div>Aucune facture</div>';return;}
   el.innerHTML=recent.map(function(d){
     var isPaid=d.status==='paye'||d.status==='paid'||d.status==='payé';
+    var isDraft=d.status==='brouillon';
+    var badgeLabel=isPaid?'✅ Réglée':(isDraft?'📝 Brouillon':'⏳ En attente');
     return '<div class="doc-card"><div class="doc-top"><div><div class="doc-num">'+esc(d.num)+'</div><div class="doc-meta">'+esc(d.cabName||'')+' · '+fmtDate(d.date)+'</div></div>'+
       '<div style="text-align:right;"><div class="doc-amount" style="color:'+(isPaid?'var(--green)':'var(--accent)')+';">'+fmtEur(d.total)+'</div>'+
-      '<span class="badge '+(isPaid?'badge-green':'badge-orange')+'">'+(isPaid?'✅ Réglée':'⏳ En attente')+'</span></div></div></div>';
+      '<span class="badge '+(isPaid?'badge-green':'badge-orange')+'">'+badgeLabel+'</span></div></div></div>';
   }).join('');
 }
 
@@ -2216,8 +2514,9 @@ function showPortalInfo(cabId){
   if(!cab.code){cab.code=Math.random().toString(36).substr(2,6).toUpperCase();}
   if(!cab.pwd){cab.pwd=Math.random().toString(36).substr(2,8);}
   saveData();
+  var loginUrl=SITE_URL+'/connexion';
   var portalUrl=SITE_URL+'/cabinet.html?id='+cab.portalId;
-  var text='🔑 Identifiants portail\n\n'+cab.name+'\n\nCode : '+cab.code+'\nMot de passe : '+cab.pwd+'\n\nURL : '+portalUrl;
+  var text='🔑 Identifiants portail\n\n'+cab.name+'\n\nConnexion : '+loginUrl+' (→ Cabinet)\nCode : '+cab.code+'\nMot de passe : '+cab.pwd+'\n\nLien direct : '+portalUrl;
   if(navigator.share){
     navigator.share({title:'Identifiants '+cab.name,text:text}).catch(function(){});
   } else if(navigator.clipboard){
@@ -2268,16 +2567,20 @@ function renderDocList(){
   if(!list.length){el.innerHTML='<div class="empty"><div class="empty-icon">💰</div>Aucune facture</div>';return;}
   el.innerHTML=list.map(function(d){
     var isPaid=d.status==='paye'||d.status==='paid'||d.status==='payé';
+    var isDraft=d.status==='brouillon';
     var lines=(d.lines||[]).length;
     var hasLink=!!d.stripeUrl;
+    var badgeClass=isPaid?'badge-green':(isDraft?'badge-orange':'badge-orange');
+    var badgeLabel=isPaid?'✅ Réglée':(isDraft?'📝 Brouillon':'⏳ En attente');
     return '<div class="doc-card"><div class="doc-top" style="align-items:flex-start;"><div style="flex:1;min-width:0;"><div class="doc-num">'+esc(d.num)+'</div>'+
       '<div class="doc-meta">'+esc(d.cabName||'')+' · '+fmtDate(d.date)+(lines?' · '+lines+' ligne'+(lines>1?'s':''):'')+'</div></div>'+
       '<div style="text-align:right;"><div class="doc-amount" style="color:'+(isPaid?'var(--green)':'var(--accent)')+';">'+fmtEur(d.total)+'</div>'+
-      '<span class="badge '+(isPaid?'badge-green':'badge-orange')+'">'+(isPaid?'✅ Réglée':'⏳ En attente')+'</span>'+
+      '<span class="badge '+badgeClass+'">'+badgeLabel+'</span>'+
       '</div></div>'+
-      '<div style="display:flex;gap:6px;margin-top:10px;">'+
-        '<button onclick="shareFacture(\''+esc(d.id)+'\')" style="flex:1;background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:8px;font-size:.74rem;font-weight:600;cursor:pointer;min-height:36px;">📤 Partager</button>'+
-        (!isPaid?'<button onclick="genPaymentLinkMobile(\''+esc(d.id)+'\')" style="flex:1;background:'+(hasLink?'#10b981':'#7c3aed')+';color:#fff;border:none;border-radius:8px;padding:8px;font-size:.74rem;font-weight:600;cursor:pointer;min-height:36px;">'+(hasLink?'📋 Copier lien':'💳 Lien paiement')+'</button>':'')+
+      '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">'+
+        (isDraft?'<button onclick="mobileSendFacture(\''+esc(d.id)+'\')" style="flex:1;min-width:120px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;padding:8px;font-size:.74rem;font-weight:600;cursor:pointer;min-height:36px;">📤 Envoyer au cabinet</button>':'')+
+        (!isDraft?'<button onclick="shareFacture(\''+esc(d.id)+'\')" style="flex:1;min-width:100px;background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:8px;font-size:.74rem;font-weight:600;cursor:pointer;min-height:36px;">📤 Partager</button>':'')+
+        (!isPaid&&!isDraft?'<button onclick="genPaymentLinkMobile(\''+esc(d.id)+'\')" style="flex:1;min-width:100px;background:'+(hasLink?'#10b981':'#7c3aed')+';color:#fff;border:none;border-radius:8px;padding:8px;font-size:.74rem;font-weight:600;cursor:pointer;min-height:36px;">'+(hasLink?'📋 Copier lien':'💳 Lien paiement')+'</button>':'')+
       '</div></div>';
   }).join('');
 }
@@ -2293,8 +2596,26 @@ function openFactureModal(cabId){
   var nonInvoiced=bdl.filter(function(b){return b.cabinet===cabId&&!b.invoiced;});
   if(!nonInvoiced.length){toast('Aucun BL à facturer','var(--red)');return;}
   _fmCabId=cabId;
-  _fmLines=nonInvoiced.map(function(b){
-    return{id:'fl_'+b.id,blId:b.id,label:b.typeLabel+(b.nb>1?' × '+b.nb:''),patient:b.patient||'',prix:b.total||(b.prix*(b.nb||1))||0,checked:true};
+  _fmLines=nonInvoiced.flatMap(function(b){
+    var lignes=(b.lignes&&b.lignes.length)?b.lignes:[{type:b.type||'',typeLabel:b.typeLabel||'',nb:b.nb||1,prix:b.prix||0,total:b.total||((b.prix||0)*(b.nb||1))}];
+    return lignes.map(function(l,idx){
+      var typeStr=String(l.type||'').toLowerCase();
+      var isBridge=typeStr.includes('bridge') || String(l.typeLabel||'').toLowerCase().includes('bridge');
+      var nb=parseFloat(l.nb)||1;
+      var pu=parseFloat(l.prix)||0;
+      var total=parseFloat(l.total|| (pu*nb))||0;
+      var qty=isBridge && nb>1 ? 1 : nb;
+      var unitPrice=isBridge && nb>1 ? total : pu;
+      return {
+        id:'fl_'+b.id+'_'+idx,
+        blId:b.id,
+        label:String(l.typeLabel||b.typeLabel||'').trim()+(nb>1?' × '+nb:''),
+        patient:b.patient||'',
+        qty:qty,
+        prix:unitPrice,
+        checked:true
+      };
+    });
   });
   renderFactureModal(cab);
 }
@@ -2303,16 +2624,16 @@ function renderFactureModal(cab){
   var existing=document.getElementById('fm-overlay');if(existing)existing.remove();
   var overlay=document.createElement('div');
   overlay.id='fm-overlay';overlay.className='fm-overlay';
-  var total=_fmLines.filter(function(l){return l.checked;}).reduce(function(s,l){return s+(l.prix||0);},0);
+  var total=_fmLines.filter(function(l){return l.checked;}).reduce(function(s,l){return s+((l.qty||1)*(l.prix||0));},0);
   overlay.innerHTML=
     '<div class="fm-sheet">'+
       '<div class="fm-title">🧾 Facturer '+esc(cab.name)+'</div>'+
-      '<div class="fm-sub">'+_fmLines.length+' bon'+(length>1?'s':'')+' de livraison</div>'+
+      '<div class="fm-sub">'+_fmLines.length+' ligne'+(_fmLines.length>1?'s':'')+' · la facture est créée en <strong>brouillon</strong>, puis visible au cabinet après « Envoyer »</div>'+
       '<div id="fm-lines">'+_fmLines.map(function(l,i){
         return '<div class="fm-line"><div style="display:flex;align-items:center;gap:10px;">'+
           '<input type="checkbox" '+(l.checked?'checked':'')+' onchange="fmToggle('+i+')" style="width:22px;height:22px;accent-color:var(--accent);"/>'+
           '<div style="flex:1;"><div class="fm-line-label">'+esc(l.label)+'</div>'+(l.patient?'<div class="fm-line-patient">'+esc(l.patient)+'</div>':'')+'</div></div>'+
-          '<div class="fm-line-price"><span style="font-size:.78rem;color:var(--ink-soft);">Montant</span>'+
+          '<div class="fm-line-price"><span style="font-size:.78rem;color:var(--ink-soft);">P.U. (€)</span>'+
           '<input type="number" value="'+l.prix+'" min="0" step="0.01" onchange="fmPrice('+i+',this.value)" style="width:100px;"/><span style="font-size:.78rem;color:var(--ink-soft);">€</span></div></div>';
       }).join('')+'</div>'+
       '<div class="fm-total-bar"><div class="fm-total-label">Total TTC</div><div class="fm-total-val" id="fm-total">'+fmtEur(total)+'</div></div>'+
@@ -2329,7 +2650,7 @@ function renderFactureModal(cab){
 function fmToggle(i){_fmLines[i].checked=!_fmLines[i].checked;fmUpdateTotal();}
 function fmPrice(i,v){_fmLines[i].prix=parseFloat(v)||0;fmUpdateTotal();}
 function fmUpdateTotal(){
-  var total=_fmLines.filter(function(l){return l.checked;}).reduce(function(s,l){return s+(l.prix||0);},0);
+  var total=_fmLines.filter(function(l){return l.checked;}).reduce(function(s,l){return s+((l.qty||1)*(l.prix||0));},0);
   var el=document.getElementById('fm-total');if(el)el.textContent=fmtEur(total);
 }
 
@@ -2337,7 +2658,7 @@ async function fmGenerate(){
   var cab=cabinets.find(function(c){return c.id===_fmCabId;});if(!cab)return;
   var activeLines=_fmLines.filter(function(l){return l.checked&&(l.label||l.prix);});
   if(!activeLines.length){toast('Sélectionnez au moins une ligne','var(--red)');return;}
-  var total=activeLines.reduce(function(s,l){return s+(l.prix||0);},0);
+  var total=activeLines.reduce(function(s,l){return s+((l.qty||1)*(l.prix||0));},0);
   var note=document.getElementById('fm-note').value.trim();
   var now=new Date();
   var year=now.getFullYear();
@@ -2354,11 +2675,11 @@ async function fmGenerate(){
     date:fmtISO(now),
     note:note||'Facture — '+now.toLocaleDateString('fr-FR',{month:'long',year:'numeric'}),
     lines:activeLines.map(function(l){
-      return{label:l.label,qty:1,prix:l.prix||0,blNum:l.blId?(bdl.find(function(b){return b.id===l.blId;})||{}).num||'':''};
+      return{label:l.label,qty:l.qty||1,prix:l.prix||0,blNum:l.blId?(bdl.find(function(b){return b.id===l.blId;})||{}).num||'':''};
     }),
     total:total,
     bdlRefs:checkedBls.map(function(b){return b.num;}),
-    status:'envoye',
+    status:'brouillon',
     createdAt:now.toISOString()
   };
 
@@ -2366,22 +2687,34 @@ async function fmGenerate(){
   documents.unshift(invoice);
 
   document.getElementById('fm-overlay').remove();
-  toast('✅ Facture '+invoice.num+' envoyée au portail !','#7c3aed');
+  toast('✅ Facture '+invoice.num+' créée (brouillon). Envoyez-la au cabinet depuis la liste.','#7c3aed');
 
   await saveData();
   publishPortal(cab);
   renderAll();
+}
 
-  setTimeout(function(){offerPaymentLink(invoice.id);},300);
+async function mobileSendFacture(docId){
+  var doc=documents.find(function(d){return d.id===docId;});if(!doc)return;
+  if(doc.status!=='brouillon'){toast('Cette facture est déjà envoyée','var(--ink-soft)');return;}
+  doc.status='envoye';
+  await saveData();
+  var cab=cabinets.find(function(c){return c.id===doc.cabinet;});
+  if(cab)publishPortal(cab);
+  renderAll();
+  toast('✅ Facture '+doc.num+' visible sur le portail cabinet','#2a6049');
+  setTimeout(function(){offerPaymentLink(docId);},400);
 }
 
 async function genPaymentLinkMobile(docId){
   var doc=documents.find(function(d){return d.id===docId;});if(!doc)return;
+  if(doc.status==='brouillon'){toast('Envoyez d’abord la facture au cabinet (bouton sur la ligne brouillon)','var(--red)');return;}
   if(doc.stripeUrl){
     try{await navigator.clipboard.writeText(doc.stripeUrl);toast('📋 Lien de paiement copié','var(--green)');}catch(e){toast('Lien : '+doc.stripeUrl,'var(--accent)');}
     return;
   }
   if(!doc.total||doc.total<=0){toast('Montant invalide','var(--red)');return;}
+  if(!_token){toast('Connectez-vous pour générer un lien','var(--red)');return;}
   toast('⏳ Génération du lien…','var(--accent)');
   try{
     var cab=cabinets.find(function(c){return c.id===doc.cabinet;});
@@ -2392,13 +2725,14 @@ async function genPaymentLinkMobile(docId){
     try{
       resp=await fetch('/.netlify/functions/stripe-create-payment',{
         method:'POST',signal:controller.signal,
-        headers:{'Content-Type':'application/json'},
+        headers:mobileStripeHeaders(),
         body:JSON.stringify({
           factureId:doc.id,factureNum:doc.num,
           portalId:cab&&cab.portalId||'',amount:doc.total,
           cabName:doc.cabName||'',
           description:'Facture '+doc.num+' — '+(doc.cabName||''),
-          appUrl:appUrl
+          appUrl:appUrl,
+          stripeSecretKey:(function(){var k=(localStorage.getItem('lb_stripe_key')||'').trim();return k||undefined;})()
         })
       });
     }finally{clearTimeout(timeoutId);}
@@ -2456,17 +2790,26 @@ async function publishPortal(cab){
       cabCode:cab.code||'',cabPwd:cab.pwd||'',portalId:cab.portalId,
       laboName:localStorage.getItem('lb_name')||'',
       laboLegal:{raisonSociale:legalInfo.raison,siret:legalInfo.siret,adresse:legalInfo.adresse,tel:legalInfo.tel,email:legalInfo.email,directeur:legalInfo.directeur,ceNum:legalInfo.ce_num},
+      signatures:{labo:localStorage.getItem('lb_sig_labo')||null,cabinet:localStorage.getItem('lb_sig_cabinet')||null},
       bdl:cabBdl,
       travaux:[],
       patients:[...new Set(jobs.filter(function(j){return j.cabinet===cab.id;}).map(function(j){return j.patient||'';}).filter(Boolean))],
       factures:cabDocs.filter(function(d){return d.status!=='brouillon';}).map(function(d){return{id:d.id,num:d.num,date:d.date,total:d.total,status:d.status,note:d.note||'',lines:(d.lines||[]).map(function(l){return Object.assign({},l);}),bdlRefs:d.bdlRefs||[],stripeUrl:d.stripeUrl||null};}),
       updatedAt:new Date().toISOString()
     };
-    await fetch(SB_URL+'/rest/v1/labo_data',{
+    var pr=await fetch(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+_token,'Prefer':'resolution=merge-duplicates,return=minimal'},
       body:JSON.stringify({id:'portal_'+cab.portalId,data:payload,updated_at:new Date().toISOString()})
     });
+    if(pr.ok&&cab.code){
+      var codeUp=String(cab.code).trim().toUpperCase();
+      await fetch(SB_URL+'/rest/v1/labo_data',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+_token,'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify({id:'cablogin_'+codeUp,data:{portalId:cab.portalId,cabId:cab.id,cabCode:codeUp},updated_at:new Date().toISOString()})
+      }).catch(function(e2){console.warn('cablogin index',e2);});
+    }
   }catch(e){console.warn('publishPortal error',e);}
 }
 
@@ -3051,6 +3394,39 @@ function showPortalSentSheet(cab,portalUrl,ids){
   });
 }
 
+/** Aperçu BL / facture dans l’app (évite window.open : en PWA / raccourci iOS on ne peut pas « revenir »). */
+function openPrintPreviewShell(fullHtml, title){
+  var existing=document.getElementById('lb-print-preview-overlay');
+  if(existing)existing.remove();
+  var ov=document.createElement('div');
+  ov.id='lb-print-preview-overlay';
+  ov.setAttribute('role','dialog');
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.5);display:flex;flex-direction:column;';
+  var safeTitle=String(title||'Aperçu').replace(/</g,'');
+  ov.innerHTML=
+    '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:var(--surface);border-bottom:1px solid var(--border);">'+
+      '<button type="button" id="lb-pp-close" style="min-width:48px;min-height:48px;border-radius:12px;border:1px solid var(--border);background:var(--bg);font-size:1.35rem;line-height:1;cursor:pointer;color:var(--ink);" aria-label="Fermer">✕</button>'+
+      '<span style="font-weight:700;font-size:.86rem;flex:1;text-align:center;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 6px;">'+safeTitle+'</span>'+
+      '<button type="button" id="lb-pp-print" style="min-height:48px;padding:0 16px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-weight:700;font-size:.8rem;cursor:pointer;">Imprimer</button>'+
+    '</div>'+
+    '<iframe title="'+safeTitle+'" id="lb-pp-iframe" style="flex:1;width:100%;min-height:0;border:none;background:#fff;"></iframe>';
+  document.body.appendChild(ov);
+  var ifr=document.getElementById('lb-pp-iframe');
+  var idoc=ifr.contentDocument||ifr.contentWindow.document;
+  idoc.open();
+  idoc.write(fullHtml);
+  idoc.close();
+  function closeOv(){try{ov.remove();}catch(e){}}
+  document.getElementById('lb-pp-close').addEventListener('click',closeOv);
+  document.getElementById('lb-pp-print').addEventListener('click',function(){
+    try{
+      ifr.contentWindow.focus();
+      ifr.contentWindow.print();
+    }catch(e){toast('Impression indisponible','var(--red)');}
+  });
+  ov.addEventListener('click',function(e){if(e.target===ov)closeOv();});
+}
+
 function showShareSheet(title,text,item,cabId){
   var cab=cabId?cabinets.find(function(c){return c.id===cabId;}):null;
   var overlay=document.createElement('div');
@@ -3110,16 +3486,13 @@ function showShareSheet(title,text,item,cabId){
     if(item&&item.id&&bdl.find(function(b){return b.id===item.id;})){
       printBLProfessional(item.id);
     } else {
-      var w=window.open('','_blank');
-      if(!w)return;
       var labo=getLegalInfo();
-      w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width"/><title>'+esc(title)+'</title><style>body{font-family:Helvetica,Arial,sans-serif;font-size:11pt;color:#1e293b;padding:20px;max-width:700px;margin:0 auto;}h1{font-size:16pt;color:#2563eb;margin-bottom:4px;}table{width:100%;border-collapse:collapse;margin:16px 0;}th{text-align:left;padding:8px;background:#f1f5f9;font-size:9pt;text-transform:uppercase;letter-spacing:.05em;color:#64748b;}td{padding:8px;border-bottom:1px solid #e2e8f0;font-size:10pt;}.total{font-size:14pt;font-weight:800;color:#2563eb;text-align:right;margin-top:12px;}@media print{.no-print{display:none;}}</style></head><body>');
-      w.document.write('<button class="no-print" onclick="window.print()" style="position:fixed;bottom:20px;right:20px;background:#2563eb;color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:11pt;font-weight:600;cursor:pointer;">🖨️ Imprimer</button>');
-      w.document.write('<h1>'+esc(title)+'</h1>');
-      w.document.write('<p style="color:#64748b;font-size:9pt;">'+(labo.raisonSociale?esc(labo.raisonSociale)+' — ':'')+new Date().toLocaleDateString('fr-FR')+'</p>');
-      w.document.write('<pre style="white-space:pre-wrap;line-height:1.7;margin-top:16px;">'+esc(text)+'</pre>');
-      w.document.write('</body></html>');
-      w.document.close();
+      var invHtml='<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width"/><title>'+esc(title)+'</title><style>body{font-family:Helvetica,Arial,sans-serif;font-size:11pt;color:#1e293b;padding:20px;max-width:700px;margin:0 auto;}h1{font-size:16pt;color:#2563eb;margin-bottom:4px;}table{width:100%;border-collapse:collapse;margin:16px 0;}th{text-align:left;padding:8px;background:#f1f5f9;font-size:9pt;text-transform:uppercase;letter-spacing:.05em;color:#64748b;}td{padding:8px;border-bottom:1px solid #e2e8f0;font-size:10pt;}.total{font-size:14pt;font-weight:800;color:#2563eb;text-align:right;margin-top:12px;}@media print{.no-print{display:none;}}</style></head><body>'+
+        '<h1>'+esc(title)+'</h1>'+
+        '<p style="color:#64748b;font-size:9pt;">'+(labo.raisonSociale?esc(labo.raisonSociale)+' — ':'')+new Date().toLocaleDateString('fr-FR')+'</p>'+
+        '<pre style="white-space:pre-wrap;line-height:1.7;margin-top:16px;">'+esc(text)+'</pre>'+
+        '</body></html>';
+      openPrintPreviewShell(invHtml,title);
     }
   });
 }
@@ -3137,6 +3510,10 @@ function printBLProfessional(blId){
   var nb=bl.nb||1;
   var materiaux=bl.materiaux||'—';
   var ref=bl.prothesisId||bl.trackCode||bl.num;
+  var laboSigRaw=localStorage.getItem('lb_sig_labo')||'';
+  var cabSigRaw=localStorage.getItem('lb_sig_cabinet')||'';
+  var laboSigImg=(laboSigRaw.indexOf('data:image')===0)?'<div style="margin-top:8px;"><img src="'+laboSigRaw+'" alt="" style="max-height:72px;max-width:260px;"/></div>':'';
+  var cabSigImg=(cabSigRaw.indexOf('data:image')===0)?'<div style="margin-top:8px;"><img src="'+cabSigRaw+'" alt="" style="max-height:72px;max-width:220px;"/></div>':'';
 
   var lignesHtml='';
   if(bl.lignes&&bl.lignes.length>1){
@@ -3261,17 +3638,14 @@ function printBLProfessional(blId){
     '</div>'+
     '<div class="signature-area">'+
       '<div class="sig-box"><div class="sig-label">Laboratoire — Signature &amp; Cachet</div>'+
-        '<div class="sig-detail">'+esc(labo.raisonSociale)+'<br/>'+(labo.directeur?esc(labo.directeur):'')+'</div></div>'+
+        '<div class="sig-detail">'+esc(labo.raisonSociale)+'<br/>'+(labo.directeur?esc(labo.directeur):'')+laboSigImg+'</div></div>'+
       '<div class="sig-box"><div class="sig-label">Cabinet — Signature à la réception</div>'+
-        '<div class="sig-detail">'+esc(cab.name||bl.cabName||'')+'<br/>Date de réception : _______________</div></div>'+
+        '<div class="sig-detail">'+esc(cab.name||bl.cabName||'')+'<br/>Date de réception : _______________'+cabSigImg+'</div></div>'+
     '</div>'+
     '<div class="footer">'+esc(labo.raisonSociale)+' — '+(labo.siret?'SIRET : '+esc(labo.siret)+' — ':'')+(labo.adresse?esc(labo.adresse)+' — ':'')+'Dispositif médical sur mesure — EU MDR 2017/745</div>'+
     '</div></body></html>';
 
-  var w=window.open('','_blank','width=900,height=900');
-  if(!w){toast('Popup bloqué — autorisez les popups','var(--red)');return;}
-  w.document.write(html);
-  w.document.close();
+  openPrintPreviewShell(html,'BL '+bl.num);
 }
 
 /* ── NAV BADGES ── */

@@ -1,0 +1,25 @@
+.migration-hero{background:linear-gradient(135deg,#f5f3ff 0%,#ede9fe 40%,#e0e7ff 100%);border:1px solid #c4b5fd;border-radius:14px;padding:18px 22px;margin-bottom:20px;box-shadow:0 4px 24px rgba(91,33,182,.08);}
+.settings-shell{max-width:560px;margin:0 auto;padding:4px 0 32px;}
+.settings-topbar{display:flex;align-items:center;gap:8px;padding:4px 0 16px;margin-bottom:4px;}
+.settings-topbar--hub{border-bottom:none;padding-bottom:8px;}
+.settings-topbar--hub h2{text-align:left;}
+.settings-topbar h2{font-size:1.05rem;font-weight:700;margin:0;flex:1;text-align:center;color:var(--ink);}
+.settings-topbar-spacer{width:40px;flex-shrink:0;}
+.settings-back{background:none;border:none;font-size:1.15rem;cursor:pointer;padding:8px 10px;color:var(--accent);border-radius:8px;line-height:1;font-family:inherit;}
+.settings-back:hover{background:var(--accent-soft);}
+.settings-group{margin-bottom:20px;}
+.settings-group-label{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft);padding:6px 4px 8px;}
+.settings-row{display:flex;align-items:center;width:100%;padding:13px 14px;background:var(--surface);border:1px solid var(--border);border-bottom:none;cursor:pointer;text-align:left;font-family:inherit;font-size:.88rem;color:var(--ink);transition:background .12s;}
+.settings-group .settings-row:first-of-type{border-radius:12px 12px 0 0;}
+.settings-group .settings-row:last-of-type{border-bottom:1px solid var(--border);border-radius:0 0 12px 12px;}
+.settings-group .settings-row:only-of-type{border-radius:12px;border-bottom:1px solid var(--border);}
+.settings-row:hover{background:var(--bg);}
+.settings-row-icon{font-size:1.15rem;width:36px;flex-shrink:0;text-align:center;margin-right:10px;}
+.settings-row-body{flex:1;min-width:0;}
+.settings-row-title{display:block;font-weight:600;font-size:.88rem;}
+.settings-row-desc{display:block;font-size:.72rem;color:var(--ink-soft);margin-top:2px;line-height:1.35;}
+.settings-row-chevron{color:var(--ink-muted);font-size:1rem;font-weight:300;margin-left:8px;}
+.settings-row--danger .settings-row-title{color:#c0392b;}
+.settings-section{display:none;}
+.settings-section.on{display:block;}
+.settings-section .card{margin-bottom:14px;}

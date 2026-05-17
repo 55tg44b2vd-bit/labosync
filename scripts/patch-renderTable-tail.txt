@@ -1,0 +1,11 @@
+      });
+    }
+  });
+  if(filtered.length>slice.length){
+    var more=filtered.length-slice.length;
+    rows.push('<tr class="list-more-row"><td colspan="6"><button type="button" class="list-more-btn" onclick="_opsLoadMore(\\'jobs\\')">Afficher '+Math.min(more,LB_OPS_PAGE)+' de plus ('+more+' restants)</button></td></tr>');
+  }
+  tbody.innerHTML=rows.join('');
+}
+
+function _closeJobRowMenu(){

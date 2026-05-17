@@ -1,37 +1,74 @@
+const {
+  buildCors,
+  verifySupabaseUser,
+  getStripeConnect,
+  platformStripeSecret,
+} = require('./_labosync-auth');
+
 exports.handler = async (event) => {
   const SB_URL = 'https://ljnfpslgwgagdisixuxz.supabase.co';
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const reqOrigin = event.headers.origin || event.headers.Origin || '';
-  const allowOrigin = allowedOrigins.length
-    ? (allowedOrigins.includes(reqOrigin) ? reqOrigin : allowedOrigins[0])
-    : '*';
 
-  const headers = {
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Content-Type': 'application/json',
-  };
+  const headers = buildCors(event);
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Méthode non autorisée' }) };
 
   let body;
-  try { body = JSON.parse(event.body); } catch {
+  try {
+    body = JSON.parse(event.body);
+  } catch {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'JSON invalide' }) };
   }
 
-  const { factureId, factureNum, portalId, amount, cabName, description, appUrl } = body;
+  const { factureId, factureNum, portalId, amount, cabName, description, appUrl, stripeSecretKey } = body;
   if (!factureId || !amount || !appUrl) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Données manquantes' }) };
   }
 
-  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-  if (!STRIPE_SECRET_KEY) return { statusCode: 500, headers, body: JSON.stringify({ error: 'Clé Stripe non configurée' }) };
+  const user = await verifySupabaseUser(event);
+  if (!user) {
+    return {
+      statusCode: 401,
+      headers,
+      body: JSON.stringify({
+        error: 'Connexion requise. Reconnectez-vous à Labosync puis réessayez.',
+      }),
+    };
+  }
+
+  const connect = await getStripeConnect(user.id);
+  const connectedAccountId = connect && connect.stripeAccountId ? String(connect.stripeAccountId).trim() : '';
+
+  const bodyKey = typeof stripeSecretKey === 'string' ? stripeSecretKey.trim() : '';
+  const bodyKeyOk = bodyKey && /^sk_(live|test)_/.test(bodyKey) && bodyKey.length >= 20 && bodyKey.length <= 500;
+
+  let stripeSecret = '';
+  let stripeAccountHeader = null;
+
+  if (connectedAccountId) {
+    stripeSecret = platformStripeSecret();
+    if (!stripeSecret) {
+      return {
+        statusCode: 503,
+        headers,
+        body: JSON.stringify({ error: 'Stripe Connect plateforme non configuré (STRIPE_SUBSCRIPTION_KEY).' }),
+      };
+    }
+    stripeAccountHeader = connectedAccountId;
+  } else if (bodyKeyOk) {
+    stripeSecret = bodyKey;
+  } else {
+    return {
+      statusCode: 403,
+      headers,
+      body: JSON.stringify({
+        error: 'Connectez votre compte Stripe dans Paramètres → Paiements en ligne. Les paiements de vos cabinets iront uniquement sur votre compte Stripe.',
+        code: 'stripe_not_connected',
+      }),
+    };
+  }
+
   let successBaseUrl = '';
   try {
     const parsed = new URL(appUrl);
@@ -46,21 +83,26 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Montant invalide' }) };
   }
 
-  // Étape 1 : créer un Price avec Product inline (Product auto-créé par Stripe)
+  function stripeHeaders() {
+    const h = {
+      Authorization: `Bearer ${stripeSecret}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    if (stripeAccountHeader) h['Stripe-Account'] = stripeAccountHeader;
+    return h;
+  }
+
   const priceParams = new URLSearchParams({
-    'currency': 'eur',
-    'unit_amount': String(amountCents),
-    'product_data[name]': description || `Facture ${factureNum || factureId}`,
+    currency: 'eur',
+    unit_amount: String(amountCents),
+    product_data[name]: description || `Facture ${factureNum || factureId}`,
   });
 
   let priceResp;
   try {
     priceResp = await fetch('https://api.stripe.com/v1/prices', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${STRIPE_SECRET_KEY}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: stripeHeaders(),
       body: priceParams.toString(),
     });
   } catch (fetchErr) {
@@ -74,7 +116,6 @@ exports.handler = async (event) => {
 
   const price = await priceResp.json();
 
-  // Étape 2 : créer un Payment Link (pas d'expiration — reste valide indéfiniment)
   const successUrl = `${successBaseUrl}?stripe_ok=1&fid=${encodeURIComponent(factureId)}`;
 
   const linkParams = new URLSearchParams({
@@ -85,7 +126,9 @@ exports.handler = async (event) => {
     'metadata[factureId]': factureId,
     'metadata[factureNum]': factureNum || '',
     'metadata[portalId]': portalId || '',
+    'metadata[labUserId]': user.id,
     'payment_intent_data[metadata][factureId]': factureId,
+    'payment_intent_data[metadata][labUserId]': user.id,
   });
   if (cabName) {
     linkParams.set('custom_text[submit][message]', `Paiement pour ${cabName}`);
@@ -95,10 +138,7 @@ exports.handler = async (event) => {
   try {
     linkResp = await fetch('https://api.stripe.com/v1/payment_links', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${STRIPE_SECRET_KEY}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: stripeHeaders(),
       body: linkParams.toString(),
     });
   } catch (fetchErr) {
@@ -112,21 +152,23 @@ exports.handler = async (event) => {
 
   const link = await linkResp.json();
 
-  // Stocker la session en attente dans Supabase — clé : factureId (pas l'ID Stripe)
-  // Le webhook écrit aussi keyé par factureId via metadata → match garanti
   if (SERVICE_KEY) {
     await fetch(`${SB_URL}/rest/v1/labo_data`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': SERVICE_KEY,
-        'Authorization': `Bearer ${SERVICE_KEY}`,
-        'Prefer': 'resolution=merge-duplicates,return=minimal',
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        Prefer: 'resolution=merge-duplicates,return=minimal',
       },
       body: JSON.stringify({
         id: `stripe_sess_${factureId}`,
         data: {
-          factureId, factureNum, portalId,
+          factureId,
+          factureNum,
+          portalId,
+          labUserId: user.id,
+          stripeAccountId: stripeAccountHeader || null,
           status: 'pending',
           paymentLinkId: link.id,
           paymentLinkUrl: link.url,
@@ -137,7 +179,6 @@ exports.handler = async (event) => {
     });
   }
 
-  // Retourne factureId comme "sessionId" pour que le polling client matche la clé
   return {
     statusCode: 200,
     headers,

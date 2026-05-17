@@ -1,0 +1,92 @@
+function resetSettingsView(){
+  _settingsSectionOpen=null;
+  var hub=document.getElementById('settings-hub');
+  if(hub)hub.style.display='block';
+  document.querySelectorAll('.settings-section').forEach(function(sec){
+    sec.classList.remove('on');
+    sec.style.display='none';
+  });
+}
+function canAccessSettingsSection(id){
+  if(id==='migration')return canAccessPane('migration');
+  if(id==='danger')return _userRole==='admin'||hasPerm('*');
+  if(id==='paiements')return _userRole==='admin'||_userRole==='billing'||hasPerm('*');
+  if(id==='compte')return true;
+  return canAccessPane('parametres')||hasPerm('*');
+}
+function applySettingsHubVisibility(){
+  var row=document.getElementById('settings-row-migration');
+  if(row)row.style.display=canAccessPane('migration')?'flex':'none';
+  document.querySelectorAll('[data-settings-req]').forEach(function(el){
+    var req=el.getAttribute('data-settings-req');
+    var ok=true;
+    if(req==='migration')ok=canAccessPane('migration');
+    else if(req==='paiements')ok=_userRole==='admin'||_userRole==='billing'||hasPerm('*');
+    else if(req==='danger')ok=_userRole==='admin'||hasPerm('*');
+    el.style.display=ok?'block':'none';
+  });
+  document.querySelectorAll('.settings-group').forEach(function(g){
+    var rows=g.querySelectorAll('.settings-row');
+    var any=false;
+    for(var i=0;i<rows.length;i++){if(rows[i].style.display!=='none'){any=true;break;}}
+    if(!rows.length)any=g.getAttribute('data-settings-req')?g.style.display!=='none':true;
+    g.style.display=any?'block':'none';
+  });
+  document.querySelectorAll('[data-settings-req="role-admin"]').forEach(function(el){
+    el.style.display=(_userRole==='admin'||hasPerm('*'))?'block':'none';
+  });
+}
+function openSettingsSection(id){
+  if(!canAccessSettingsSection(id)){
+    showToast('⛔ Vous n’avez pas accès à cette section.','#c0392b',3200);
+    return;
+  }
+  var hub=document.getElementById('settings-hub');
+  var sec=document.getElementById('settings-sec-'+id);
+  if(!sec)return;
+  if(hub)hub.style.display='none';
+  document.querySelectorAll('.settings-section').forEach(function(s){
+    s.classList.remove('on');
+    s.style.display='none';
+  });
+  sec.classList.add('on');
+  sec.style.display='block';
+  _settingsSectionOpen=id;
+  try{sec.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}
+}
+function closeSettingsSection(){
+  resetSettingsView();
+  try{
+    var hub=document.getElementById('settings-hub');
+    if(hub)hub.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){}
+}
+function goSettings(){
+  if(!canAccessPane('parametres')&&!canAccessPane('migration')){
+    showToast('⛔ Vous n’avez pas accès aux paramètres.','#c0392b',3400);
+    return;
+  }
+  const tab=document.querySelector('.tab[data-pane="parametres"]');
+  if(tab){tab.click();return;}
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on');});
+  document.querySelectorAll('.pane').forEach(function(x){x.classList.remove('on');});
+  var el=document.getElementById('pane-parametres');
+  if(el)el.classList.add('on');
+  resetSettingsView();
+  applySettingsHubVisibility();
+}
+function goMigration(){
+  if(!canAccessPane('migration')){
+    showToast('⛔ Vous n’avez pas accès à la migration des données.','#c0392b',3400);
+    return;
+  }
+  goSettings();
+  setTimeout(function(){openSettingsSection('migration');},80);
+}"}}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"[REDACTED]"},{"type":"tool_use","name":"StrReplace","input":{"path":"c:\\Users\	omgo\\OneDrive\\Bureau\\labosync - Copie\\app.html","old_string":"    if(pane==='parametres'){
+      const n=localStorage.getItem('lb_name');if(n)document.getElementById('labo-name-input').value=n;
+      const rs=document.getElementById('user-role-select');if(rs)rs.value=_userRole;
+      renderSubInfo();
+      updateSuiviToggleUI();
+      // Load legal fields
+      const lf=['raison','siret','adre
