@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="Labosync"/>
 <meta name="theme-color" content="#ffffff"/>
 <link rel="manifest" href="/manifest.json"/>
+<script src="/vendor/onesignal-sdk.js" defer id="onesignal-sdk"></script>
+<script src="/lb-push.js"></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="/icon.svg"/>
 <script src="/lb-env-routing.js"></script>
@@ -324,6 +326,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
   <div class="main">
     <!-- ── DASHBOARD / AUJOURD'HUI ── -->
     <div class="view on" id="view-home">
+      <div id="lb-push-banner"></div>
       <div id="home-greeting" style="margin-bottom:14px;"></div>
       <div class="stats-grid" id="stats-grid"></div>
 
@@ -975,6 +978,7 @@ document.getElementById('env-mobile').addEventListener('click',function(){
 
 var _mobileInitDone=false;
 var _mobilePwdRecovery=false;
+var _msgBgInterval=null;
 async function initMobileApp(){
   if(_mobileInitDone)return;
   _mobileInitDone=true;
@@ -985,9 +989,21 @@ async function initMobileApp(){
     const k='lb_mobile_onboard_seen';
     if(localStorage.getItem(k)!=='1'){
       localStorage.setItem(k,'1');
-      toast('👋 Bienvenue ! Commencez par "Mes cabinets", puis "Factures".','var(--accent)');
+      toast('👋 Bienvenue ! Ajoutez Labosync à l\'écran d\'accueil et acceptez les notifications pour les messages des cabinets.','var(--accent)');
     }
   }catch(e){}
+  try{
+    if(typeof LabosyncPush!=='undefined'&&currentUser){
+      LabosyncPush.prepare({role:'lab',externalId:'lab:'+currentUser.id});
+      var pushBanner=document.getElementById('lb-push-banner');
+      if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab_mobile'});
+    }
+  }catch(ePush){console.warn('push init',ePush);}
+  if(!_msgBgInterval){
+    _msgBgInterval=setInterval(function(){
+      if(currentUser&&!document.hidden&&typeof loadLastMessages==='function')loadLastMessages();
+    },30000);
+  }
 }
 
 function showEnvSelector(){
@@ -1084,6 +1100,7 @@ sbClient.auth.onAuthStateChange(async function(event,session){
   }
   if(event==='SIGNED_OUT'){
     currentUser=null;_token='';_mobileInitDone=false;_initDoneByIIFE=false;
+    if(_msgBgInterval){clearInterval(_msgBgInterval);_msgBgInterval=null;}
     document.getElementById('app').style.display='none';
     document.getElementById('env-selector').classList.remove('on');
     document.getElementById('auth-screen').style.display='flex';
@@ -1261,6 +1278,7 @@ function showView(id){
   var el=document.getElementById('view-'+id);
   if(el)el.classList.add('on');
   window.scrollTo(0,0);
+  if(id==='messages'&&typeof loadLastMessages==='function')loadLastMessages();
 }
 
 /* ── RENDER ALL ── */
@@ -1607,13 +1625,13 @@ async function sendOrderQuestionsMobile(){
   var text=ta?ta.value.trim():'';
   if(!text){toast('Le message est vide','var(--red)');return;}
   try{
-    var sbAnon=supabase.createClient(SB_URL,SB_KEY);
-    var{data:rows}=await sbAnon.from('labo_data').select('data').eq('id','chat_'+cab.portalId);
-    var existing=(rows&&rows[0]&&rows[0].data)?rows[0].data:{messages:[]};
-    var msgs=existing.messages||[];
     var laboName=localStorage.getItem('lb_name')||'Laboratoire';
-    msgs.push({sender:'labo',senderName:laboName,content:text,createdAt:new Date().toISOString(),_orderQuestion:true,_caseId:caseId,_stepId:stepId});
-    await sbAnon.from('labo_data').upsert({id:'chat_'+cab.portalId,data:{messages:msgs},updated_at:new Date().toISOString()});
+    var r=await fetch('/.netlify/functions/portal',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
+      body:JSON.stringify({action:'chat',portalId:cab.portalId,sender:'labo',senderName:laboName,content:text})
+    });
+    if(!r.ok){toast('❌ Erreur d\'envoi','var(--red)');return;}
     var list=_pendingOrdersCacheMobile[portalId]||await _fetchOrdersForCabMobile(portalId);
     var cIdx=list.findIndex(function(x){return x.id===caseId;});
     if(cIdx>=0){
@@ -2198,14 +2216,10 @@ async function sendMissingInfoMessage(cabId){
 
   if(cab.portalId){
     try{
-      var sbAnon=supabase.createClient(SB_URL,SB_KEY);
-      var{data:rows}=await sbAnon.from('labo_data').select('data').eq('id','chat_'+cab.portalId);
-      var existing=(rows&&rows[0]&&rows[0].data)?rows[0].data:{messages:[]};
-      var msgs=existing.messages||[];
       var laboName=localStorage.getItem('lb_name')||'Laboratoire';
       var sentAt=new Date().toISOString();
-      msgs.push({sender:'labo',senderName:laboName,content:text,createdAt:sentAt,_missingMsg:true});
-      await sbAnon.from('labo_data').upsert({id:'chat_'+cab.portalId,data:{messages:msgs},updated_at:sentAt});
+      var ok=await _postPortalChatMessage(cab.portalId,{sender:'labo',senderName:laboName,content:text});
+      if(!ok){toast('Erreur envoi chat','var(--red)');return;}
       _missingJobsForCab(cabId).forEach(function(j){j._missingSentAt=sentAt;});
       saveData();
       toast('✅ Message envoyé via le chat','var(--green)');
@@ -2259,12 +2273,8 @@ function _showMissingMsgSheetMobile(cab,initialText){
 
 async function _fetchCabRepliesMobile(cab,sinceISO){
   if(!cab.portalId)return [];
-  try{
-    var sbAnon=supabase.createClient(SB_URL,SB_KEY);
-    var{data:rows}=await sbAnon.from('labo_data').select('data').eq('id','chat_'+cab.portalId);
-    var msgs=(rows&&rows[0]&&rows[0].data&&rows[0].data.messages)||[];
-    return msgs.filter(function(m){return m.sender==='cabinet'&&(!sinceISO||m.createdAt>sinceISO);});
-  }catch(e){return [];}
+  var msgs=await _fetchPortalChat(cab.portalId);
+  return msgs.filter(function(m){return m.sender==='cabinet'&&(!sinceISO||m.createdAt>sinceISO);});
 }
 
 async function checkMissingMsgRepliesMobile(){
@@ -2778,7 +2788,7 @@ async function publishPortal(cab){
   if(!cab||!cab.portalId||!_token)return;
   try{
     var cabBdl=bdl.filter(function(b){return b.cabinet===cab.id;});
-    var cabDocs=documents.filter(function(d){return d.cabinet===cab.id&&d.type==='facture';});
+    var cabDocs=documents.filter(function(d){return d.cabinet===cab.id&&(d.type==='facture'||d.type==='avoir');});
     var legalInfo={};
     ['raison','siret','adresse','tel','email','directeur','ce_num'].forEach(function(k){
       legalInfo[k]=localStorage.getItem('lb_legal_'+k)||'';
@@ -2786,28 +2796,22 @@ async function publishPortal(cab){
     var payload={
       cabId:cab.id,cabName:cab.name,cabPhone:cab.phone||'',cabEmail:cab.email||'',
       cabCode:cab.code||'',cabPwd:cab.pwd||'',portalId:cab.portalId,
-      laboName:localStorage.getItem('lb_name')||'',
+      labUserId:currentUser?currentUser.id:null,
+      laboName:localStorage.getItem('lb_name')||'Laboratoire Dentaire',
       laboLegal:{raisonSociale:legalInfo.raison,siret:legalInfo.siret,adresse:legalInfo.adresse,tel:legalInfo.tel,email:legalInfo.email,directeur:legalInfo.directeur,ceNum:legalInfo.ce_num},
       signatures:{labo:localStorage.getItem('lb_sig_labo')||null,cabinet:localStorage.getItem('lb_sig_cabinet')||null},
       bdl:cabBdl,
       travaux:[],
       patients:[...new Set(jobs.filter(function(j){return j.cabinet===cab.id;}).map(function(j){return j.patient||'';}).filter(Boolean))],
-      factures:cabDocs.filter(function(d){return d.status!=='brouillon';}).map(function(d){return{id:d.id,num:d.num,date:d.date,total:d.total,status:d.status,note:d.note||'',lines:(d.lines||[]).map(function(l){return Object.assign({},l);}),bdlRefs:d.bdlRefs||[],stripeUrl:d.stripeUrl||null};}),
+      factures:cabDocs.filter(function(d){return d.status!=='brouillon';}).map(function(d){return{id:d.id,num:d.num,type:d.type||'facture',avoirOf:d.avoirOf||null,date:d.date,total:d.total,status:d.status,note:d.note||'',lines:(d.lines||[]).map(function(l){return Object.assign({},l);}),bdlRefs:d.bdlRefs||[],stripeUrl:d.stripeUrl||null};}),
       updatedAt:new Date().toISOString()
     };
-    var pr=await fetch(SB_URL+'/rest/v1/labo_data',{
+    var pr=await fetch('/.netlify/functions/portal',{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+_token,'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({id:'portal_'+cab.portalId,data:payload,updated_at:new Date().toISOString()})
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
+      body:JSON.stringify({portalId:cab.portalId,payload:payload})
     });
-    if(pr.ok&&cab.code){
-      var codeUp=String(cab.code).trim().toUpperCase();
-      await fetch(SB_URL+'/rest/v1/labo_data',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+_token,'Prefer':'resolution=merge-duplicates,return=minimal'},
-        body:JSON.stringify({id:'cablogin_'+codeUp,data:{portalId:cab.portalId,cabId:cab.id,cabCode:codeUp},updated_at:new Date().toISOString()})
-      }).catch(function(e2){console.warn('cablogin index',e2);});
-    }
+    if(!pr.ok)console.warn('publishPortal',pr.status);
   }catch(e){console.warn('publishPortal error',e);}
 }
 
@@ -2833,12 +2837,8 @@ function closeChat(){
 async function loadChat(){
   if(!_chatCabId)return;
   var cab=cabinets.find(function(c){return c.id===_chatCabId;});if(!cab||!cab.portalId)return;
-  try{
-    var sbAnon=supabase.createClient(SB_URL,SB_KEY);
-    var{data:rows}=await sbAnon.from('labo_data').select('data').eq('id','chat_'+cab.portalId);
-    var msgs=(rows&&rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
-    renderChat(msgs);
-  }catch(e){console.warn('loadChat',e);}
+  var msgs=await _fetchPortalChat(cab.portalId);
+  renderChat(msgs);
 }
 
 function renderChat(msgs){
@@ -2943,15 +2943,21 @@ async function sendChat(){
   input.value='';
   cancelChatAttachment();
   try{
-    var sbAnon=supabase.createClient(SB_URL,SB_KEY);
-    var{data:rows}=await sbAnon.from('labo_data').select('data').eq('id','chat_'+cab.portalId);
-    var existing=(rows&&rows[0]&&rows[0].data)?rows[0].data:{messages:[]};
-    var msgs=existing.messages||[];
-    var newMsg={sender:'labo',content:text,createdAt:new Date().toISOString()};
-    if(attachment)newMsg.attachment=attachment;
-    msgs.push(newMsg);
-    await sbAnon.from('labo_data').upsert({id:'chat_'+cab.portalId,data:{messages:msgs},updated_at:new Date().toISOString()});
-    renderChat(msgs);
+    var laboName=localStorage.getItem('lb_name')||'Laboratoire';
+    var body={action:'chat',portalId:cab.portalId,sender:'labo',senderName:laboName,content:text};
+    if(attachment)body.attachment=attachment;
+    var r=await fetch('/.netlify/functions/portal',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
+      body:JSON.stringify(body)
+    });
+    if(r.ok){
+      var msgs=await _fetchPortalChat(cab.portalId);
+      renderChat(msgs);
+      if(msgs.length)_msgLastMessages[cab.id]=msgs[msgs.length-1];
+      renderMsgList_update();
+      renderHomeMessages();
+    }else{toast('Erreur envoi','var(--red)');}
   }catch(e){toast('Erreur envoi','var(--red)');console.error(e);}
 }
 
@@ -3230,6 +3236,31 @@ function renderJobList(){
 /* ── MESSAGES LIST ── */
 var _msgLastMessages={};
 
+/** Même source que app.html (API portail) — évite chat_ID vs chat_id et RLS anon. */
+async function _fetchPortalChat(portalId){
+  if(!portalId||!_token)return [];
+  try{
+    var r=await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(portalId),{
+      headers:{'Authorization':'Bearer '+_token}
+    });
+    if(!r.ok){console.warn('_fetchPortalChat',portalId,r.status);return [];}
+    var rows=await r.json();
+    return (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
+  }catch(e){console.warn('_fetchPortalChat',e);return [];}
+}
+
+async function _postPortalChatMessage(portalId,payload){
+  if(!portalId||!_token)return false;
+  try{
+    var r=await fetch('/.netlify/functions/portal',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
+      body:JSON.stringify(Object.assign({action:'chat',portalId:portalId},payload))
+    });
+    return r.ok;
+  }catch(e){console.warn('_postPortalChatMessage',e);return false;}
+}
+
 async function renderMsgList(){
   var el=document.getElementById('msg-cab-list');if(!el)return;
   if(!cabinets.length){
@@ -3254,18 +3285,15 @@ async function renderMsgList(){
 }
 
 async function loadLastMessages(){
-  var sbAnon=supabase.createClient(SB_URL,SB_KEY);
   var cabs=cabinets.filter(function(c){return c.portalId;});
-  for(var i=0;i<cabs.length;i++){
-    try{
-      var c=cabs[i];
-      var{data:rows}=await sbAnon.from('labo_data').select('data').eq('id','chat_'+c.portalId);
-      var msgs=(rows&&rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
-      if(msgs.length){_msgLastMessages[c.id]=msgs[msgs.length-1];}
-    }catch(e){}
-  }
+  await Promise.all(cabs.map(async function(c){
+    var msgs=await _fetchPortalChat(c.portalId);
+    if(msgs.length)_msgLastMessages[c.id]=msgs[msgs.length-1];
+    else delete _msgLastMessages[c.id];
+  }));
   var el=document.getElementById('msg-cab-list');
   if(el&&el.children.length)renderMsgList_update();
+  renderHomeMessages();
 }
 
 function renderMsgList_update(){

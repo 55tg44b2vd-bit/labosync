@@ -10,6 +10,7 @@ const sendEmail = require('../netlify/functions/send-email.js');
 const logClientError = require('../netlify/functions/log-client-error.js');
 const auditLog = require('../netlify/functions/audit-log.js');
 const courierApi = require('../netlify/functions/courier-api.js');
+const onesignalConfig = require('../netlify/functions/onesignal-config.js');
 
 async function run() {
   const tests = [];
@@ -62,6 +63,13 @@ async function run() {
   tests.push((async () => {
     const res = await courierApi.handler({ httpMethod: 'OPTIONS', headers: {} });
     assert.equal(res.statusCode, 200);
+  })());
+
+  tests.push((async () => {
+    const res = await onesignalConfig.handler({ httpMethod: 'GET', headers: {} });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(typeof body.enabled, 'boolean');
   })());
 
   await Promise.all(tests);

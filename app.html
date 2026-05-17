@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="Labo">
 <meta name="theme-color" content="#2563eb">
 <link rel="manifest" href="/manifest.json">
+<script src="/vendor/onesignal-sdk.js" defer id="onesignal-sdk"></script>
+<script src="/lb-push.js"></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>Labosync</title>
@@ -597,6 +599,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
 
 <!-- APPLICATION PRINCIPALE -->
 <div id="app-main">
+<div id="lb-push-banner" style="max-width:1320px;margin:0 auto;padding:12px 24px 0;"></div>
 <header>
   <div style="display:flex;align-items:center;gap:2px;">
     <button id="btn-drawer" onclick="toggleDrawer()" aria-label="Menu">☰</button>
@@ -616,6 +619,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
       <div id="account-menu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);min-width:220px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 28px rgba(15,23,42,.12);z-index:1000;overflow:hidden;">
         <button class="account-item" onclick="toggleLang();closeAccountMenu();">🌐 <span>Changer de langue</span></button>
         <button class="account-item" onclick="localStorage.setItem('lb_env','mobile');window.location.href='labo-mobile.html';">📱 <span>Passer en vue mobile</span></button>
+        <button class="account-item" onclick="closeAccountMenu();if(typeof LabosyncPush!=='undefined'){LabosyncPush.promptForNotifications().then(function(r){showToast(r.message||(r.ok?'Notifications activées':'Impossible d\'activer'),r.ok?'#2563eb':'#c0392b',5000);});}">🔔 <span>Activer les notifications</span></button>
         <button class="account-item" onclick="goSettings();closeAccountMenu();">⚙️ <span>Paramètres</span></button>
         <button class="account-item" id="btn-quick-admin" style="display:none;" onclick="switchToAdminRole(true);closeAccountMenu();">🔓 <span>Revenir en mode admin</span></button>
         <button class="account-item" onclick="closeAccountMenu();replayOnboardingTour();">🧭 <span>Refaire le tour guidé</span></button>
@@ -654,9 +658,9 @@ body.has-sidebar #drawer{transform:translateX(0);}
       <button type="button" class="tab" data-pane="calendrier" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📅</span><span class="drawer-tab-text"><span class="drawer-tab-title">Planning</span><span class="drawer-tab-sub">Calendrier</span></span></button>
       <button type="button" class="tab" data-pane="stats" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📊</span><span class="drawer-tab-text"><span class="drawer-tab-title">Statistiques</span><span class="drawer-tab-sub">Chiffres</span></span></button>
       <button type="button" class="tab" data-pane="historique" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📁</span><span class="drawer-tab-text"><span class="drawer-tab-title">Historique</span><span class="drawer-tab-sub">Archives</span></span></button>
-      <button type="button" class="tab prog-tab" data-pane="impression" data-drawer-more="1" style="display:none;">Impression</button>
-      <button type="button" class="tab prog-tab" data-pane="attente" id="tab-attente" data-drawer-more="1" style="display:none;">En attente <span id="attente-badge" style="display:none;background:#e67e22;color:#fff;border-radius:99px;padding:1px 7px;font-size:.65rem;">0</span></button>
-      <button type="button" class="tab prog-tab" data-pane="equipe" data-drawer-more="1" style="display:none;">Équipe</button>
+      <button type="button" class="tab prog-tab" data-pane="impression" data-drawer-more="1" style="display:none;"><span class="drawer-tab-icon" aria-hidden="true">🖨️</span><span class="drawer-tab-text"><span class="drawer-tab-title">Impression</span><span class="drawer-tab-sub">Fiches techniciens</span></span></button>
+      <button type="button" class="tab prog-tab" data-pane="attente" id="tab-attente" data-drawer-more="1" style="display:none;"><span class="drawer-tab-icon" aria-hidden="true">⏳</span><span class="drawer-tab-text"><span class="drawer-tab-title">En attente</span><span class="drawer-tab-sub">Pièces manquantes <span id="attente-badge" style="display:none;background:#e67e22;color:#fff;border-radius:99px;padding:1px 7px;font-size:.65rem;">0</span></span></span></button>
+      <button type="button" class="tab prog-tab" data-pane="equipe" data-drawer-more="1" style="display:none;"><span class="drawer-tab-icon" aria-hidden="true">👥</span><span class="drawer-tab-text"><span class="drawer-tab-title">Équipe</span><span class="drawer-tab-sub">Techniciens</span></span></button>
     </div>
     <span class="prog-tab" id="prog-separator" style="display:none;"></span>
     <button class="mode-btn drawer-standalone" data-mode="messages" id="mode-btn-messages" style="display:none !important;"><span class="mode-icon">💬</span> Messages</button>
@@ -1102,7 +1106,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
         <div class="settings-group-label">Travail</div>
         <button type="button" class="settings-row" onclick="openSettingsSection('tarifs')">
           <span class="settings-row-icon">🔧</span>
-          <span class="settings-row-body"><span class="settings-row-title">Types de travaux et tarifs</span><span class="settings-row-desc">Catalogue, prix, étapes de programmation</span></span>
+          <span class="settings-row-body"><span class="settings-row-title">Prix des travaux</span><span class="settings-row-desc">Un prix par type (couronne, inlay, facette…)</span></span>
           <span class="settings-row-chevron">›</span>
         </button>
         <button type="button" class="settings-row" onclick="openSettingsSection('equipe')">
@@ -1125,7 +1129,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
         </button>
         <button type="button" class="settings-row" id="settings-row-migration" data-settings-req="migration" onclick="openSettingsSection('migration')">
           <span class="settings-row-icon">📦</span>
-          <span class="settings-row-body"><span class="settings-row-title">Importer des données</span><span class="settings-row-desc">Migration depuis un autre logiciel (CSV, Factur-X…)</span></span>
+          <span class="settings-row-body"><span class="settings-row-title">Importer des données</span><span class="settings-row-desc">Reprendre vos dossiers depuis un autre logiciel</span></span>
           <span class="settings-row-chevron">›</span>
         </button>
       </div>
@@ -1215,7 +1219,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;max-width:780px;">
           <div>
             <div style="font-weight:700;margin-bottom:6px;color:var(--ink);">Laboratoire — Signature</div>
-            <canvas id="sig-labo-canvas" width="420" height="130" style="width:100%;border:1.5px dashed var(--border);border-radius:10px;background:#fff;touch-action:none;"></canvas>
+            <canvas id="sig-labo-canvas" width="420" height="130" style="width:100%;border:1.5px dashed var(--border);border-radius:10px;background:#fff;touch-action:none;cursor:crosshair;display:block;"></canvas>
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
               <button class="btn btn-b" id="btn-sig-labo-clear" type="button" style="padding:8px 12px;font-size:.76rem;">Effacer</button>
               <button class="btn btn-a" id="btn-sig-labo-save" type="button" style="padding:8px 12px;font-size:.76rem;">Enregistrer</button>
@@ -1227,7 +1231,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
           </div>
           <div>
             <div style="font-weight:700;margin-bottom:6px;color:var(--ink);">Cabinet — Signature (optionnel)</div>
-            <canvas id="sig-cab-canvas" width="420" height="130" style="width:100%;border:1.5px dashed var(--border);border-radius:10px;background:#fff;touch-action:none;"></canvas>
+            <canvas id="sig-cab-canvas" width="420" height="130" style="width:100%;border:1.5px dashed var(--border);border-radius:10px;background:#fff;touch-action:none;cursor:crosshair;display:block;"></canvas>
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
               <button class="btn btn-b" id="btn-sig-cab-clear" type="button" style="padding:8px 12px;font-size:.76rem;">Effacer</button>
               <button class="btn btn-a" id="btn-sig-cab-save" type="button" style="padding:8px 12px;font-size:.76rem;">Enregistrer</button>
@@ -1244,12 +1248,13 @@ body.has-sidebar #drawer{transform:translateX(0);}
     <div id="settings-sec-tarifs" class="settings-section">
       <div class="settings-topbar">
         <button type="button" class="settings-back" onclick="closeSettingsSection()" aria-label="Retour">←</button>
-        <h2>Types et tarifs</h2>
+        <h2>Prix des travaux</h2>
         <span class="settings-topbar-spacer"></span>
       </div>
       <div class="card" id="card-custom-types">
-        <h2 data-i18n="h2.settings.types">🔧 Types de travaux &amp; tarifs</h2>
-        <p data-i18n="desc.types" style="font-size:.76rem;color:var(--ink-soft);margin-bottom:16px;">Gérez vos types de travaux et leur prix unitaire. Le prix est automatiquement proposé lors de la création d'un bon de livraison.</p>
+        <h2 data-i18n="h2.settings.types">💰 Prix de vos travaux</h2>
+        <p data-i18n="desc.types" style="font-size:.76rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;">Indiquez le <strong>prix en euros</strong> de chaque type de travail (couronne, inlay, facette…). Ce prix sera proposé automatiquement sur les bons de livraison et les factures.</p>
+        <p style="font-size:.7rem;color:var(--ink-muted);margin-bottom:14px;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);">💡 Utilisez <strong>✏️ Modifier</strong> uniquement pour changer le nom, la catégorie ou les étapes de programmation (optionnel).</p>
         <div id="ct-list" style="margin-bottom:16px;"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-b" id="btn-ct-show-form" data-i18n="btn.ct.add" onclick="showCustomTypeForm()">+ Ajouter un type</button>
@@ -1282,24 +1287,6 @@ body.has-sidebar #drawer{transform:translateX(0);}
           </div>
         </div>
       </div>
-
-    <!-- Tarifs par défaut -->
-    <div class="card" id="tarif-card" style="margin-top:18px;">
-      <h2 data-i18n="h2.tarifs">Tarifs par défaut</h2>
-      <p data-i18n="desc.tarifs" style="font-size:.74rem;color:var(--ink-soft);margin-bottom:14px;">Ces prix sont pré-remplis automatiquement lors de la création d'un document.</p>
-      <div id="tarif-list"></div>
-      <div style="display:flex;gap:8px;margin-top:12px;align-items:flex-end;flex-wrap:wrap;">
-        <div class="fl" style="flex:2;min-width:140px;"><label data-i18n="form.tarif.service">Prestation</label><input type="text" id="tarif-label" placeholder="ex: Couronne zircone"/></div>
-        <div class="fl" style="min-width:80px;"><label data-i18n="form.tarif.price">Prix (€)</label><input type="number" id="tarif-price" min="0" step="0.01" placeholder="0.00" style="width:90px;"/></div>
-        <button id="btn-tarif-add" style="background:#2a6049;color:#fff;border:none;border-radius:7px;padding:8px 14px;font-family:monospace;font-size:.78rem;cursor:pointer;white-space:nowrap;">+ Ajouter</button>
-      </div>
-      <div style="margin-top:12px;">
-        <div data-i18n="tarif.assoc" style="font-size:.65rem;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft);margin-bottom:6px;">Associer aux types de travaux (auto-remplissage)</div>
-        <div id="tarif-type-sel" style="display:flex;flex-wrap:wrap;gap:5px;padding:8px;background:var(--bg);border-radius:8px;border:1px solid var(--border);"></div>
-        <div data-i18n="tarif.assoc.desc" style="font-size:.66rem;color:var(--ink-soft);margin-top:4px;">Cochez les types pour lesquels ce tarif s'applique automatiquement.</div>
-      </div>
-    </div>
-  </div>
 
     </div>
 
@@ -1355,7 +1342,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
       </div>
       <div class="card">
         <h2>🛵 Rattacher un coursier</h2>
-        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;">Le coursier doit d'abord créer son compte sur <a href="/courier.html" target="_blank" rel="noopener">l'app Coursier Labosync</a>. Ensuite, ajoutez-le avec l'email utilisé à l'inscription.</p>
+        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.45;">Le coursier doit d'abord créer son compte sur <a href="/courier.html" target="_blank" rel="noopener">labosync.app/courier</a> (bouton « Créer un compte coursier »), <strong>pas</strong> sur l'app laboratoire. Utilisez ensuite <strong>exactement</strong> le même email que lors de l'inscription coursier.</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;max-width:520px;">
           <div class="fl" style="flex:1;min-width:200px;"><label>Email du coursier</label><input type="email" id="courier-link-email" placeholder="coursier@email.fr"/></div>
           <button type="button" class="btn btn-a" id="btn-courier-link">Ajouter</button>
@@ -1391,38 +1378,30 @@ body.has-sidebar #drawer{transform:translateX(0);}
         <span class="settings-topbar-spacer"></span>
       </div>
       <div class="migration-hero" style="margin-bottom:16px;">
-        <p style="margin:0;font-size:.84rem;color:#5b21b6;line-height:1.55;">Import ponctuel depuis un autre logiciel. Une fois votre compte à jour, vous n’aurez plus besoin de cet outil.</p>
+        <p style="margin:0;font-size:.9rem;color:#5b21b6;line-height:1.55;">Vous changez de logiciel ? Importez une fois vos dentistes, bons de livraison et factures. Ensuite, vous n’aurez plus besoin de cette page.</p>
       </div>
-      <div class="card" style="max-width:920px;border-left:4px solid #7c3aed;">
-        <h2 style="margin-top:0;">Données à importer</h2>
-        <p style="font-size:.84rem;color:var(--ink);margin-bottom:12px;line-height:1.55;">
-          <strong>1)</strong> déposez un fichier ou collez un tableau, <strong>2)</strong> vérifiez le résumé, <strong>3)</strong> validez. Rien n’est enregistré sans confirmation.
-        </p>
-        <details style="font-size:.72rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;border:1px solid var(--border);border-radius:8px;padding:8px 12px;background:var(--bg);">
-          <summary style="cursor:pointer;font-weight:600;color:var(--ink);">Aide rapide : Factur-X, bdlRefs, CSV labo</summary>
-          <p style="margin:10px 0 0;"><strong>Factur-X</strong> : XML UBL ou CII analysé localement (cabinet acheteur, lignes, totaux, références BL si présentes).</p>
-          <p style="margin:8px 0 0;"><strong>bdlRefs</strong> : numéros de BL rattachés à une facture pour la traçabilité.</p>
-          <p style="margin:8px 0 0;"><strong>CSV labo</strong> : en-têtes reconnus automatiquement ; regroupement par n° de facture si la colonne est remplie sur assez de lignes.</p>
+      <div class="card import-simple-card" style="max-width:720px;border-left:4px solid #7c3aed;">
+        <h2 style="margin-top:0;font-size:1.05rem;">En 3 étapes</h2>
+        <ol style="font-size:.88rem;color:var(--ink);line-height:1.65;margin:0 0 20px;padding-left:1.2rem;">
+          <li><strong>Déposez</strong> le fichier exporté par votre ancien logiciel (ou collez un tableau).</li>
+          <li><strong>Vérifiez</strong> le résumé proposé par Labosync.</li>
+          <li><strong>Validez</strong> — rien n’est enregistré tant que vous n’avez pas confirmé.</li>
+        </ol>
+        <select id="import-ai-mode" aria-hidden="true" tabindex="-1" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;"><option value="auto" selected>auto</option></select>
+        <label class="import-file-zone" for="import-ai-file">
+          <span class="import-file-zone-icon">📁</span>
+          <span class="import-file-zone-title">Choisir un fichier</span>
+          <span class="import-file-zone-hint">Export Excel, liste de factures, fichier de votre ancien labo… Labosync reconnaît le format automatiquement.</span>
+        </label>
+        <input type="file" id="import-ai-file" class="import-file-input" accept=".csv,.txt,.tsv,.xls,.xlsx,.xml,.pdf" onchange="importAiPickFile(this)"/>
+        <details style="margin:14px 0;font-size:.82rem;">
+          <summary style="cursor:pointer;font-weight:600;color:var(--ink);">Ou collez un tableau copié depuis Excel</summary>
+          <textarea id="import-ai-raw" placeholder="Collez ici les lignes copiées depuis un tableur (Ctrl+V)…" rows="8" style="width:100%;box-sizing:border-box;font-size:.88rem;padding:12px;margin-top:10px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--ink);outline:none;resize:vertical;font-family:inherit;"></textarea>
         </details>
-        <div style="margin-bottom:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-          <label style="font-size:.74rem;color:var(--ink-soft);white-space:nowrap;">Source</label>
-          <select id="import-ai-mode" style="font-size:.78rem;padding:6px 10px;border-radius:7px;border:1.5px solid var(--border);background:var(--bg);color:var(--ink);max-width:100%;">
-            <option value="auto">Auto (IA + XML auto si reconnu)</option>
-            <option value="facturx">Factur-X / UBL-CII (XML → plan direct)</option>
-            <option value="prothesis">Export CSV labo (plan direct)</option>
-          </select>
-        </div>
-        <div style="margin-bottom:10px;">
-          <input type="file" id="import-ai-file" accept=".csv,.txt,.tsv,.pdf,.xml,text/plain,text/csv,application/pdf,text/xml,application/xml" onchange="importAiPickFile(this)" style="font-size:.78rem;margin-bottom:8px;"/>
-          <textarea id="import-ai-raw" placeholder="Collez ici le contenu (CSV, XML, tableau, texte extrait d'un PDF…) — max ~120 000 caractères" rows="10" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:.78rem;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--ink);outline:none;resize:vertical;"></textarea>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <button type="button" class="btn btn-a" id="btn-import-ai-analyze" onclick="runAiImportAnalyze()">🔍 Analyser avec l'IA</button>
-          <button type="button" class="btn btn-b" onclick="importRunStructuredFromTextarea()">📋 Plan depuis le texte (XML ou CSV)</button>
-          <span style="font-size:.7rem;color:var(--ink-soft);">IA : <code>ANTHROPIC_API_KEY</code> sur Netlify · XML/CSV : local</span>
-        </div>
-        <div id="import-ai-status" style="font-size:.76rem;margin-top:10px;min-height:18px;color:var(--ink-soft);"></div>
-        <div id="import-ai-preview" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);"></div>
+        <button type="button" class="btn btn-a" id="btn-import-prepare" onclick="runImportPrepare()" style="width:100%;padding:14px;font-size:.92rem;">Préparer l’import</button>
+        <p style="font-size:.74rem;color:var(--ink-soft);margin:10px 0 0;line-height:1.45;">Formats courants : tableur, export de factures, liste de travaux. En cas de doute, déposez le fichier tel quel.</p>
+        <div id="import-ai-status" style="font-size:.82rem;margin-top:14px;min-height:20px;color:var(--ink-soft);"></div>
+        <div id="import-ai-preview" style="display:none;margin-top:16px;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--bg);"></div>
       </div>
     </div>
 
@@ -1434,19 +1413,21 @@ body.has-sidebar #drawer{transform:translateX(0);}
       </div>
       <div class="card">
         <h2 data-i18n="h2.settings.stripe">💳 Paiements en ligne (Stripe)</h2>
-        <p style="font-size:.76rem;color:var(--ink-soft);margin-bottom:14px;">Permettez à vos cabinets dentaires de payer leurs factures en ligne. Chaque laboratoire renseigne sa propre clé secrète Stripe (compte du labo) : elle est enregistrée sur cet appareil pour générer les liens de paiement et n'est jamais visible côté dentiste. Vous pouvez aussi définir <code>STRIPE_SECRET_KEY</code> sur Netlify comme repli pour les appareils sans clé locale.</p>
-        <div style="margin-bottom:12px;">
-          <div style="font-size:.65rem;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft);margin-bottom:5px;">Clé secrète Stripe</div>
-          <div style="font-size:.68rem;color:var(--ink-soft);margin-bottom:6px;">Trouvez-la sur <strong>dashboard.stripe.com → Développeurs → Clés API → Clé secrète</strong></div>
-          <div style="display:flex;gap:8px;align-items:center;">
+        <p style="font-size:.76rem;color:var(--ink-soft);margin-bottom:14px;">Connectez le compte Stripe de votre laboratoire en un clic. Les paiements des cabinets arrivent directement sur votre compte Stripe.</p>
+        <div id="stripe-connect-status" style="font-size:.82rem;margin-bottom:14px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--ink-soft);">Vérification du compte…</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+          <button type="button" class="btn btn-a" id="btn-stripe-connect" style="background:#635bff;border:none;min-width:200px;">Connecter mon compte Stripe</button>
+          <button type="button" class="btn btn-b" id="btn-stripe-disconnect" style="display:none;">Déconnecter</button>
+        </div>
+        <details style="font-size:.74rem;color:var(--ink-soft);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+          <summary style="cursor:pointer;font-weight:600;color:var(--ink);">Mode avancé : clé API manuelle</summary>
+          <p style="margin:10px 0 8px;line-height:1.45;">Réservé au dépannage. Préférez la connexion Stripe ci-dessus.</p>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
             <input type="password" id="stripe-key-input" placeholder="sk_live_... ou sk_test_..." style="flex:1;font-family:monospace;font-size:.82rem;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--ink);outline:none;"/>
-            <button onclick="toggleStripeKeyVisibility()" style="background:none;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:.85rem;" title="Afficher/masquer">👁️</button>
+            <button type="button" onclick="toggleStripeKeyVisibility()" style="background:none;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:.85rem;" title="Afficher/masquer">👁️</button>
           </div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <button class="btn btn-a" id="btn-stripe-save">💾 Enregistrer</button>
-          <div id="stripe-status" style="font-size:.75rem;"></div>
-        </div>
+          <button type="button" class="btn btn-b" id="btn-stripe-save">Enregistrer la clé locale</button>
+        </details>
         <div id="stripe-msg" style="font-size:.76rem;margin-top:10px;min-height:16px;"></div>
       </div>
     </div>
@@ -1603,7 +1584,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
     <!-- Tarifs : Réglages -->
     <div class="card" id="tarif-card" style="margin:0;">
       <h2>Tarifs</h2>
-      <p style="font-size:.8rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;">Un seul endroit pour vos prix : <strong>Réglages → Types de travaux et tarifs</strong>.</p>
+      <p style="font-size:.8rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;">Un seul endroit pour vos prix : <strong>Réglages → Prix des travaux</strong>.</p>
       <button type="button" class="btn btn-a" onclick="goSettings();setTimeout(function(){openSettingsSection('tarifs');},200);">Gérer les tarifs</button>
     </div>
   </div>
@@ -1667,7 +1648,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
   <div id="courier-missions-board"></div>
   <div class="card" style="margin-top:18px;padding:16px 18px;">
     <h3 style="font-size:.92rem;font-weight:700;margin:0 0 10px;">Relevés coursier (facturation)</h3>
-    <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.4;">Vérifiez le nombre de courses effectuées par chaque coursier sur une période avant de le régler.</p>
+    <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.4;">Relevé des courses terminées. Le montant estimé reprend le tarif défini par le coursier (forfait + supplément par arrêt supplémentaire).</p>
     <div class="frow" style="margin-bottom:10px;flex-wrap:wrap;gap:10px;">
       <div class="fl" style="flex:1;min-width:160px;"><label>Coursier</label><select id="lab-courier-billing-courier"></select></div>
       <div class="fl" style="flex:1;min-width:140px;"><label>Période</label><select id="lab-courier-billing-month"></select></div>
@@ -2006,7 +1987,9 @@ const TRANSLATIONS = {
     'toast.csv_exported':'📥 Export CSV téléchargé',
     'toast.no_cab_email':'⚠️ Aucun email pour ce cabinet — ajoutez-en un dans Cabinets',
     'toast.email_sent':'📧 Email envoyé à {email}',
-    'toast.invoice_sent_no_email':'⚠️ Facture envoyée ✅ — Email auto désactivé (configurez RESEND_API_KEY dans Netlify)',
+    'toast.invoice_sent_no_email':'Facture marquée envoyée — ouverture de votre client mail (Outlook, etc.)',
+    'toast.email_mailto_fallback':'📧 Client mail ouvert — joignez le PDF si besoin (bouton PDF sur la facture)',
+    'toast.email_resend_ok':'📧 Facture envoyée par email à {email}',
     'toast.invoice_sent_email_fail':'⚠️ Facture envoyée ✅ — Échec email : {err}',
     'toast.invoice_sent_email_error':'⚠️ Facture envoyée ✅ — Erreur réseau email (non bloquant)',
     'toast.mark_sent_first':'⚠️ Passez d\'abord en "Envoyé"',
@@ -2113,7 +2096,7 @@ const TRANSLATIONS = {
     'desc.waiting':'Ces travaux sont suspendus. Recherchez le code patient dans la barre de recherche pour y accéder.',
     'desc.cloud':'Vos données sont sauvegardées sur Supabase (cloud sécurisé). Sauvegarde automatique toutes les 5 minutes. Restaurez sur n\'importe quel appareil.',
     'desc.legal':'Ces informations apparaissent sur vos bons de livraison et certificats de conformité CE.',
-    'desc.types':'Gérez vos types de travaux et leur prix unitaire. Le prix est automatiquement proposé lors de la création d\'un bon de livraison.',
+    'desc.types':'Indiquez le prix en euros de chaque type de travail. Ce prix est proposé sur les bons de livraison et les factures.',
     'desc.tarifs':'Ces prix sont pré-remplis automatiquement lors de la création d\'un document.',
     'desc.fourn':'Votre fournisseur est pré-sélectionné automatiquement sur chaque bon.',
     // Form labels – scan
@@ -2375,7 +2358,9 @@ const TRANSLATIONS = {
     'toast.csv_exported':'📥 CSV export downloaded',
     'toast.no_cab_email':'⚠️ No email for this clinic — add one in Clinics',
     'toast.email_sent':'📧 Email sent to {email}',
-    'toast.invoice_sent_no_email':'⚠️ Invoice sent ✅ — Auto email disabled (configure RESEND_API_KEY in Netlify)',
+    'toast.invoice_sent_no_email':'Invoice marked sent — opening your mail app',
+    'toast.email_mailto_fallback':'📧 Mail app opened — attach the PDF if needed',
+    'toast.email_resend_ok':'📧 Invoice emailed to {email}',
     'toast.invoice_sent_email_fail':'⚠️ Invoice sent ✅ — Email failed: {err}',
     'toast.invoice_sent_email_error':'⚠️ Invoice sent ✅ — Email network error (non-blocking)',
     'toast.mark_sent_first':'⚠️ Mark as "Sent" first',
@@ -2685,6 +2670,9 @@ function openSettingsSection(id){
   sec.classList.add('on');
   sec.style.display='block';
   _settingsSectionOpen=id;
+  if(id==='paiements'){loadStripeConnectUI();}
+  if(id==='tarifs'){renderCustomTypesList();}
+  if(id==='labo'){setTimeout(function(){initAllSignaturePads();},80);}
   try{sec.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}
 }
 function closeSettingsSection(){
@@ -2876,6 +2864,37 @@ if(!localStorage.getItem('lb_types_seeded')){
 // Synchronise les types dans TYPE_LABELS pour que TYPE_LABELS[x]||x fonctionne partout
 function syncCustomTypesToTL(){customTypes.forEach(function(ct){TYPE_LABELS[ct.id]=ct.label;});}
 syncCustomTypesToTL();
+
+function getTypeUnitPrice(typeId){
+  if(!typeId)return 0;
+  const ct=customTypes.find(function(c){return c.id===typeId;});
+  if(ct&&ct.prix!=null&&!isNaN(Number(ct.prix)))return Number(ct.prix);
+  const tr=tarifs.find(function(t){return t.types&&t.types.includes(typeId);});
+  return tr?Number(tr.prix)||0:0;
+}
+
+function migrateTarifsToCustomTypes(){
+  let changed=false;
+  customTypes.forEach(function(ct){
+    if(ct.prix!=null&&Number(ct.prix)>0)return;
+    const tr=tarifs.find(function(t){return t.types&&t.types.includes(ct.id);});
+    if(tr&&tr.prix!=null){ct.prix=Number(tr.prix)||0;changed=true;}
+  });
+  if(changed)saveCustomTypes();
+}
+
+function syncTarifsFromCustomTypes(){
+  customTypes.forEach(function(ct){
+    const prix=Number(ct.prix)||0;
+    const idx=tarifs.findIndex(function(t){return t.types&&t.types.includes(ct.id);});
+    if(prix>0){
+      const row={label:ct.label,prix,types:[ct.id]};
+      if(idx>=0)tarifs[idx]=Object.assign({},tarifs[idx],row);
+      else tarifs.push(Object.assign({id:'tp_'+ct.id},row));
+    }else if(idx>=0){tarifs.splice(idx,1);}
+  });
+  saveTarifs();
+}
 
 // Reconstruit les selects de type depuis customTypes (par catégorie)
 // Reconstruit les <select> de types groupés par catégorie
@@ -4600,8 +4619,11 @@ function _getAllJobTypeOptions(){
 }
 
 function _findTarif(typeId){
-  if(!Array.isArray(tarifs))return null;
-  return tarifs.find(function(t){return t.types&&t.types.includes(typeId);});
+  if(!typeId)return null;
+  const ct=customTypes.find(function(c){return c.id===typeId;});
+  const prix=getTypeUnitPrice(typeId);
+  if(!ct&&!prix)return null;
+  return{label:ct?ct.label:(TYPE_LABELS[typeId]||typeId),prix: prix,types:[typeId]};
 }
 
 function addAcceptItem(skipRender){
@@ -5727,30 +5749,35 @@ function renderMonth(){
 /* ══════════════════════════════════════════
    §10 — PRINTING / IMPRESSION
    ══════════════════════════════════════════ */
+function getTechTasksForPrint(tech,todayOnly){
+  const today=new Date();
+  const tasks=[];
+  jobs.forEach(function(j){
+    j.tasks.forEach(function(t,idx){
+      if(t.tech!==tech)return;
+      if(todayOnly&&!sameDay(t.dueDate,today))return;
+      tasks.push({...t,patient:j.patient,urgent:j.urgent,note:j.note,jobId:j.id,taskIdx:idx,trackCode:j.trackCode||''});
+    });
+  });
+  tasks.sort(function(a,b){return new Date(a.dueDate)-new Date(b.dueDate);});
+  return tasks;
+}
 function buildPrintHTML(){
   const type=document.getElementById('pt').value;
   if(type==='person'){
     const tech=document.getElementById('pp').value;
     const info=getTech(tech);
-    const tasks=[];
-    jobs.forEach(j=>j.tasks.forEach((t,idx)=>{if(t.tech===tech)tasks.push({...t,patient:j.patient,urgent:j.urgent,note:j.note,jobId:j.id,taskIdx:idx,trackCode:j.trackCode||''});}));
-    tasks.sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-    const byDay={};
-    tasks.forEach(t=>{const k=fmtISO(t.dueDate);if(!byDay[k])byDay[k]=[];byDay[k].push(t);});
+    const today=new Date();
+    const tasks=getTechTasksForPrint(tech,true);
     return `<div class="print-wrap">
-      <div class="ptitle">Planning — ${info.label}</div>
-      <div class="psub">Généré le ${fmtL(new Date())} · ${tasks.length} tâche(s)</div>
-      ${Object.keys(byDay).sort().map(k=>{
-        const d=new Date(k+'T12:00:00');
-        return `<div class="pday">
-          <div class="pday-lbl" style="color:${info.color}">${DFR[d.getDay()]} ${d.getDate()} ${MFR[d.getMonth()]} ${d.getFullYear()}<span class="pday-cnt">${byDay[k].length} tâche(s)</span></div>
-          ${byDay[k].map(t=>`<div class="prow" style="background:${info.soft};border-color:${info.color}${t.urgent?';border-left-width:6px':''}">
+      <div class="ptitle">Planning du jour — ${info.label}</div>
+      <div class="psub">${fmtL(today)} · ${tasks.length} tâche(s) · Généré le ${fmtL(new Date())}</div>
+      ${tasks.length?tasks.map(function(t){
+        return `<div class="prow" style="background:${info.soft};border-color:${info.color}${t.urgent?';border-left-width:6px':''}">
             <div class="pp">${t.urgent?'🔴 ':''}${t.patient}</div>
             <div class="pst">${t.label}${t.note?` · <em>${t.note}</em>`:''}</div>
-          </div>`).join('')}
-        </div>`;
-      }).join('')}
-      ${!tasks.length?'<div class="empty">'+t('print.no_tasks')+'</div>':''}
+          </div>`;
+      }).join(''):'<div class="empty">'+t('print.no_tasks_day')+'</div>'}
     </div>`;
   } else {
     const k=document.getElementById('pd').value;
@@ -5789,40 +5816,27 @@ function doPDF(){
   if(type==='person'){
     const tech=document.getElementById('pp').value;
     const info=getTech(tech);const rgb=h2r(info.color);
-    const tasks=[];
-    jobs.forEach(j=>j.tasks.forEach((t,idx)=>{if(t.tech===tech)tasks.push({...t,patient:j.patient,urgent:j.urgent,note:j.note,jobId:j.id,taskIdx:idx,trackCode:j.trackCode||''});}));
-    tasks.sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-    // Header
+    const today=new Date();
+    const tasks=getTechTasksForPrint(tech,true);
     doc.setFillColor(...rgb);doc.rect(0,0,W,22,'F');
     doc.setFontSize(16);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);
-    doc.text('Planning — '+info.label,M,14);
+    doc.text('Planning du jour — '+info.label,M,14);
     doc.setFontSize(9);doc.setFont('helvetica','normal');
-    doc.text('Généré le '+fmtL(new Date())+' · '+tasks.length+' tâche(s)',M,20);
+    doc.text(fmtL(today)+' · '+tasks.length+' tâche(s) · Généré le '+fmtL(new Date()),M,20);
     y=28;
-    const byDay={};
-    tasks.forEach(t=>{const k=fmtISO(t.dueDate);if(!byDay[k])byDay[k]=[];byDay[k].push(t);});
-    Object.keys(byDay).sort().forEach(k=>{
-      const d=new Date(k+'T12:00:00');
-      const dl=DFR[d.getDay()]+' '+d.getDate()+' '+MFR[d.getMonth()]+' '+d.getFullYear();
-      chk(14);
-      doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(...rgb);doc.text(dl,M,y);
-      doc.setFontSize(8);doc.setTextColor(120,116,110);doc.text(byDay[k].length+' tâche(s)',W-M,y,{align:'right'});
-      y+=2;doc.setDrawColor(...rgb);doc.setLineWidth(.3);doc.line(M,y,W-M,y);y+=4;
-      byDay[k].forEach(t=>{
-        chk(12);
-        const sr=h2r(info.soft);
-        doc.setFillColor(...sr);doc.roundedRect(M,y,W-M*2,t.note?13:9,2,2,'F');
-        doc.setFillColor(...rgb);doc.rect(M,y,3,t.note?13:9,'F');
-        doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(26,22,18);
-        doc.text((t.urgent?'🔴 ':'')+t.patient,M+5,y+4);
-        doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(100,96,90);
-        doc.text(t.label,M+5,y+8);
-        if(t.note){doc.setFontSize(7);doc.text('📝 '+t.note,M+5,y+12);}
-        y+=(t.note?13:9)+3;
-      });
-      y+=3;
+    tasks.forEach(function(t){
+      chk(12);
+      const sr=h2r(info.soft);
+      doc.setFillColor(...sr);doc.roundedRect(M,y,W-M*2,t.note?13:9,2,2,'F');
+      doc.setFillColor(...rgb);doc.rect(M,y,3,t.note?13:9,'F');
+      doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(26,22,18);
+      doc.text((t.urgent?'🔴 ':'')+t.patient,M+5,y+4);
+      doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(100,96,90);
+      doc.text(t.label,M+5,y+8);
+      if(t.note){doc.setFontSize(7);doc.text('📝 '+t.note,M+5,y+12);}
+      y+=(t.note?13:9)+3;
     });
-    if(!tasks.length){doc.setFontSize(10);doc.setTextColor(150,140,130);doc.text(t('print.no_tasks'),M,y);}
+    if(!tasks.length){doc.setFontSize(10);doc.setTextColor(150,140,130);doc.text(t('print.no_tasks_day'),M,y);}
     doc.save('planning_'+info.label.replace(' ','_')+'_'+fmtISO(new Date())+'.pdf');
   } else {
     const k=document.getElementById('pd').value;
@@ -6623,7 +6637,7 @@ document.addEventListener('click',function(e){
     if(pane==='attente'){renderWaiting();}
     if(pane==='equipe'){renderEquipe();refreshTechSelects();}
     if(pane==='commandes'){renderBdcList();renderFournList();syncBdcFourn();}
-    if(pane==='facturation'){renderToInvoice();renderToInvoice();renderBillDocs();updateBillStats();renderTarifs();syncBillCab();renderTarifTypeSel();}
+    if(pane==='facturation'){renderToInvoice();renderToInvoice();renderBillDocs();updateBillStats();syncBillCab();}
     if(pane==='parametres'){
       resetSettingsView();
       applySettingsHubVisibility();
@@ -7043,12 +7057,11 @@ function renderCustomTypesList(){
     if(!cats[t.category]){cats[t.category]=[];catOrder.push(t.category);}
     cats[t.category].push(t);
   });
-  let html='';
+  let html='<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:6px;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-muted);"><span style="flex:1;">Travail</span><span style="width:100px;text-align:right;">Prix (€)</span><span style="width:72px;"></span></div>';
   catOrder.forEach(function(cat){
-    html+='<div style="font-size:.62rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-muted);margin:10px 0 4px;">'+cat+'</div>';
+    html+='<div style="font-size:.62rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-muted);margin:14px 0 4px;">'+cat+'</div>';
     cats[cat].forEach(function(t){
-      const existingTarif=tarifs.find(function(tr){return tr.types&&tr.types.includes(t.id);});
-      const prix=existingTarif?existingTarif.prix:0;
+      const prix=getTypeUnitPrice(t.id);
       const stepsHtml=(t.steps||[]).map(function(s){
         const techLabel=s.sameAs!==null&&s.sameAs!==undefined?'🔗 ét.'+(s.sameAs+1):(!s.tech||s.tech==='auto')?'Auto':Array.isArray(s.tech)?s.tech.map(function(k){return TECHS[k]?TECHS[k].label:k;}).join(' / '):(TECHS[s.tech]?TECHS[s.tech].label:s.tech);
         return '<span style="font-size:.59rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;white-space:nowrap;">J+'+s.dayOffset+' '+s.label+' → '+techLabel+'</span>'+(t.stepsEmp?'<span style="font-size:.55rem;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;padding:1px 5px;white-space:nowrap;">📡 emp</span>':'');
@@ -7059,7 +7072,7 @@ function renderCustomTypesList(){
           (stepsHtml?'<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">'+stepsHtml+'</div>':'')+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">'+
-          '<input type="number" id="type-prix-'+t.id+'" min="0" step="0.01" value="'+(prix||'')+'" placeholder="0.00" title="Prix unitaire BDL" style="width:80px;border:1.5px solid var(--border);border-radius:6px;background:var(--bg);font-family:monospace;font-size:.82rem;padding:5px 7px;color:var(--ink);text-align:right;outline:none;"/>'+
+          '<input type="number" id="type-prix-'+t.id+'" min="0" step="0.01" value="'+(prix||'')+'" placeholder="0.00" title="Prix unitaire" onchange="saveTypePriceQuick(\''+t.id+'\')" style="width:80px;border:1.5px solid var(--border);border-radius:6px;background:var(--bg);font-family:monospace;font-size:.82rem;padding:5px 7px;color:var(--ink);text-align:right;outline:none;"/>'+
           '<span style="font-size:.75rem;color:var(--ink-soft);">€</span>'+
         '</div>'+
         '<button onclick="editCustomType(\''+t.id+'\')" title="Modifier ce type" style="flex-shrink:0;background:none;border:1px solid var(--border);border-radius:5px;padding:2px 9px;cursor:pointer;font-size:.68rem;color:var(--ink-soft);">✏️ Modifier</button>'+
@@ -7736,7 +7749,7 @@ async function cloudRestore(silent=false){
     if(rows[0].updated_at)_serverUpdatedAt=rows[0].updated_at;
     if(p.jobs)jobs=p.jobs;
     if(p.archive)archive=p.archive;
-    if(p.cabinets)cabinets=p.cabinets;
+    if(p.cabinets&&(p.cabinets.length>0||!cabinets.length))cabinets=p.cabinets;
     if(p.syns)syns=p.syns;
     if(p.waiting)waiting=p.waiting;
     if(p.conges)conges=p.conges;
@@ -7834,22 +7847,134 @@ function toggleStripeKeyVisibility(){
   inp.type=inp.type==='password'?'text':'password';
 }
 
+function stripeConnectHeaders(){
+  const h={'Content-Type':'application/json'};
+  if(_cachedAccessToken)h.Authorization='Bearer '+_cachedAccessToken;
+  return h;
+}
+
+async function loadStripeConnectUI(){
+  const el=document.getElementById('stripe-connect-status');
+  const btnConnect=document.getElementById('btn-stripe-connect');
+  const btnDisc=document.getElementById('btn-stripe-disconnect');
+  if(!el)return;
+  if(!_cachedAccessToken){
+    el.innerHTML='<span style="color:#c0392b;">Connectez-vous pour lier Stripe.</span>';
+    return;
+  }
+  el.textContent='Vérification…';
+  try{
+    const resp=await fetch('/.netlify/functions/stripe-connect-status',{method:'POST',headers:stripeConnectHeaders(),body:'{}'});
+    const data=await resp.json().catch(function(){return {};});
+    if(!resp.ok){
+      el.innerHTML='<span style="color:#c0392b;">'+(data.error||'Erreur Stripe ('+resp.status+')')+'</span>';
+      return;
+    }
+    if(data.connected){
+      el.innerHTML='<span style="color:#059669;font-weight:600;">✓ Compte Stripe connecté</span> · <code style="font-size:.7rem;">'+(data.stripeAccountId||'')+'</code>';
+      if(btnDisc)btnDisc.style.display='inline-flex';
+      if(btnConnect)btnConnect.style.display='none';
+    }else{
+      el.textContent='Aucun compte Stripe lié. Cliquez sur le bouton pour connecter votre compte.';
+      if(btnDisc)btnDisc.style.display='none';
+      if(btnConnect)btnConnect.style.display='inline-flex';
+    }
+  }catch(e){
+    el.textContent='Réseau indisponible. Réessayez.';
+  }
+  loadStripeKeyUI();
+}
+
 function loadStripeKeyUI(){
   const inp=document.getElementById('stripe-key-input');
-  if(!inp)return;
-  inp.value='';
-  const status=document.getElementById('stripe-status');
-  if(status){
-    status.innerHTML='<span style="color:var(--ink-soft);font-size:.72rem;">Configuration Stripe gérée côté serveur</span>';
+  if(inp){
+    const saved=localStorage.getItem('lb_stripe_key')||'';
+    if(saved)inp.value=saved;
   }
 }
 
+async function startStripeConnectDesktop(){
+  if(!_cachedAccessToken){showToast('Connectez-vous d’abord','#c0392b');return;}
+  const btn=document.getElementById('btn-stripe-connect');
+  if(btn){btn.disabled=true;btn.textContent='Redirection…';}
+  try{
+    const resp=await fetch('/.netlify/functions/stripe-connect-start',{
+      method:'POST',
+      headers:stripeConnectHeaders(),
+      body:JSON.stringify({appUrl:window.location.origin+window.location.pathname})
+    });
+    const data=await resp.json().catch(function(){return {};});
+    if(!resp.ok||!data.url){
+      showToast(data.error||'Connexion Stripe impossible','#c0392b');
+      if(btn){btn.disabled=false;btn.textContent='Connecter mon compte Stripe';}
+      return;
+    }
+    window.location.href=data.url;
+  }catch(e){
+    showToast('Erreur réseau','#c0392b');
+    if(btn){btn.disabled=false;btn.textContent='Connecter mon compte Stripe';}
+  }
+}
+
+async function disconnectStripeDesktop(){
+  if(!confirm('Déconnecter le compte Stripe ?'))return;
+  try{
+    const resp=await fetch('/.netlify/functions/stripe-connect-disconnect',{method:'POST',headers:stripeConnectHeaders(),body:'{}'});
+    if(!resp.ok){showToast('Déconnexion impossible','#c0392b');return;}
+    showToast('Stripe déconnecté','#059669');
+    loadStripeConnectUI();
+  }catch(e){showToast('Erreur réseau','#c0392b');}
+}
+
+function handleStripeConnectReturnDesktop(){
+  var sc,msg;
+  try{
+    var sp=new URLSearchParams(location.search||'');
+    sc=sp.get('stripe_connect');
+    msg=sp.get('stripe_connect_msg')||'';
+  }catch(e){return;}
+  if(!sc)return;
+  try{
+    var keep=new URLSearchParams(location.search||'');
+    keep.delete('stripe_connect');
+    keep.delete('stripe_connect_msg');
+    var qs=keep.toString();
+    history.replaceState({},'',location.pathname+(qs?'?'+qs:'')+(location.hash||''));
+  }catch(e2){
+    history.replaceState({},'',location.pathname+(location.hash||''));
+  }
+  if(sc==='success'){
+    showToast('Compte Stripe connecté','#059669');
+    loadStripeConnectUI();
+  }else{
+    showToast('Stripe : '+(msg||'erreur'),'#c0392b');
+  }
+}
+
+async function republishAllPortals(){
+  if(!currentUser||!_cachedAccessToken)return;
+  for(const cab of cabinets){
+    if(cab&&cab.portalId){
+      try{await publishPortal(cab);}catch(e){console.warn('republish',cab.name,e);}
+    }
+  }
+}
+
+document.getElementById('btn-stripe-connect').addEventListener('click',startStripeConnectDesktop);
+document.getElementById('btn-stripe-disconnect').addEventListener('click',disconnectStripeDesktop);
+
 document.getElementById('btn-stripe-save').addEventListener('click',async function(){
   const msg=document.getElementById('stripe-msg');
-  localStorage.removeItem('lb_stripe_key');
-  msg.style.color='var(--ink-soft)';
-  msg.textContent='La clé Stripe doit être configurée dans les variables serveur.';
-  loadStripeKeyUI();
+  const key=(document.getElementById('stripe-key-input').value||'').trim();
+  if(key&&!/^sk_(live|test)_/.test(key)){
+    msg.style.color='#c0392b';
+    msg.textContent='Clé invalide (doit commencer par sk_live_ ou sk_test_)';
+    return;
+  }
+  if(key)localStorage.setItem('lb_stripe_key',key);
+  else localStorage.removeItem('lb_stripe_key');
+  msg.style.color='#059669';
+  msg.textContent=key?'Clé locale enregistrée (secours). Utilisez Stripe Connect de préférence.':'Clé locale supprimée.';
   setTimeout(function(){msg.textContent='';},4000);
 });
 
@@ -7872,6 +7997,872 @@ document.getElementById('btn-legal-save').addEventListener('click',function(){
   msg.textContent=t('toast.legal_saved');
   setTimeout(function(){msg.textContent='';},3000);
 });
+
+function initSignaturePad(canvasId,storageKey,previewId,clearBtnId,saveBtnId){
+  const canvas=document.getElementById(canvasId);
+  if(!canvas||canvas._sigBound)return;
+  canvas._sigBound=true;
+  const ctx=canvas.getContext('2d');
+  let drawing=false;
+  let hasStroke=false;
+  ctx.lineCap='round';
+  ctx.lineJoin='round';
+  ctx.lineWidth=2.5;
+  ctx.strokeStyle='#1e293b';
+  function loadSaved(){
+    const saved=localStorage.getItem(storageKey);
+    const prev=document.getElementById(previewId);
+    if(!saved)return;
+    const img=new Image();
+    img.onload=function(){
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      hasStroke=true;
+      if(prev){prev.src=saved;prev.style.display='block';}
+    };
+    img.src=saved;
+  }
+  function pointerPos(e){
+    const rect=canvas.getBoundingClientRect();
+    const scaleX=canvas.width/rect.width;
+    const scaleY=canvas.height/rect.height;
+    const pt=e.touches?e.touches[0]:e;
+    return{x:(pt.clientX-rect.left)*scaleX,y:(pt.clientY-rect.top)*scaleY};
+  }
+  function startDraw(e){
+    e.preventDefault();
+    drawing=true;
+    const p=pointerPos(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x,p.y);
+  }
+  function moveDraw(e){
+    if(!drawing)return;
+    e.preventDefault();
+    const p=pointerPos(e);
+    ctx.lineTo(p.x,p.y);
+    ctx.stroke();
+    hasStroke=true;
+  }
+  function endDraw(){drawing=false;}
+  canvas.addEventListener('mousedown',startDraw);
+  canvas.addEventListener('mousemove',moveDraw);
+  canvas.addEventListener('mouseup',endDraw);
+  canvas.addEventListener('mouseleave',endDraw);
+  canvas.addEventListener('touchstart',startDraw,{passive:false});
+  canvas.addEventListener('touchmove',moveDraw,{passive:false});
+  canvas.addEventListener('touchend',endDraw);
+  canvas.addEventListener('touchcancel',endDraw);
+  const clearBtn=document.getElementById(clearBtnId);
+  if(clearBtn)clearBtn.addEventListener('click',function(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    hasStroke=false;
+    localStorage.removeItem(storageKey);
+    const prev=document.getElementById(previewId);
+    if(prev){prev.style.display='none';prev.src='';}
+    scheduleSave();
+  });
+  const saveBtn=document.getElementById(saveBtnId);
+  if(saveBtn)saveBtn.addEventListener('click',function(){
+    if(!hasStroke){showToast('Dessinez d\'abord une signature','#d97706');return;}
+    const data=canvas.toDataURL('image/png');
+    localStorage.setItem(storageKey,data);
+    const prev=document.getElementById(previewId);
+    if(prev){prev.src=data;prev.style.display='block';}
+    showToast('Signature enregistrée','#2a6049');
+    scheduleSave();
+  });
+  loadSaved();
+}
+function initAllSignaturePads(){
+  initSignaturePad('sig-labo-canvas','lb_sig_labo','sig-labo-preview','btn-sig-labo-clear','btn-sig-labo-save');
+  initSignaturePad('sig-cab-canvas','lb_sig_cabinet','sig-cab-preview','btn-sig-cab-clear','btn-sig-cab-save');
+}
+
+/* Import données */
+var _importPlan=null;
+
+
+function _fxNormHeader(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+}
+function _fxParseAmount(s){
+  var t=String(s||'').replace(/\s/g,'').replace(',','.');
+  var n=parseFloat(t);
+  return Number.isFinite(n)?n:NaN;
+}
+function _fxParseDateISO(s){
+  var t=String(s||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(t))return t.slice(0,10);
+  var m=t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m){
+    var d=parseInt(m[1],10),mo=parseInt(m[2],10),y=parseInt(m[3],10);
+    if(y<100)y+=2000;
+    if(mo>=1&&mo<=12&&d>=1&&d<=31)return String(y)+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+  }
+  return '';
+}
+function _fxFirstDesc(el, localName){
+  if(!el)return null;
+  if(el.localName===localName)return el;
+  for(var i=0;i<el.children.length;i++){
+    var r=_fxFirstDesc(el.children[i],localName);
+    if(r)return r;
+  }
+  return null;
+}
+function _fxText(el){
+  return String(el&&(el.textContent!=null?el.textContent:'')).replace(/\s+/g,' ').trim();
+}
+function _fxAll(docOrEl, localName){
+  try{return Array.prototype.slice.call(docOrEl.getElementsByTagNameNS('*',localName));}
+  catch(e){return Array.prototype.slice.call(docOrEl.getElementsByTagName(localName));}
+}
+
+function _fxExtractUBLInvoice(inv,fileName){
+  var idEl=_fxFirstDesc(inv,'ID');
+  var invoiceId=_fxText(idEl)||'IMPORT';
+  var dateEl=_fxFirstDesc(inv,'IssueDate');
+  var dateISO=_fxText(dateEl).slice(0,10)||fmtISO(new Date());
+  var custParty=_fxFirstDesc(inv,'AccountingCustomerParty');
+  var party=custParty?_fxFirstDesc(custParty,'Party'):null;
+  var custName='';
+  if(party){
+    var pn=_fxFirstDesc(party,'PartyName');
+    var nEl=pn?_fxFirstDesc(pn,'Name'):null;
+    custName=_fxText(nEl);
+    if(!custName){
+      var ple=_fxFirstDesc(party,'PartyLegalEntity');
+      if(ple){var rn=_fxFirstDesc(ple,'RegistrationName');custName=_fxText(rn);}
+    }
+  }
+  var addrParts=[];
+  if(party){
+    var post=_fxFirstDesc(party,'PostalAddress');
+    if(post){
+      ['StreetName','AdditionalStreetName','CityName','PostalZone','CountrySubentity'].forEach(function(ln){
+        var n=_fxFirstDesc(post,ln),tx=_fxText(n);if(tx)addrParts.push(tx);
+      });
+    }
+  }
+  var siret='';
+  if(party){
+    var ids=_fxAll(party,'ID');
+    for(var i=0;i<ids.length;i++){
+      var idn=ids[i];
+      var scheme=String(idn.getAttribute('schemeID')||idn.getAttribute('schemeId')||'').toUpperCase();
+      if(scheme==='0002'||scheme.indexOf('SIRET')>=0){siret=_fxText(idn).replace(/\D/g,'');break;}
+    }
+    if(!siret){
+      var ple2=_fxFirstDesc(party,'PartyLegalEntity');
+      if(ple2){
+        var cid=_fxFirstDesc(ple2,'CompanyID');
+        var st=String(cid&&cid.getAttribute('schemeID')||'').toUpperCase();
+        if(st==='0002'||!st)siret=_fxText(cid).replace(/\D/g,'');
+      }
+    }
+  }
+  var lines=[];
+  var invLines=_fxAll(inv,'InvoiceLine');
+  for(var li=0;li<invLines.length;li++){
+    var lin=invLines[li];
+    var qtyEl=_fxFirstDesc(lin,'InvoicedQuantity');
+    var qty=_fxParseAmount(_fxText(qtyEl));if(!Number.isFinite(qty)||qty<=0)qty=1;
+    var lineAmtEl=_fxFirstDesc(lin,'LineExtensionAmount');
+    var lineTotal=_fxParseAmount(_fxText(lineAmtEl));
+    var item=_fxFirstDesc(lin,'Item');
+    var label='Ligne '+(li+1);
+    if(item){
+      var desc=_fxFirstDesc(item,'Description');
+      var nam=_fxFirstDesc(item,'Name');
+      label=_fxText(desc)||_fxText(nam)||label;
+    }
+    var unitPrix=Number.isFinite(lineTotal)?lineTotal/qty:0;
+    if(!Number.isFinite(unitPrix)||unitPrix<0)unitPrix=0;
+    lines.push({label:label.slice(0,220),qty:Math.max(1,qty),prix:unitPrix});
+  }
+  var payable=_fxFirstDesc(inv,'PayableAmount');
+  var taxIncl=_fxFirstDesc(inv,'TaxInclusiveAmount');
+  var taxExcl=_fxFirstDesc(inv,'TaxExclusiveAmount');
+  var total=_fxParseAmount(_fxText(payable));
+  if(!Number.isFinite(total))total=_fxParseAmount(_fxText(taxIncl));
+  if(!Number.isFinite(total))total=_fxParseAmount(_fxText(taxExcl));
+  if(!Number.isFinite(total)&&lines.length)total=lines.reduce(function(s,l){return s+l.qty*l.prix;},0);
+  if(!Number.isFinite(total))total=0;
+  var bdlRefs=[];
+  var ads=_fxAll(inv,'AdditionalDocumentReference');
+  for(var ai=0;ai<ads.length;ai++){
+    var ade=ads[ai];
+    var idd=_fxFirstDesc(ade,'ID');
+    var t=_fxText(idd);if(!t)continue;
+    var dtc=_fxText(_fxFirstDesc(ade,'DocumentTypeCode'));
+    if(!dtc||dtc==='130'||dtc==='916'||/BL|livraison|delivery|despatch/i.test(String(ade.textContent||'')))bdlRefs.push(t);
+  }
+  bdlRefs=Array.from(new Set(bdlRefs)).slice(0,50);
+  if(!custName)custName='Client (fichier)';
+  return{
+    cabinetName:custName,
+    cabinetAdresse:addrParts.join(', '),
+    cabinetSiret:siret.slice(0,14),
+    facture:{
+      legacyNum:invoiceId,
+      dateISO:dateISO,
+      lines:lines.length?lines:[{label:'Import fichier',qty:1,prix:total}],
+      total:total,
+      bdlRefs:bdlRefs,
+      note:'Import XML fichier / UBL — '+String(fileName||''),
+      status:'brouillon'
+    }
+  };
+}
+
+function _fxExtractCII(doc,fileName){
+  var txn=_fxFirstDesc(doc.documentElement,'SupplyChainTradeTransaction');
+  if(!txn)txn=_fxFirstDesc(doc.documentElement,'SpecifiedSupplyChainTradeTransaction');
+  if(!txn)return null;
+  var agr=_fxFirstDesc(txn,'ApplicableHeaderTradeAgreement');
+  var buyer=agr?_fxFirstDesc(agr,'BuyerTradeParty'):null;
+  if(!buyer)return null;
+  var custName=_fxText(_fxFirstDesc(buyer,'Name'));
+  var post=_fxFirstDesc(buyer,'PostalTradeAddress');
+  var addrParts=[];
+  if(post){
+    ['LineOne','LineTwo','CityName','PostcodeCode','CountryID'].forEach(function(ln){
+      var n=_fxFirstDesc(post,ln),tx=_fxText(n);if(tx)addrParts.push(tx);
+    });
+  }
+  var siret='';
+  var specIds=_fxAll(buyer,'ID');
+  for(var si=0;si<specIds.length;si++){
+    var sid=specIds[si];
+    var sch=String(sid.getAttribute('schemeID')||'').toUpperCase();
+    if(sch==='0002'||sch.indexOf('SIRET')>=0)siret=_fxText(sid).replace(/\D/g,'');
+  }
+  var invoiceId='';
+  var dateISO=fmtISO(new Date());
+  var hi=_fxFirstDesc(doc.documentElement,'ExchangedDocumentContext')?_fxFirstDesc(doc.documentElement,'HeaderExchangedDocument'):_fxFirstDesc(doc.documentElement,'HeaderExchangedDocument');
+  hi=_fxFirstDesc(doc.documentElement,'HeaderExchangedDocument')||hi;
+  if(!hi){
+    var roots=_fxAll(doc,'HeaderExchangedDocument');
+    if(roots.length)hi=roots[0];
+  }
+  if(hi){
+    invoiceId=_fxText(_fxFirstDesc(hi,'ID'))||invoiceId;
+    var issued=_fxFirstDesc(hi,'IssueDateTime');
+    if(issued){
+      var ds=_fxText(_fxFirstDesc(issued,'DateTimeString'));
+      if(ds&&ds.length>=8)dateISO=ds.slice(0,4)+'-'+ds.slice(4,6)+'-'+ds.slice(6,8);
+    }
+  }
+  var lines=[];
+  var lineItems=_fxAll(txn,'IncludedSupplyChainTradeLineItem');
+  for(var li=0;li<lineItems.length;li++){
+    var item=lineItems[li];
+    var prod=_fxFirstDesc(item,'SpecifiedTradeProduct');
+    var label=prod?_fxText(_fxFirstDesc(prod,'Name')):'Ligne '+(li+1);
+    var settled=_fxFirstDesc(item,'SpecifiedLineTradeSettlement');
+    var lineTotal=NaN,qty=1;
+    if(settled){
+      var summ=_fxFirstDesc(settled,'SpecifiedTradeSettlementLineMonetarySummation');
+      if(summ){
+        var lta=_fxFirstDesc(summ,'LineTotalAmount');
+        lineTotal=_fxParseAmount(_fxText(lta));
+      }
+      var agree=_fxFirstDesc(item,'SpecifiedLineTradeAgreement');
+      if(agree){
+        var net=_fxFirstDesc(agree,'NetPriceProductTradePrice');
+        if(net){
+          var qEl=_fxFirstDesc(net,'BasisQuantity');
+          qty=_fxParseAmount(_fxText(qEl));if(!Number.isFinite(qty)||qty<=0)qty=1;
+        }
+      }
+    }
+    if(!Number.isFinite(lineTotal))lineTotal=0;
+    var unitPrix=qty?lineTotal/qty:0;
+    lines.push({label:(label||'Ligne').slice(0,220),qty:Math.max(1,qty),prix:unitPrix});
+  }
+  var grandTotal=NaN;
+  var sums=_fxAll(txn,'SpecifiedTradeSettlementHeaderMonetarySummation');
+  if(!sums.length)sums=_fxAll(doc,'SpecifiedTradeSettlementHeaderMonetarySummation');
+  for(var g=0;g<sums.length;g++){
+    var pay=_fxFirstDesc(sums[g],'GrandTotalAmount')||_fxFirstDesc(sums[g],'DuePayableAmount');
+    var v=_fxParseAmount(_fxText(pay));
+    if(Number.isFinite(v)){grandTotal=v;break;}
+  }
+  if(!Number.isFinite(grandTotal)){
+    var gas=_fxAll(doc,'GrandTotalAmount');
+    for(var gi=gas.length-1;gi>=0;gi--){
+      var v2=_fxParseAmount(_fxText(gas[gi]));
+      if(Number.isFinite(v2)&&v2>0){grandTotal=v2;break;}
+    }
+  }
+  if(!Number.isFinite(grandTotal)&&lines.length)grandTotal=lines.reduce(function(s,l){return s+l.qty*l.prix;},0);
+  if(!Number.isFinite(grandTotal))grandTotal=0;
+  if(!custName)custName='Client (fichier CII)';
+  if(!invoiceId)invoiceId='IMPORT';
+  return{
+    cabinetName:custName,
+    cabinetAdresse:addrParts.join(', '),
+    cabinetSiret:siret.slice(0,14),
+    facture:{
+      legacyNum:invoiceId,
+      dateISO:dateISO,
+      lines:lines.length?lines:[{label:'Import fichier',qty:1,prix:grandTotal}],
+      total:grandTotal,
+      bdlRefs:[],
+      note:'Import XML fichier (CII) — '+String(fileName||''),
+      status:'brouillon'
+    }
+  };
+}
+
+function importFacturXPlanToTextDump(data){
+  return '=== Extrait structuré fichier (auto) ===\nCabinet : '+data.cabinetName+'\nAdresse : '+(data.cabinetAdresse||'')+'\nSIRET : '+(data.cabinetSiret||'')+'\nFacture : '+data.facture.legacyNum+' du '+data.facture.dateISO+'\nTotal : '+data.facture.total+'\n';
+}
+
+function importFacturXBuildPlan(xmlString,fileName){
+  try{
+    var doc=new DOMParser().parseFromString(xmlString,'text/xml');
+    if(doc.querySelector('parsererror'))throw new Error('XML invalide');
+    var data=null;
+    if(_fxAll(doc,'Invoice').length)data=_fxExtractUBLInvoice(_fxAll(doc,'Invoice')[0],fileName);
+    if(!data)data=_fxExtractCII(doc,fileName);
+    if(!data||!data.facture)throw new Error('Format non reconnu (UBL Invoice ou CII / CrossIndustryInvoice).');
+    var useName=data.cabinetName;
+    var ex=_importFindCabinetByName(data.cabinetName);
+    if(ex)useName=ex.name;
+    var actions=[];
+    if(!ex){
+      actions.push({type:'create_cabinet',draft:{
+        name:data.cabinetName,phone:'',email:'',
+        adresse:data.cabinetAdresse||'',siretCab:data.cabinetSiret||'',note:'fichier'
+      }});
+    }
+    actions.push({type:'create_facture',draft:{
+      cabinetName:useName,
+      legacyNum:String(data.facture.legacyNum||'').slice(0,80),
+      dateISO:data.facture.dateISO,
+      status:data.facture.status||'brouillon',
+      lines:data.facture.lines,
+      total:data.facture.total,
+      bdlRefs:data.facture.bdlRefs||[],
+      note:data.facture.note||''
+    }});
+    return{
+      ok:true,
+      plan:{
+        summary:'fichier : facture '+String(data.facture.legacyNum)+' — '+data.facture.lines.length+' ligne(s), total '+String(data.facture.total)+' pour « '+useName+' ».',
+        questions:[],
+        actions:actions,
+        _source:'factur_x'
+      },
+      textDump:importFacturXPlanToTextDump(data)
+    };
+  }catch(e){
+    return{ok:false,error:String(e&&e.message||e)};
+  }
+}
+
+function importCsvSplitLine(line,delim){
+  var out=[],cur='',inQ=false;
+  for(var i=0;i<line.length;i++){
+    var c=line[i],n=line[i+1];
+    if(c==='"'&&inQ&&n==='"'){cur+='"';i++;continue;}
+    if(c==='"'){inQ=!inQ;continue;}
+    if(!inQ&&c===delim){out.push(cur);cur='';continue;}
+    cur+=c;
+  }
+  out.push(cur);
+  return out.map(function(s){return s.trim();});
+}
+function importCsvDetectDelim(headerLine){
+  var sc=(headerLine.match(/;/g)||[]).length;
+  var cc=(headerLine.match(/,/g)||[]).length;
+  var tc=(headerLine.match(/\t/g)||[]).length;
+  if(tc>=sc&&tc>=cc)return '\t';
+  if(sc>=cc)return ';';
+  return ',';
+}
+var _IMPORT_COL_SYN={
+  cabinet:['cabinet','client','praticien','dentiste','customer','compte','dr','docteur','nom client','libelle client','raison sociale','tiers','contact'],
+  patient:['patient','nom patient','beneficiaire'],
+  date:['date','dt','jour','livraison','liv','emis'],
+  bl:['bl','bon','livraison','bdl','no bl','n° bl','numero bl','num bl','delivery','delivery note'],
+  facture:['facture','n facture','n° facture','no facture','invoice','fac','num facture','numero facture','piece'],
+  desc:['libelle','description','travail','prestation','designation','article','prothese','type','product'],
+  prix:['prix','montant','total','ht','ttc','amount','net','pu','prix unitaire'],
+  qty:['qte','qty','quantite','quantité','nombre','nb'],
+  materiau:['materiau','materiaux','matériau','alliage','materiel'],
+  lot:['lot','n lot','batch'],
+  siret:['siret'],
+  email:['email','mail','e-mail'],
+  phone:['tel','telephone','téléphone','phone','portable']
+};
+function importCsvMapHeaders(headers){
+  var norm=headers.map(_fxNormHeader);
+  var best={};
+  for(var role in _IMPORT_COL_SYN){
+    var bestI=-1,bestSc=0;
+    for(var i=0;i<norm.length;i++){
+      var sc=0;
+      var syns=_IMPORT_COL_SYN[role];
+      for(var s=0;s<syns.length;s++){
+        if(norm[i]===syns[s])sc=15;
+        else if(norm[i].indexOf(syns[s])>=0)sc=Math.max(sc,9);
+      }
+      if(sc>bestSc){bestSc=sc;bestI=i;}
+    }
+    if(bestI>=0&&bestSc>=6)best[role]=bestI;
+  }
+  return{best:best,headers:headers,norm:norm};
+}
+function importProthesisRowsToPlan(rows,mapRes,fileName){
+  var map=mapRes.best;
+  if(map.cabinet==null)return{ok:false,error:'Colonne cabinet / client introuvable (en-têtes : '+mapRes.headers.join(' | ')+').'};
+  var cabs=[],cabL=new Set();
+  for(var r=0;r<rows.length;r++){
+    var cn=String(rows[r][map.cabinet]||'').trim();
+    if(cn&&!cabL.has(_fxNormHeader(cn))){cabL.add(_fxNormHeader(cn));cabs.push(cn);}
+  }
+  var actions=[];
+  for(var c=0;c<cabs.length;c++){
+    actions.push({type:'create_cabinet',draft:{name:cabs[c],phone:'',email:'',adresse:'',siretCab:'',note:'preset CSV'}});
+  }
+  var facCount=0,blCount=0;
+  var facCol=map.facture!=null;
+  var nf=0;
+  for(var r0=0;r0<rows.length;r0++){
+    if(facCol&&String(rows[r0][map.facture]||'').trim())nf++;
+  }
+  var groupInvoices=facCol&&nf>=Math.max(1,Math.floor(rows.length*0.15));
+  if(groupInvoices){
+    var groups={};
+    for(var r1=0;r1<rows.length;r1++){
+      var row1=rows[r1];
+      var fac=String(row1[map.facture]||'').trim();
+      if(!fac)continue;
+      var cn1=String(row1[map.cabinet]||'').trim();
+      if(!cn1)continue;
+      var k=_fxNormHeader(cn1)+'||'+_fxNormHeader(fac);
+      if(!groups[k])groups[k]={cabinet:cn1,fac:fac,lines:[],dates:[],bdl:[]};
+      var ds=map.desc!=null?String(row1[map.desc]||'').trim():'Ligne';
+      var qty=map.qty!=null?_fxParseAmount(row1[map.qty]):1;if(!Number.isFinite(qty)||qty<=0)qty=1;
+      var pr=map.prix!=null?_fxParseAmount(row1[map.prix]):NaN;
+      if(!Number.isFinite(pr))pr=0;
+      groups[k].lines.push({label:ds||'Ligne',qty:qty,prix:qty?pr/qty:pr});
+      if(map.date!=null){var d=_fxParseDateISO(row1[map.date]);if(d)groups[k].dates.push(d);}
+      if(map.bl!=null){var b=String(row1[map.bl]||'').trim();if(b)groups[k].bdl.push(b);}
+    }
+    for(var gk in groups){
+      var g=groups[gk];
+      if(!g.lines.length)continue;
+      var tot=g.lines.reduce(function(s,l){return s+l.qty*l.prix;},0);
+      var dt=g.dates.length?g.dates.slice().sort()[0]:fmtISO(new Date());
+      var brefs=Array.from(new Set(g.bdl)).slice(0,30);
+      actions.push({type:'create_facture',draft:{
+        cabinetName:g.cabinet,
+        legacyNum:g.fac,
+        dateISO:dt,
+        lines:g.lines,
+        total:tot,
+        bdlRefs:brefs,
+        note:'Import CSV (factures) — '+String(fileName||''),
+        status:'brouillon'
+      }});
+      facCount++;
+    }
+    if(!facCount)groupInvoices=false;
+  }
+  if(!groupInvoices){
+    for(var r2=0;r2<rows.length;r2++){
+      var row2=rows[r2];
+      var cn2=String(row2[map.cabinet]||'').trim();
+      if(!cn2)continue;
+      var ds2=map.desc!=null?String(row2[map.desc]||'').trim():'';
+      var q2=map.qty!=null?_fxParseAmount(row2[map.qty]):1;if(!Number.isFinite(q2)||q2<=0)q2=1;
+      var pr2=map.prix!=null?_fxParseAmount(row2[map.prix]):0;if(!Number.isFinite(pr2))pr2=0;
+      var d2=map.date!=null?_fxParseDateISO(row2[map.date]):'';
+      var bln=map.bl!=null?String(row2[map.bl]||'').trim():'';
+      var pat=map.patient!=null?String(row2[map.patient]||'').trim():'';
+      var mat=map.materiau!=null?String(row2[map.materiau]||'').trim():'';
+      var lot=map.lot!=null?String(row2[map.lot]||'').trim():'';
+      actions.push({type:'create_bl',draft:{
+        cabinetName:cn2,
+        patient:pat,
+        legacyBlNum:bln,
+        dateISO:d2,
+        description:ds2||'Import CSV',
+        typeKey:'provisoire',
+        nb:q2,
+        prix:pr2,
+        materiaux:mat,
+        lot:lot,
+        note:'preset CSV'
+      }});
+      blCount++;
+    }
+  }
+  if(!facCount&&!blCount)return{ok:false,error:'Aucune ligne exploitable (vérifiez prix, libellé, n° facture ou cabinet).'};
+  return{
+    ok:true,
+    plan:{
+      summary:'Tableau : '+cabs.length+' cabinet(s), '+(groupInvoices&&facCount?facCount+' facture(s) groupée(s)':blCount+' bon(s) de livraison')+'. Fichier : '+String(fileName||'')+'.',
+      questions:[],
+      actions:actions,
+      _source:'prothesis_csv'
+    }
+  };
+}
+
+function importProthesisParseCsvText(csvText,fileName){
+  var lines=String(csvText||'').split(/\r?\n/).filter(function(l){return String(l).trim().length;});
+  if(lines.length<2)return{ok:false,error:'CSV trop court (en-tête + au moins une ligne).'};
+  var delim=importCsvDetectDelim(lines[0]);
+  var headers=importCsvSplitLine(lines[0],delim);
+  var rows=[];
+  for(var i=1;i<lines.length;i++){
+    var cells=importCsvSplitLine(lines[i],delim);
+    if(cells.length===1&&!cells[0].trim())continue;
+    rows.push(cells);
+  }
+  for(var j=0;j<rows.length;j++){
+    while(rows[j].length<headers.length)rows[j].push('');
+  }
+  var mapRes=importCsvMapHeaders(headers);
+  return importProthesisRowsToPlan(rows,mapRes,fileName);
+}
+
+function importTryLoadStructuredAfterFile(text,fileName){
+  var mode=importAiGetMode();
+  var st=document.getElementById('import-ai-status');
+  var ta=document.getElementById('import-ai-raw');
+  _importPlan=null;
+  if(mode==='facturx'){
+    var fx=importFacturXBuildPlan(text,fileName);
+    if(fx.ok){
+      _importPlan=fx.plan;
+      if(ta&&fx.textDump)ta.value=fx.textDump;
+      if(st){st.textContent='fichier : plan prêt (sans IA). Vérifiez l’aperçu puis appliquez.';st.style.color='#2a6049';}
+      renderImportPlanPreview(_importPlan);
+      return true;
+    }
+    if(ta)ta.value=text;
+    if(st){st.textContent='fichier : '+fx.error+' — corrigez le fichier ou repassez en mode Auto + IA.';st.style.color='#c8410a';}
+    return false;
+  }
+  if(mode==='prothesis'){
+    var pr=importProthesisParseCsvText(text,fileName);
+    if(pr.ok){
+      _importPlan=pr.plan;
+      if(ta)ta.value=text;
+      if(st){st.textContent='CSV : plan prêt (sans IA).';st.style.color='#2a6049';}
+      renderImportPlanPreview(_importPlan);
+      return true;
+    }
+    if(ta)ta.value=text;
+    if(st){st.textContent=pr.error;st.style.color='#c8410a';}
+    return false;
+  }
+  return false;
+}
+
+
+
+function _importParseAiJsonText(text){
+  var t=String(text||'').trim();
+  var fence=t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if(fence)t=fence[1].trim();
+  return JSON.parse(t);
+}
+
+function _importSetByPath(obj, pathStr, val){
+  var parts=String(pathStr||'').split('.').filter(Boolean);
+  if(!parts.length)return;
+  var cur=obj;
+  for(var i=0;i<parts.length-1;i++){
+    var k=parts[i];
+    if(cur[k]==null||typeof cur[k]!=='object')cur[k]={};
+    cur=cur[k];
+  }
+  cur[parts[parts.length-1]]=val;
+}
+
+function _importFindCabinetByName(name){
+  var n=String(name||'').trim().toLowerCase();if(!n)return null;
+  var exact=cabinets.find(function(c){return String(c.name||'').trim().toLowerCase()===n;});
+  if(exact)return exact;
+  return cabinets.find(function(c){
+    var cn=String(c.name||'').trim().toLowerCase();
+    return cn&&n&&(cn.indexOf(n)>=0||n.indexOf(cn)>=0);
+  })||null;
+}
+
+function _importResolveTypeKey(draft){
+  var k=String(draft.typeKey||'').trim();
+  if(k&&TYPE_LABELS[k])return k;
+  var desc=String(draft.description||draft.typeLabel||'').toLowerCase();
+  if(desc){
+    for(var id in TYPE_LABELS){
+      var lab=String(TYPE_LABELS[id]||'').toLowerCase();
+      if(lab&&(desc.indexOf(lab)>=0||lab.indexOf(desc)>=0))return id;
+    }
+  }
+  return 'provisoire';
+}
+
+function createLegacyImportedBL(cab, draft){
+  if(!cab||!draft)return;
+  var typeKey=_importResolveTypeKey(draft);
+  var nb=Math.max(1,parseInt(draft.nb,10)||1);
+  var pu=parseFloat(draft.prix);
+  if(!Number.isFinite(pu))pu=0;
+  var lignes=draft.lignes;
+  if(!Array.isArray(lignes)||!lignes.length){
+    lignes=[{type:typeKey,typeLabel:TYPE_LABELS[typeKey]||draft.description||'Import',nb:nb,prix:pu,total:pu*nb}];
+  }else{
+    lignes=lignes.map(function(l){
+      var t=l.type&&TYPE_LABELS[l.type]?l.type:_importResolveTypeKey({typeKey:l.type,description:l.typeLabel||l.label});
+      var nbb=Math.max(1,parseFloat(l.nb)||1);
+      var p=parseFloat(l.prix);if(!Number.isFinite(p))p=0;
+      return {type:t,typeLabel:TYPE_LABELS[t]||l.typeLabel||l.label||t,nb:nbb,prix:p,total:p*nbb};
+    });
+  }
+  var totalBL=lignes.reduce(function(s,l){return s+(l.total!=null?l.total:(l.prix||0)*(l.nb||1));},0);
+  var first=lignes[0];
+  var leg=String(draft.legacyBlNum||'').trim();
+  var num=leg&&!bdl.find(function(b){return b.num===leg;})?leg:genBLNum();
+  var dStr=String(draft.dateISO||'').trim();
+  var dateIso=dStr&&/^\d{4}-\d{2}-\d{2}$/.test(dStr)?dStr:fmtISO(new Date());
+  var bl={
+    id:'impbl_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    num:num,
+    jobId:null,
+    patient:String(draft.patient||'').trim()||'—',
+    trackCode:'',
+    prothesisId:String(draft.prothesisId||'').trim(),
+    type:first.type,
+    typeLabel:lignes.length>1?lignes.map(function(l){return l.typeLabel;}).join(', '):first.typeLabel,
+    nb:first.nb,
+    lignes:lignes,
+    note:String(draft.note||'').trim(),
+    materiaux:String(draft.materiaux||'').trim(),
+    lot:String(draft.lot||'').trim(),
+    cabinet:cab.id,
+    cabName:cab.name,
+    cabPortalId:cab.portalId||'',
+    prix:first.prix,
+    total:totalBL,
+    deliveryDate:'',
+    date:dateIso,
+    status:'envoye',
+    createdAt:new Date().toISOString(),
+    importedFrom:'ai_import',
+    orderId:null,orderPortalId:null,orderStepId:null,orderData:null,parentJobId:null
+  };
+  if(!cab.portalId){cab.portalId='CAB-'+Math.random().toString(36).substr(2,8).toUpperCase();}
+  if(!cab.code){cab.code=Math.random().toString(36).substr(2,6).toUpperCase();}
+  if(!cab.pwd){cab.pwd=Math.random().toString(36).substr(2,8);}
+  bdl.unshift(bl);
+}
+
+function createLegacyImportedFacture(cab, draft){
+  if(!cab||!draft)return;
+  var lines=Array.isArray(draft.lines)?draft.lines.map(function(l){
+    return {label:String(l.label||'').trim()||'Ligne',qty:Math.max(1,parseFloat(l.qty)||1),prix:parseFloat(l.prix)||0};
+  }):[];
+  if(!lines.length)lines=[{label:String(draft.note||'Import').slice(0,80)||'Import',qty:1,prix:parseFloat(draft.total)||0}];
+  var total=parseFloat(draft.total);
+  if(!Number.isFinite(total))total=lines.reduce(function(s,l){return s+(l.qty||1)*(l.prix||0);},0);
+  var now=new Date();
+  var year=now.getFullYear();
+  var n=documents.filter(function(d){return d.type==='facture'&&d.num&&d.num.includes(String(year));}).length+1;
+  var st=String(draft.status||'brouillon').toLowerCase()==='envoye'?'envoye':'brouillon';
+  var leg=String(draft.legacyNum||'').trim();
+  var num=leg&&!documents.find(function(d){return d.num===leg;})?leg:('FAC-'+year+'-'+String(n).padStart(3,'0'));
+  var dStr=String(draft.dateISO||'').trim();
+  var dateIso=dStr&&/^\d{4}-\d{2}-\d{2}$/.test(dStr)?dStr:fmtISO(now);
+  documents.unshift({
+    id:'impfac_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    num:num,
+    type:'facture',
+    cabinet:cab.id,
+    cabName:cab.name,
+    date:dateIso,
+    note:String(draft.note||'').trim(),
+    lines:lines,
+    total:total,
+    bdlRefs:[],
+    status:st,
+    createdAt:now.toISOString(),
+    importedFrom:'ai_import'
+  });
+}
+
+async function runAiImportAnalyze(){
+  if(!guardPerm('action:data_import','⛔ Votre rôle ne permet pas d\'importer des données.'))return;
+  var ta=document.getElementById('import-ai-raw');
+  var st=document.getElementById('import-ai-status');
+  var pv=document.getElementById('import-ai-preview');
+  if(!ta||!st)return;
+  var raw=ta.value||'';
+  if(!raw.trim()){st.textContent='Collez du contenu ou choisissez un fichier.';st.style.color='#c0392b';return;}
+  _importPlan=null;
+  st.textContent='Analyse en cours…';
+  st.style.color='var(--ink-soft)';
+  if(pv){pv.style.display='none';pv.innerHTML='';}
+  try{
+    var resp=await fetch('/.netlify/functions/ai-import-plan',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        rawText:raw,
+        fileName:(document.getElementById('import-ai-file')&&document.getElementById('import-ai-file').files[0]&&document.getElementById('import-ai-file').files[0].name)||'',
+        existingCabinetNames:cabinets.map(function(c){return c.name;})
+      })
+    });
+    var data=await resp.json();
+    if(!resp.ok||data.error){
+      throw new Error((data.error&&data.error.message)||data.message||('HTTP '+resp.status));
+    }
+    var aiText=(data.content&&data.content[0]&&data.content[0].text)||'';
+    if(!aiText)throw new Error('Réponse vide du modèle.');
+    var plan=_importParseAiJsonText(aiText);
+    if(!plan||typeof plan!=='object')throw new Error('Format de plan invalide.');
+    if(!Array.isArray(plan.actions))plan.actions=[];
+    if(!Array.isArray(plan.questions))plan.questions=[];
+    _importPlan=plan;
+    st.textContent='C\'est prêt — vérifiez le résumé puis validez.';
+    st.style.color='#2a6049';
+    renderImportPlanPreview(plan);
+  }catch(e){
+    st.textContent='Erreur : '+String(e.message||e).slice(0,200);
+    st.style.color='#c0392b';
+  }
+}
+
+async function applyAiImportPlan(){
+  if(!guardPerm('action:data_import','⛔ Import refusé pour votre rôle.'))return;
+  if(!_importPlan||!Array.isArray(_importPlan.actions)){showToast('Aucun plan à appliquer — lancez d’abord l’analyse.','#c0392b');return;}
+  var plan=JSON.parse(JSON.stringify(_importPlan));
+  var inputs=document.querySelectorAll('.import-q-inp');
+  for(var i=0;i<inputs.length;i++){
+    var inp=inputs[i];
+    var qid=inp.dataset.qid;
+    var idx=parseInt(inp.dataset.idx,10);
+    var path=inp.dataset.path;
+    var v=inp.value.trim();
+    if(!v)continue;
+    var q=(plan.questions||[]).find(function(x){return x.id===qid;});
+    if(q&&q.mergeInto&&typeof q.mergeInto.actionIndex==='number'&&plan.actions[q.mergeInto.actionIndex]){
+      _importSetByPath(plan.actions[q.mergeInto.actionIndex], q.mergeInto.path||'draft.note', v);
+    }
+  }
+  var cabByName={};
+  var created=0,errors=[];
+  for(var j=0;j<plan.actions.length;j++){
+    var act=plan.actions[j];
+    try{
+      if(act.type==='create_cabinet'&&act.draft){
+        var nm=String(act.draft.name||'').trim();
+        if(!nm)continue;
+        var ex=_importFindCabinetByName(nm);
+        if(ex){cabByName[nm.toLowerCase()]=ex;continue;}
+        if(cabinets.find(function(c){return String(c.name||'').toLowerCase()===nm.toLowerCase();})){cabByName[nm.toLowerCase()]=cabinets.find(function(c){return String(c.name||'').toLowerCase()===nm.toLowerCase();});continue;}
+        var colors=['#1a4a7a','#2a6049','#5a3472','#c8410a','#7b3f00'];
+        var col=colors[cabinets.length%colors.length];
+        addCabinet(nm,col,String(act.draft.phone||'').trim(),String(act.draft.email||'').trim());
+        var createdCab=cabinets.find(function(c){return String(c.name||'').toLowerCase()===nm.toLowerCase();});
+        if(createdCab)cabByName[nm.toLowerCase()]=createdCab;
+        created++;
+      }else if(act.type==='create_bl'&&act.draft){
+        var cname=String(act.draft.cabinetName||'').trim();
+        var cab=cabByName[cname.toLowerCase()]||_importFindCabinetByName(cname);
+        if(!cab){errors.push('BL sans cabinet : '+cname);continue;}
+        createLegacyImportedBL(cab,act.draft);
+        cabByName[cname.toLowerCase()]=cab;
+        created++;
+      }else if(act.type==='create_facture'&&act.draft){
+        var cname2=String(act.draft.cabinetName||'').trim();
+        var cab2=cabByName[cname2.toLowerCase()]||_importFindCabinetByName(cname2);
+        if(!cab2){errors.push('Facture sans cabinet : '+cname2);continue;}
+        createLegacyImportedFacture(cab2,act.draft);
+        cabByName[cname2.toLowerCase()]=cab2;
+        created++;
+      }
+    }catch(err){errors.push(String(err&&err.message||err));}
+  }
+  saveCabinets();saveBdl();saveDocs();
+  scheduleSave();
+  _importPlan=null;
+  var pv=document.getElementById('import-ai-preview');if(pv){pv.style.display='none';pv.innerHTML='';}
+  var st=document.getElementById('import-ai-status');if(st){st.textContent='Terminé.';st.style.color='#2a6049';}
+  renderLivraisons();renderToInvoice();renderBillDocs();updateBillStats();renderCabList();
+  reportAudit({action:'data_import_applied',target:String(created),meta:errors.length?errors.slice(0,5).join(' | '):''});
+  showToast('✅ Import : '+created+' action(s) appliquée(s)'+(errors.length?' — '+errors.length+' avertissement(s)':'')+'.','#2a6049',7000);
+  if(errors.length)console.warn('Import warnings',errors);
+}
+
+
+
+function importAiPickFile(inp){
+  var f=inp.files&&inp.files[0];if(!f)return;
+  var st=document.getElementById('import-ai-status');
+  var ta=document.getElementById('import-ai-raw');
+  if(st){st.textContent='Lecture du fichier « '+f.name+' »…';st.style.color='var(--ink-soft)';}
+  var r=new FileReader();
+  r.onload=function(){
+    var txt=String(r.result||'');
+    if(ta)ta.value=txt;
+    var fn=f.name||'';
+    if(/^\s*</.test(txt)||/\.xml$/i.test(fn)){
+      var fx=importFacturXBuildPlan(txt,fn);
+      if(fx.ok){
+        _importPlan=fx.plan;
+        if(fx.textDump&&ta)ta.value=fx.textDump;
+        if(st){st.textContent='Fichier reconnu. Vérifiez le résumé ci-dessous.';st.style.color='#2a6049';}
+        renderImportPlanPreview(_importPlan);
+        inp.value='';
+        return;
+      }
+    }
+    if(importTryLoadStructuredAfterFile(txt,fn)){inp.value='';return;}
+    if(st){st.textContent='Fichier chargé. Cliquez sur « Préparer l\'import ».';st.style.color='var(--ink-soft)';}
+    inp.value='';
+  };
+  r.onerror=function(){if(st){st.textContent='Impossible de lire ce fichier.';st.style.color='#c0392b';}};
+  r.readAsText(f,'UTF-8');
+}
+
+function importAiGetMode(){ return 'auto'; }
+
+function _importActionLabel(type){
+  if(type==='create_cabinet')return 'Dentiste';
+  if(type==='create_bl')return 'Bon de livraison';
+  if(type==='create_facture')return 'Facture';
+  return 'Élément';
+}
+
+
+async function runImportPrepare(){
+  if(!guardPerm('action:data_import','⛔ Votre rôle ne permet pas d\'importer des données.'))return;
+  var ta=document.getElementById('import-ai-raw');
+  var st=document.getElementById('import-ai-status');
+  var pv=document.getElementById('import-ai-preview');
+  if(!ta||!st)return;
+  var raw=ta.value||'';
+  if(!raw.trim()){st.textContent='Choisissez un fichier ou collez un export de votre ancien logiciel.';st.style.color='#c0392b';return;}
+  var fn=(document.getElementById('import-ai-file')&&document.getElementById('import-ai-file').files[0]&&document.getElementById('import-ai-file').files[0].name)||'export';
+  _importPlan=null;
+  if(pv){pv.style.display='none';pv.innerHTML='';}
+  st.textContent='Analyse en cours…';st.style.color='var(--ink-soft)';
+  if(/^\s*</.test(raw)||/\.xml$/i.test(fn)){
+    var fx=importFacturXBuildPlan(raw,fn);
+    if(fx.ok){ _importPlan=fx.plan; st.textContent='C\'est prêt — vérifiez le résumé puis validez.'; st.style.color='#2a6049'; renderImportPlanPreview(_importPlan); return; }
+  }
+  var pr=importProthesisParseCsvText(raw,fn);
+  if(pr.ok){ _importPlan=pr.plan; st.textContent='C\'est prêt — vérifiez le résumé puis validez.'; st.style.color='#2a6049'; renderImportPlanPreview(_importPlan); return; }
+  await runAiImportAnalyze();
+}
+function importRunStructuredFromTextarea(){ runImportPrepare(); }
 
 
 // — File d'attente de programmation (queue)
@@ -8330,6 +9321,7 @@ let documents = JSON.parse(localStorage.getItem('lb_docs')||'[]');
 let tarifs    = JSON.parse(localStorage.getItem('lb_tarifs')||'[]');
 function saveDocs(){localStorage.setItem('lb_docs',JSON.stringify(documents));scheduleSave();}
 function saveTarifs(){localStorage.setItem('lb_tarifs',JSON.stringify(tarifs));scheduleSave();}
+migrateTarifsToCustomTypes();
 
 let billType = 'facture'; // current doc type being edited
 let billLines = []; // current lines
@@ -8572,45 +9564,25 @@ function updateBillStats(){
   }
 }
 
-function renderTypePrices(){
-  const el=document.getElementById('type-prices-list');if(!el)return;
-  if(!customTypes.length){
-    el.innerHTML='<div style="font-size:.74rem;color:var(--ink-soft);font-style:italic;">'+t('empty.types')+'</div>';
-    return;
-  }
-  el.innerHTML='';
-  customTypes.forEach(function(ct){
-    // Chercher un tarif existant pour ce type
-    const existing=tarifs.find(function(t){return t.types&&t.types.includes(ct.id);});
-    const prix=existing?existing.prix:0;
-    const row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;';
-    row.innerHTML=
-      '<span style="flex:1;font-size:.84rem;font-weight:500;">'+escHtml(ct.label)+'</span>'+
-      '<span style="font-size:.72rem;color:var(--ink-soft);">'+escHtml(ct.category||'')+'</span>'+
-      '<div style="display:flex;align-items:center;gap:5px;">'+
-        '<input type="number" id="type-prix-'+ct.id+'" min="0" step="0.01" value="'+prix+'" style="width:90px;border:1.5px solid var(--border);border-radius:7px;background:var(--bg);font-family:monospace;font-size:.88rem;padding:6px 9px;color:var(--ink);text-align:right;outline:none;"/>'+
-        '<span style="font-size:.8rem;color:var(--ink-soft);">€</span>'+
-      '</div>';
-    el.appendChild(row);
-  });
+function saveTypePriceQuick(typeId){
+  const input=document.getElementById('type-prix-'+typeId);
+  const ct=customTypes.find(function(c){return c.id===typeId;});
+  if(!input||!ct)return;
+  ct.prix=parseFloat(input.value)||0;
+  saveCustomTypes();
+  syncTarifsFromCustomTypes();
 }
 
 function saveTypePrices(){
   customTypes.forEach(function(ct){
     const input=document.getElementById('type-prix-'+ct.id);
     if(!input)return;
-    const prix=parseFloat(input.value)||0;
-    const idx=tarifs.findIndex(function(t){return t.types&&t.types.includes(ct.id);});
-    if(prix>0){
-      if(idx>=0){tarifs[idx].prix=prix;tarifs[idx].label=ct.label;}
-      else{tarifs.push({id:String(Date.now())+ct.id,label:ct.label,prix:prix,types:[ct.id]});}
-    } else {
-      if(idx>=0)tarifs.splice(idx,1);
-    }
+    ct.prix=parseFloat(input.value)||0;
   });
-  saveTarifs();
-  const msg=document.getElementById('ct-prix-msg')||document.getElementById('type-prices-msg');
+  saveCustomTypes();
+  syncTarifsFromCustomTypes();
+  renderCustomTypesList();
+  const msg=document.getElementById('ct-prix-msg');
   if(msg){msg.textContent=t('toast.prices_saved');setTimeout(function(){msg.textContent='';},2500);}
 }
 
@@ -8807,12 +9779,34 @@ function exportFacturesCSV(){
   showToast(t('toast.csv_exported'),'#2a6049');
 }
 
-/* ── EMAIL FACTURE (Resend via Netlify) ── */
-async function sendInvoiceEmail(docId){
-  const doc=documents.find(function(d){return d.id===docId;});if(!doc)return;
+/* ── EMAIL FACTURE (Resend via Netlify + repli client mail) ── */
+function invoiceEmailPlainBody(doc,labo,portalUrl){
+  let s='Bonjour,\n\n';
+  s+='Votre laboratoire '+String(labo.raisonSociale||'Laboratoire')+' vous envoie la facture '+doc.num+' d\'un montant de '+fmtEur(doc.total)+'.\n\n';
+  (doc.lines||[]).forEach(function(l){
+    s+='• '+String(l.label||'')+' : '+fmtEur((parseFloat(l.qty)||1)*(parseFloat(l.prix)||0))+'\n';
+  });
+  s+='\nTotal TTC : '+fmtEur(doc.total)+'\n';
+  s+='Exonéré de TVA — art. 261-4-1° CGI · Paiement à 30 jours\n';
+  if(portalUrl)s+='\nEspace cabinet : '+portalUrl+'\n';
+  s+='\nCordialement,\n'+String(labo.raisonSociale||'');
+  if(labo.tel)s+='\nTél : '+labo.tel;
+  return s;
+}
+
+function openInvoiceMailtoFallback(doc,cab,labo){
+  const portalUrl=cab&&cab.portalId?'https://labosync.app/cabinet.html?id='+cab.portalId:'';
+  const subject='Facture '+doc.num+' — '+String(labo.raisonSociale||'Laboratoire');
+  const body=invoiceEmailPlainBody(doc,labo,portalUrl);
+  window.location.href='mailto:'+encodeURIComponent(cab.email)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+}
+
+async function sendInvoiceEmail(docId,opts){
+  opts=opts||{};
+  const doc=documents.find(function(d){return d.id===docId;});if(!doc)return false;
   const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
-  const email=cab&&cab.email?cab.email:'';
-  if(!email){showToast(t('toast.no_cab_email'),'#c0392b');return;}
+  const email=cab&&cab.email?String(cab.email).trim():'';
+  if(!email){showToast(t('toast.no_cab_email'),'#c0392b');return false;}
   const labo=getLegalInfo();
   const portalUrl=cab&&cab.portalId?'https://labosync.app/cabinet.html?id='+cab.portalId:'';
   const linesHtml=(doc.lines||[]).map(function(l){
@@ -8835,10 +9829,22 @@ async function sendInvoiceEmail(docId){
   ${portalUrl?'<div style="text-align:center;margin-top:20px;"><a href="'+portalUrl+'" style="background:#c8410a;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:700;display:inline-block;">Accéder à votre espace cabinet</a></div>':''}
   <p style="margin-top:20px;font-size:12px;color:#888;">Cordialement,<br/><strong>${String(labo.raisonSociale)}</strong>${labo.tel?' — Tél : '+labo.tel:''}</p>
 </div></div>`;
+
+  function mailtoFallback(){
+    if(opts.skipMailto)return false;
+    if(opts.confirmMailto!==false&&!opts.autoFallback){
+      if(!confirm('L\'envoi automatique par email n\'est pas disponible.\n\nOuvrir Outlook (ou votre client mail) pour envoyer la facture à '+email+' ?'))return false;
+    }
+    try{if(typeof genPDFDoc==='function')genPDFDoc(docId);}catch(ePdf){}
+    openInvoiceMailtoFallback(doc,cab,labo);
+    showToast(t('toast.email_mailto_fallback'),'#2a6049',7000);
+    return false;
+  }
+
   try{
     const r=await fetch('/.netlify/functions/send-email',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:_portalApiHeaders(),
       body:JSON.stringify({
         to:email,
         subject:'Facture '+doc.num+' — '+String(labo.raisonSociale),
@@ -8848,15 +9854,25 @@ async function sendInvoiceEmail(docId){
     });
     const res=await r.json().catch(function(){return {};});
     if(r.ok&&res.ok){
-      showToast(ti('toast.email_sent',{email:email}),'#2a6049');
-    } else if(res.error&&res.error.includes('RESEND_API_KEY')){
-      // Clé Resend manquante — la facture est bien envoyée, seul l'email auto ne fonctionne pas
-      showToast(t('toast.invoice_sent_no_email'),'#c8410a',8000);
-    } else {
-      showToast(ti('toast.invoice_sent_email_fail',{err:res.error||r.status}),'#c0392b',7000);
+      showToast(ti('toast.email_resend_ok',{email:email})||ti('toast.email_sent',{email:email}),'#2a6049');
+      return true;
     }
+    const resendMissing=(res.code==='RESEND_NOT_CONFIGURED')||(res.error&&String(res.error).indexOf('RESEND')>=0)||r.status===503;
+    if(resendMissing){
+      mailtoFallback();
+      return false;
+    }
+    if(r.status===401){
+      showToast('Reconnectez-vous pour envoyer un email','#c0392b');
+      return false;
+    }
+    showToast(ti('toast.invoice_sent_email_fail',{err:res.error||r.status}),'#c0392b',7000);
+    if(confirm('Échec de l\'envoi automatique. Ouvrir votre client mail à la place ?'))mailtoFallback();
+    return false;
   }catch(e){
-    showToast(t('toast.invoice_sent_email_error'),'#c0392b',6000);
+    if(opts.autoFallback||confirm('Erreur réseau. Ouvrir votre client mail pour envoyer la facture ?'))mailtoFallback();
+    else showToast(t('toast.invoice_sent_email_error'),'#c0392b',6000);
+    return false;
   }
 }
 
@@ -8871,7 +9887,7 @@ document.getElementById('to-invoice-list').addEventListener('click',function(e){
 });
 document.getElementById('btn-bill-cancel').addEventListener('click',function(){document.getElementById('bill-form').style.display='none';});
 document.getElementById('btn-bill-add-line').addEventListener('click',function(){billLines.push({label:'',qty:1,prix:0});renderBillLines();});
-document.getElementById('btn-tarif-add').addEventListener('click',function(){
+var _btnTarifAdd=document.getElementById('btn-tarif-add');if(_btnTarifAdd)_btnTarifAdd.addEventListener('click',function(){
   const lbl=document.getElementById('tarif-label').value.trim();
   const prix=parseFloat(document.getElementById('tarif-price').value)||0;
   if(!lbl){alert(t('alert.enter_service'));return;}
@@ -8908,7 +9924,7 @@ document.getElementById('bill-docs-list').addEventListener('click',function(e){
     // Auto-envoi email si le cabinet a une adresse
     const cabForEmail=cabinets.find(function(c){return c.id===doc.cabinet;});
     if(cabForEmail&&cabForEmail.email){
-      sendInvoiceEmail(id);
+      sendInvoiceEmail(id,{autoFallback:true,confirmMailto:false});
     } else {
       showToast(t('toast.invoice_sent'),'#1a4a7a');
     }
@@ -8957,17 +9973,27 @@ async function genPaymentLink(docId){
     const appUrl=window.location.href.split('?')[0];
     const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
 
-    // Timeout 15s sur toute la requête (AbortController)
+    if(!_cachedAccessToken){
+      try{
+        const sess=await getSessionOnce();
+        if(sess&&sess.data&&sess.data.session)_cachedAccessToken=sess.data.session.access_token;
+      }catch(_e){}
+    }
+    if(!_cachedAccessToken){
+      showToast('❌ Session expirée — reconnectez-vous à Labosync puis réessayez.','#c0392b',8000);
+      if(btn){btn.textContent=origLabel;btn.disabled=false;}
+      return;
+    }
+
     const controller=new AbortController();
-    const timeoutId=setTimeout(function(){controller.abort();},15000);
+    const timeoutId=setTimeout(function(){controller.abort();},20000);
+    const legacyKey=(localStorage.getItem('lb_stripe_key')||'').trim();
     let resp;
     try{
-      // Pas de header Authorization — la function ne le vérifie pas
-      // et sa présence déclenchait un preflight CORS qui pouvait bloquer
       resp=await fetch('/.netlify/functions/stripe-create-payment',{
         method:'POST',
         signal:controller.signal,
-        headers:{'Content-Type':'application/json'},
+        headers:stripeConnectHeaders(),
         body:JSON.stringify({
           factureId:doc.id,
           factureNum:doc.num,
@@ -8976,6 +10002,7 @@ async function genPaymentLink(docId){
           cabName:doc.cabName||'',
           description:'Facture '+doc.num+' — '+(doc.cabName||''),
           appUrl:appUrl,
+          stripeSecretKey:legacyKey&&/^sk_(live|test)_/.test(legacyKey)?legacyKey:undefined,
         }),
       });
     }finally{clearTimeout(timeoutId);}
@@ -9421,7 +10448,8 @@ function runOnboardingWizard(){
       body=
         '<div style="font-size:.86rem;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">Étape 2 sur 2 · Premier dentiste</div>'+
         '<h2 style="margin:0 0 12px 0;font-size:1.6rem;font-weight:800;color:#0f172a;">À vous de jouer 🚀</h2>'+
-        '<p style="margin:0 0 22px 0;font-size:1rem;color:#475569;line-height:1.55;">Avant de commencer, prenez 5 minutes pour configurer ces deux choses. Vous pourrez aussi le faire plus tard depuis le menu Paramètres.</p>'+
+        '<p style="margin:0 0 14px 0;font-size:1rem;color:#475569;line-height:1.55;">Avant de commencer, prenez 5 minutes pour configurer ces deux choses. Vous pourrez aussi le faire plus tard depuis le menu Paramètres.</p>'+
+        '<p style="margin:0 0 22px 0;font-size:.9rem;color:#1e40af;line-height:1.5;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;">📱 <strong>Sur téléphone :</strong> ajoutez Labosync à l\'écran d\'accueil et acceptez les notifications pour être alerté des messages dentistes même quand l\'app est fermée (iPhone : ouvrir depuis l\'icône installée).</p>'+
         '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">'+
           '<button id="onb-go-cabs" style="text-align:left;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:12px;padding:16px 18px;cursor:pointer;display:flex;align-items:center;gap:14px;">'+
             '<div style="font-size:1.6rem;flex-shrink:0;">👥</div>'+
@@ -9510,6 +10538,8 @@ const TOUR_STEPS=[
    body:"Une fois par mois (ou quand vous voulez), vous facturez vos dentistes en quelques clics, à partir des bons de livraison qu'ils ont reçus."},
   {target:'#btn-messages-hd',placement:'bottom',title:"La messagerie 💬",
    body:"Pour échanger avec vos dentistes : poser une question sur une commande, prévenir qu'un travail est prêt, etc. La pastille rouge vous prévient des nouveaux messages."},
+  {target:null,title:"Notifications sur mobile 📱",
+   body:"Pour être alerté d'un message dentiste même si Labosync est fermé :\n\n1. Sur iPhone ou Android, ajoutez Labosync à l'écran d'accueil (icône comme une application).\n2. Ouvrez Labosync depuis cette icône — sur iPhone, c'est obligatoire pour recevoir les notifications.\n3. Acceptez les notifications quand l'application vous le demande.\n\nPas besoin d'installer une app depuis l'App Store ou le Play Store."},
   {target:'#btn-account',placement:'left',title:"Le menu ⚙️",
    body:"Tout ce qui concerne votre compte se trouve ici :\n\n• Paramètres (vos prix, votre mode de programmation, infos légales)\n• Changer de langue\n• Refaire le tour guidé\n• Déconnexion"},
 
@@ -9534,21 +10564,17 @@ const TOUR_STEPS=[
   {target:null,title:"Bravo, votre premier dentiste est créé ! 🎉",
    body:"Vous pouvez en ajouter d'autres de la même façon, autant que vous voulez.\n\nMaintenant, configurons votre premier prix de prothèse."},
 
-  // ─── PHASE 4 : PREMIER PRIX (main dans la main) ────────────────────────
-  {target:null,title:"Direction : la facturation",
-   body:"Les prix sont configurés dans l'onglet « Mes factures », tout en bas de la page. Cliquez sur « Allons-y » et je vous y emmène.",
+  // ─── PHASE 4 : PREMIER PRIX ───────────────────────────────────────────
+  {target:null,title:"Vos prix de travaux",
+   body:"Chaque type (couronne, inlay, facette…) a un prix. On les configure dans Réglages → Prix des travaux.",
    nextLabel:"Allons-y →",
    onNext:function(){
-     var t=document.querySelector('.tab[data-pane="facturation"]');if(t)t.click();
-     setTimeout(function(){var el=document.getElementById('tarif-card')||document.getElementById('tarif-label');if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'center'});},350);
+     if(typeof goSettings==='function')goSettings();
+     setTimeout(function(){if(typeof openSettingsSection==='function')openSettingsSection('tarifs');},400);
    }},
-  {target:'#tarif-card',placement:'top',title:"Renseignez votre premier prix",
-   body:"Voici la section des prix. Le formulaire en bas vous permet d'ajouter une prestation et son tarif.\n\n• Prestation — par exemple « Couronne céramo-métallique »\n• Prix (€) — par exemple 120\n\nQuand c'est rempli, cliquez sur Suivant. Vous pouvez aussi cliquer directement sur « + Ajouter » si vous préférez.",
-   nextLabel:"Suivant : valider →",
-   skipNextIfClicked:'#btn-tarif-add'},
-  {target:'#btn-tarif-add',placement:'left',title:"Enregistrez ce prix",
-   body:"Cliquez maintenant sur le bouton « + Ajouter » pour enregistrer cette prestation.\n\nAllez-y, je vous attends !",
-   waitForClick:true},
+  {target:'#card-custom-types',placement:'top',title:"Indiquez le prix de chaque travail",
+   body:"Dans la colonne de droite, saisissez le prix en euros pour chaque ligne (ex. 120 pour une couronne).\n\nPuis cliquez sur « Enregistrer les prix » en bas de la liste.",
+   nextLabel:"Compris →"},
   {target:null,title:"Tout est prêt ! 🎉",
    body:"Vous savez maintenant ajouter des dentistes et des prix.\n\n📌 Les autres prix se configurent au même endroit, et vous trouverez plein d'autres réglages dans Paramètres.\n\n💡 Partout dans l'application, des « ? » expliquent les termes techniques.\n\nBon courage et bonne journée !"}
 ];
@@ -10136,20 +11162,15 @@ async function publishPortal(cab){
   };
 
   try{
-    const r=await fetch(SB_URL+'/rest/v1/labo_data',{
+    const r=await fetch('/.netlify/functions/portal',{
       method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'apikey':SB_KEY,
-        'Authorization':'Bearer '+token,
-        'Prefer':'resolution=merge-duplicates,return=minimal'
-      },
-      body:JSON.stringify({id:'portal_'+cab.portalId,data:payload,updated_at:new Date().toISOString()})
+      headers:_portalApiHeaders(),
+      body:JSON.stringify({portalId:cab.portalId,payload:payload})
     });
-    if(!r.ok&&r.status!==201&&r.status!==204){
-      const t=await r.text();
-      console.warn('publishPortal error',r.status,t);
-      showToast(ti('toast.portal_error',{status:r.status}),'#c0392b');
+    if(!r.ok){
+      const err=await r.json().catch(function(){return {};});
+      console.warn('publishPortal error',r.status,err);
+      showToast((err.error||ti('toast.portal_error',{status:r.status})),'#c0392b');
     }
   }catch(e){
     showToast(ti('toast.network_error',{msg:String(e).slice(0,80)}),'#c0392b');
@@ -10196,12 +11217,15 @@ function applyProgMode(){
   document.querySelectorAll('.prog-tab').forEach(function(el){
     el.style.display=on?'':'none';
   });
-  // Onglet Travaux/Programmation : toujours visible, texte change
+  // Onglet Travaux/Programmation : toujours visible, texte + icône changent
   const tabSaisie=document.querySelector('[data-pane="saisie"]');
   if(tabSaisie){
-    const badge=tabSaisie.querySelector('.queue-badge');
-    const badgeHtml=badge?badge.outerHTML:'';
-    tabSaisie.innerHTML=(on?'🔬 Programmation ':'📋 Mes travaux ')+badgeHtml;
+    const iconEl=tabSaisie.querySelector('.drawer-tab-icon');
+    const titleEl=tabSaisie.querySelector('.drawer-tab-title');
+    const subEl=tabSaisie.querySelector('.drawer-tab-sub');
+    if(iconEl)iconEl.textContent=on?'🔬':'🔧';
+    if(titleEl)titleEl.textContent=on?'Programmation':'Travaux';
+    if(subEl)subEl.innerHTML=on?'File &amp; étapes · <span class="queue-badge" id="queue-badge-tab">'+(document.getElementById('queue-badge-tab')?.textContent||'0')+'</span>':'En cours · <span class="queue-badge" id="queue-badge-tab">'+(document.getElementById('queue-badge-tab')?.textContent||'0')+'</span>';
     tabSaisie.style.display='';
   }
   // Bouton "Ajouter le travail" dans le formulaire
@@ -10886,7 +11910,7 @@ let _userRole = localStorage.getItem('lb_user_role') || 'admin';
 const _ROLE_PERMS = {
   admin: ['*'],
   production: ['pane:dashboard','pane:saisie','pane:calendrier','pane:livraisons','pane:historique','pane:stats','pane:attente','pane:impression','pane:messages','pane:cabinets','pane:coursiers'],
-  billing: ['pane:dashboard','pane:cabinets','pane:livraisons','pane:facturation','pane:historique','pane:stats','pane:messages','action:billing_generate','action:billing_credit'],
+  billing: ['pane:dashboard','pane:cabinets','pane:livraisons','pane:facturation','pane:historique','pane:stats','pane:messages','action:billing_generate','action:billing_credit','action:data_import'],
   support: ['pane:dashboard','pane:cabinets','pane:livraisons','pane:historique','pane:messages'],
 };
 function hasPerm(key){
@@ -11048,15 +12072,26 @@ async function completeLabBoot(session){
       showToast('Connexion lente au cloud — l\'app reste utilisable.','#d97706',4500);
     }
 
+    try{handleStripeConnectReturnDesktop();}catch(eSc){}
     _withTimeout(cloudRestore(true),18000,'cloudRestore').then(function(){
       if(typeof render==='function')render();
       refreshTechSelects();refreshTypeSelects();applyProgMode();
+      if(typeof renderMessagesPane==='function')renderMessagesPane();
+      try{startChatBgPoll();}catch(eChat){}
+      republishAllPortals().catch(function(e){console.warn('republishAllPortals',e);});
     }).catch(function(e2){console.warn('cloudRestore',e2);});
 
     try{startRealtime(session.user.id);}catch(e){}
     try{startCourierLabRealtime();}catch(e3){console.warn('courier rt',e3);}
     try{startCourierMissionPolling();}catch(e5){console.warn('courier poll',e5);}
     try{_maybeRunOnboarding();}catch(e4){console.warn('onboarding',e4);}
+    try{
+      if(typeof LabosyncPush!=='undefined'&&session&&session.user){
+        LabosyncPush.prepare({role:'lab',externalId:'lab:'+session.user.id});
+        var pushBanner=document.getElementById('lb-push-banner');
+        if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab'});
+      }
+    }catch(ePush){console.warn('push init',ePush);}
   }finally{
     _labBootInProgress=false;
   }
@@ -12031,6 +13066,8 @@ async function loadChatMessages(scrollToBottom){
     const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(_chatPortalId),{headers:_portalApiHeaders()});
     if(!r.ok){
       _noteChatPollResult(_chatPortalId,false);
+      if(r.status===401)showToast('Chat : accès refusé — republiez le portail du cabinet','#c0392b');
+      else if(scrollToBottom)showToast('Impossible de charger le chat ('+r.status+')','#c0392b');
       return;
     }
     _noteChatPollResult(_chatPortalId,true);
@@ -12345,14 +13382,18 @@ async function renderMessagesPane(){
   if(_isRenderingMessagesPane) return;
   _isRenderingMessagesPane = true;
   const el = document.getElementById('messages-cab-list');
+  if(!el){_isRenderingMessagesPane=false;return;}
   if(!cabinets.length){
-    el.innerHTML = '<div class="empty">'+t('empty.cabinets')+'</div>';
+    el.innerHTML = '<div class="empty">'+t('empty.cabinets')+'</div><p style="text-align:center;font-size:.76rem;color:var(--ink-soft);margin-top:8px;">Ajoutez un cabinet dans <strong>Dentistes</strong>, puis publiez son portail.</p>';
     _isRenderingMessagesPane = false;
     return;
   }
-  // Affichage immédiat avec données en cache, puis refresh en arrière-plan
-  el.innerHTML = cabinets.map(function(cab){
-    if(!cab.portalId) return '';
+  const withPortal=cabinets.filter(function(c){return c.portalId;});
+  const withoutPortal=cabinets.filter(function(c){return !c.portalId;});
+  if(!withPortal.length){
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-soft);font-size:.84rem;line-height:1.5;">Aucun cabinet avec portail actif.<br/>Allez dans <strong>Dentistes</strong>, ouvrez chaque cabinet et <strong>publiez le portail</strong>.</div>';
+  }else{
+  el.innerHTML = withPortal.map(function(cab){
     const prev = _chatPreview[cab.portalId]||{};
     const unread = _chatUnread[cab.id]||0;
     const lastMsg = prev.lastMsg||'';
@@ -12369,39 +13410,51 @@ async function renderMessagesPane(){
       +(lastTime?'<div style="font-size:.68rem;color:var(--ink-soft);flex-shrink:0;">'+lastTime+'</div>':'')
       +'</div>';
   }).join('');
-  // Charger les previews en arrière-plan
-  cabinets.forEach(async function(cab){
-    if(!cab.portalId) return;
+  }
+  if(withoutPortal.length){
+    el.innerHTML+=withoutPortal.map(function(cab){
+      return '<div style="padding:12px 16px;border:1px dashed var(--border);border-radius:10px;margin-bottom:8px;font-size:.78rem;color:var(--ink-soft);">'
+        +chatEscH(cab.name)+' — pas de portail (Dentistes → publier le portail).'
+        +'</div>';
+    }).join('');
+  }
+  await Promise.all(withPortal.map(async function(cab){
     if(!_canPollChat(cab.portalId)) return;
     try{
-      const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId),{headers:_portalApiHeaders()});
+      const r=await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(cab.portalId),{headers:_portalApiHeaders()});
       if(!r.ok){
         _noteChatPollResult(cab.portalId,false);
+        if(r.status===401)showToast('Messagerie : accès refusé pour '+cab.name+' — republiez le portail','#c0392b',5000);
         return;
       }
       _noteChatPollResult(cab.portalId,true);
-      const rows = await r.json();
-      const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
+      const rows=await r.json();
+      const msgs=(rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
       if(!msgs.length) return;
-      const last = msgs[msgs.length-1];
-      const lastSeen = localStorage.getItem('chat_seen_'+cab.portalId)||'';
-      const unreadCount = msgs.filter(function(m){return m.sender==='cabinet'&&m.createdAt>lastSeen;}).length;
-      _chatPreview[cab.portalId] = {
-        lastMsg: (last.senderName||last.sender)+' : '+last.content.slice(0,60)+(last.content.length>60?'…':''),
-        lastTime: last.createdAt,
-        unreadCount: unreadCount
+      const last=msgs[msgs.length-1];
+      const lastSeen=localStorage.getItem('chat_seen_'+cab.portalId)||'';
+      const unreadCount=msgs.filter(function(m){return m.sender==='cabinet'&&m.createdAt>lastSeen;}).length;
+      _chatPreview[cab.portalId]={
+        lastMsg:(last.senderName||last.sender)+' : '+last.content.slice(0,60)+(last.content.length>60?'…':''),
+        lastTime:last.createdAt,
+        unreadCount:unreadCount
       };
       const prevUnread=_chatUnread[cab.id]||0;
-      if(unreadCount > 0){
-        _chatUnread[cab.id] = unreadCount;
-        if(prevUnread!==unreadCount) updateChatBadge(cab.id);
-      } else if(prevUnread!==0){
-        _chatUnread[cab.id] = 0;
+      if(unreadCount>0){
+        _chatUnread[cab.id]=unreadCount;
+        if(prevUnread!==unreadCount){
+          updateChatBadge(cab.id);
+          const unseen=msgs.filter(function(m){return m.sender==='cabinet'&&m.createdAt>lastSeen;});
+          if(unseen.length)notifyLabNewChatMessages(cab,unseen);
+        }
+      }else if(prevUnread!==0){
+        _chatUnread[cab.id]=0;
         updateChatBadge(cab.id);
       }
     }catch(e){}
-  });
-  _isRenderingMessagesPane = false;
+  }));
+  _isRenderingMessagesPane=false;
+  if(withPortal.length) _queueMessagesPaneRender();
 }
 
 function fmtChatTime(iso){
@@ -12445,10 +13498,9 @@ function startChatBgPoll(){
           };
         }
         if(unseen.length){
-          _chatUnread[cab.id] = (_chatUnread[cab.id]||0)+unseen.length;
+          _chatUnread[cab.id]=unseen.length;
           updateChatBadge(cab.id);
-          const latest = cabMsgs[cabMsgs.length-1].createdAt;
-          localStorage.setItem('chat_seen_'+cab.portalId, latest);
+          notifyLabNewChatMessages(cab,unseen);
           var _dashPane=document.getElementById('pane-dashboard');
           if(_dashPane&&_dashPane.classList.contains('on')&&typeof renderDashboard==='function')renderDashboard();
         }
@@ -12692,10 +13744,23 @@ function buildMapsDirectionsUrl(stops){
   return url;
 }
 
-function labCourierNotify(title,body,tag){
+function labDesktopNotify(title,body,tag){
   if(!('Notification' in window)||Notification.permission!=='granted')return;
   if(document.visibilityState==='visible')return;
-  try{new Notification(title||'Labosync',{body:body,tag:tag||'labosync-lab-courier',icon:'/icon.svg'});}catch(e){}
+  try{new Notification(title||'Labosync',{body:body,tag:tag||'labosync',icon:'/icon.svg'});}catch(e){}
+}
+function labCourierNotify(title,body,tag){
+  labDesktopNotify(title,body,tag||'labosync-lab-courier');
+}
+var _chatNotifyAt={};
+function notifyLabNewChatMessages(cab,unseen){
+  if(!unseen||!unseen.length||!cab||!cab.portalId)return;
+  const latest=unseen[unseen.length-1];
+  if(_chatNotifyAt[cab.portalId]===latest.createdAt)return;
+  _chatNotifyAt[cab.portalId]=latest.createdAt;
+  const who=latest.senderName||cab.name||'Cabinet';
+  const body=(latest.content||'Nouveau message').slice(0,160);
+  labDesktopNotify('💬 '+who,body,'chat-'+cab.portalId+'-'+latest.createdAt);
 }
 
 function notifyLabCourierMissionChanges(all){
@@ -12979,17 +14044,25 @@ async function loadLabCourierBilling(){
     const name=(b.courier&&b.courier.displayName)||'Coursier';
     const monthLbl=fmtMonthLabelCourier(b.period&&b.period.month);
     if(!b.totalCourses){
-      el.innerHTML='<'+D+' style="padding:12px;background:var(--bg);border-radius:8px;color:var(--ink-soft);">Aucune course terminée pour <b>'+escH(name)+'</b> en '+escH(monthLbl)+'.</'+D+'>';
+      el.innerHTML='<div style="padding:12px;background:var(--bg);border-radius:8px;color:var(--ink-soft);">Aucune course terminée pour <b>'+escH(name)+'</b> en '+escH(monthLbl)+'.</div>';
       return;
     }
-    let html='<'+D+' style="padding:14px;background:#f0f7f4;border:1px solid #c8e6d4;border-radius:10px;margin-bottom:12px;">'+
-      '<'+D+' style="font-weight:700;font-size:1rem;color:#2a6049;">'+b.totalCourses+' course'+(b.totalCourses>1?'s':'')+' terminée'+(b.totalCourses>1?'s':'')+'</'+D+'>'+
-      '<'+D+' style="font-size:.78rem;color:#2a6049;margin-top:4px;">'+escH(name)+' · '+escH(monthLbl)+' · '+b.totalPickups+' réc. · '+b.totalDeliveries+' liv.</'+D+'></'+D+'>';
+    let rateHint='';
+    if(b.ratePerCourse!=null){
+      rateHint=' · Tarif coursier : '+b.ratePerCourse+' €';
+      if(b.ratePerExtraStop!=null&&b.ratePerExtraStop>0)rateHint+=' + '+b.ratePerExtraStop+' €/arrêt suppl.';
+    }
+    let html='<div style="padding:14px;background:#f0f7f4;border:1px solid #c8e6d4;border-radius:10px;margin-bottom:12px;">'+
+      '<div style="font-weight:700;font-size:1rem;color:#2a6049;">'+b.totalCourses+' course'+(b.totalCourses>1?'s':'')+' terminée'+(b.totalCourses>1?'s':'')+
+      (b.estimatedTotal!=null?' · <span style="color:#1a4d38;">~'+b.estimatedTotal.toFixed(2)+' €</span>':'')+'</div>'+
+      '<div style="font-size:.78rem;color:#2a6049;margin-top:4px;">'+escH(name)+' · '+escH(monthLbl)+' · '+b.totalPickups+' réc. · '+b.totalDeliveries+' liv.'+rateHint+'</div></div>';
     if((b.missions||[]).length){
-      html+='<'+D+' style="font-weight:700;margin-bottom:8px;font-size:.78rem;">Détail</'+D+'>';
+      html+='<div style="font-weight:700;margin-bottom:8px;font-size:.78rem;">Détail</div>';
       html+=(b.missions||[]).map(function(m,i){
-        return '<'+D+' style="padding:8px 0;border-bottom:1px solid var(--border);font-size:.78rem;">'+
-          '<b>'+(i+1)+'.</b> '+escH(m.label)+'<br/><span style="color:var(--ink-soft);">'+fmtBillingDateCourier(m.completedAt)+'</span></'+D+'>';
+        const amt=m.amount!=null?' · <b>'+m.amount.toFixed(2)+' €</b>':'';
+        const stops=m.stopCount>1?' · '+m.stopCount+' arrêts':'';
+        return '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:.78rem;">'+
+          '<b>'+(i+1)+'.</b> '+escH(m.label)+amt+'<br/><span style="color:var(--ink-soft);">'+fmtBillingDateCourier(m.completedAt)+stops+'</span></div>';
       }).join('');
     }
     el.innerHTML=html;
@@ -13117,9 +14190,13 @@ async function cancelCourierMission(missionId){
 }
 
 document.getElementById('btn-courier-link')?.addEventListener('click',async function(){
-  const email=document.getElementById('courier-link-email')?.value.trim();
+  const email=(document.getElementById('courier-link-email')?.value||'').trim().toLowerCase();
   const msg=document.getElementById('courier-link-msg');
-  if(!email){if(msg)msg.textContent='Email requis';return;}
+  if(!email){if(msg){msg.style.color='#c0392b';msg.textContent='Email requis';}return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    if(msg){msg.style.color='#c0392b';msg.textContent='Adresse email invalide';}
+    return;
+  }
   this.disabled=true;
   try{
     await courierApi('linkCourier',{email:email});
@@ -13162,7 +14239,7 @@ document.getElementById('lab-courier-billing-month')?.addEventListener('change',
 document.getElementById('btn-cp-maps-preview')?.addEventListener('click',function(){
   const url=buildMapsDirectionsUrl(collectCpStopsPayload());
   if(url)window.open(url,'_blank','noopener');
-  else showToast('Ajoutez au moins une adresse pour l'itinéraire.','#c0392b');
+  else showToast('Ajoutez au moins une adresse pour l\'itinéraire.','#c0392b');
 });
 if('Notification' in window&&Notification.permission==='default'){
   try{Notification.requestPermission();}catch(e){}

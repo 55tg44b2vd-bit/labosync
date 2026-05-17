@@ -6,6 +6,11 @@ const {
   getPortalTokenFromEvent,
   labOwnsPortal,
 } = require('./_labosync-auth');
+const {
+  detectNewlySentInvoices,
+  notifyChatMessage,
+  notifyInvoice,
+} = require('./_onesignal');
 
 exports.handler = async (event) => {
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -19,6 +24,33 @@ exports.handler = async (event) => {
   const isValidPortalId = (portalId) => typeof portalId === 'string' && /^[a-zA-Z0-9_-]{4,120}$/.test(portalId);
   const clampStr = (value, maxLen) => String(value || '').slice(0, maxLen);
   const normPortalId = (portalId) => String(portalId || '').trim().toLowerCase();
+  const cabLoginRowId = (code) => 'cablogin_' + String(code || '').trim().toUpperCase();
+
+  const stripPortalSecrets = (data) => {
+    if (!data || typeof data !== 'object') return data;
+    const out = Object.assign({}, data);
+    delete out.cabPwd;
+    return out;
+  };
+
+  const upsertCabLoginIndex = async (portalId, cabCode, cabId) => {
+    const codeUp = String(cabCode || '').trim().toUpperCase();
+    if (!codeUp || !isValidPortalId(portalId)) return;
+    await fetch(`${SB_URL}/rest/v1/labo_data`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({
+        id: cabLoginRowId(codeUp),
+        data: { portalId: normPortalId(portalId), cabId: clampStr(cabId || '', 80) || null, cabCode: codeUp },
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  };
 
   const readRow = async (rowId) => {
     const resp = await fetch(
@@ -106,7 +138,13 @@ exports.handler = async (event) => {
       }
       rows = legacyRead.rows;
     }
-    return { statusCode: 200, headers, body: JSON.stringify(rows) };
+    const sanitizedRows = (rows || []).map((row) => {
+      if (!row || !row.data) return row;
+      const rowId = String(row.id || '');
+      if (!/^portal_/i.test(rowId)) return row;
+      return Object.assign({}, row, { data: stripPortalSecrets(row.data) });
+    });
+    return { statusCode: 200, headers, body: JSON.stringify(sanitizedRows) };
   }
 
   // ── POST : écrire portail ou chat (authentifié) ───────────────────────────
@@ -199,6 +237,19 @@ exports.handler = async (event) => {
 
       const trimmed = [...existing, newMsg].slice(-200);
 
+      let chatLabUserId = auth.userId || null;
+      if (!chatLabUserId) {
+        const portalRead = await readRow(`portal_${normalizedId}`);
+        if (portalRead.ok && portalRead.rows[0]?.data?.labUserId) {
+          chatLabUserId = String(portalRead.rows[0].data.labUserId);
+        } else if (legacyRowId !== rowId) {
+          const legacyPortal = await readRow(legacyRowId.replace(/^chat_/, 'portal_'));
+          if (legacyPortal.ok && legacyPortal.rows[0]?.data?.labUserId) {
+            chatLabUserId = String(legacyPortal.rows[0].data.labUserId);
+          }
+        }
+      }
+
       const writeResp = await fetch(`${SB_URL}/rest/v1/labo_data`, {
         method: 'POST',
         headers: {
@@ -209,7 +260,7 @@ exports.handler = async (event) => {
         },
         body: JSON.stringify({
           id: rowId,
-          data: { messages: trimmed, labUserId: auth.userId || null },
+          data: { messages: trimmed, labUserId: chatLabUserId },
           updated_at: new Date().toISOString(),
         }),
       });
@@ -218,6 +269,23 @@ exports.handler = async (event) => {
         const txt = await writeResp.text();
         return { statusCode: 500, headers, body: JSON.stringify({ error: 'Écriture échouée : ' + txt }) };
       }
+
+      let laboName = clampStr(senderName || '', 80);
+      if (sender === 'labo') {
+        const portalRead = await readRow(`portal_${normalizedId}`);
+        if (portalRead.ok && portalRead.rows[0]?.data?.laboName) {
+          laboName = clampStr(portalRead.rows[0].data.laboName, 80);
+        }
+      }
+
+      notifyChatMessage({
+        sender,
+        portalId: normalizedId,
+        labUserId: chatLabUserId,
+        senderName: clampStr(senderName || '', 80),
+        content: clampStr(content || '', 5000),
+        laboName,
+      }).catch((err) => console.warn('[push] chat', err));
 
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true, message: newMsg }) };
     }
@@ -286,7 +354,12 @@ exports.handler = async (event) => {
 
     const normalizedId = auth.portalId;
     const safePayload = Object.assign({}, payload, { labUserId: auth.userId });
-    delete safePayload.cabPwd;
+
+    const prevPortalRead = await readRow(`portal_${normalizedId}`);
+    const prevFactures =
+      prevPortalRead.ok && prevPortalRead.rows[0]?.data?.factures
+        ? prevPortalRead.rows[0].data.factures
+        : [];
 
     const resp = await fetch(`${SB_URL}/rest/v1/labo_data`, {
       method: 'POST',
@@ -306,6 +379,24 @@ exports.handler = async (event) => {
     if (!resp.ok) {
       const txt = await resp.text();
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Écriture échouée : ' + txt }) };
+    }
+
+    try {
+      await upsertCabLoginIndex(normalizedId, safePayload.cabCode, safePayload.cabId);
+    } catch (_) {
+      /* index optionnel — la connexion par code reste possible via cabCode JSON */
+    }
+
+    const newInvoices = detectNewlySentInvoices(prevFactures, safePayload.factures || []);
+    const laboName = clampStr(safePayload.laboName || 'Votre laboratoire', 80);
+    const cabName = clampStr(safePayload.cabName || '', 80);
+    for (const fac of newInvoices) {
+      notifyInvoice({
+        portalId: normalizedId,
+        facture: fac,
+        laboName,
+        cabName,
+      }).catch((err) => console.warn('[push] invoice', fac.id, err));
     }
 
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };

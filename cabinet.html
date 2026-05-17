@@ -6,7 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="theme-color" content="#ffffff"/>
-<link rel="manifest" href="/manifest.json"/>
+<link rel="manifest" href="/manifest-cabinet.json"/>
+<script src="/vendor/onesignal-sdk.js" defer id="onesignal-sdk"></script>
+<script src="/lb-push.js"></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="/icon.svg"/>
 <title>Espace Cabinet — Labosync</title>
@@ -230,6 +232,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
   </header>
 
   <div class="portal-body">
+    <div id="lb-push-banner"></div>
     <!-- Labo info bar -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px;">
       <div>
@@ -570,6 +573,13 @@ function showPortal(){
   setTimeout(checkPortalChatNotif, 1000);
   renderPortalDraftBanner();
   showPortalWelcomeHint();
+  try{
+    if(typeof LabosyncPush!=='undefined'&&sessionPortalId){
+      LabosyncPush.prepare({role:'cabinet',externalId:'cabinet:'+String(sessionPortalId).trim().toLowerCase()});
+      var pushBanner=document.getElementById('lb-push-banner');
+      if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_cab_'+sessionPortalId,subtitle:'Messages du laboratoire et nouvelles factures, même quand l\'application est fermée.'});
+    }
+  }catch(ePush){console.warn('push init',ePush);}
 
   // Sync immédiat pour éviter d'afficher un snapshot session trop ancien.
   refreshPortalDataOnce(true);
@@ -628,7 +638,7 @@ function showPortalWelcomeHint(){
     const key='cab_onboard_seen_'+sessionPortalId;
     if(localStorage.getItem(key)==='1')return;
     localStorage.setItem(key,'1');
-    showToast('👋 Bienvenue ! Appuyez sur « Nouvelle commande » pour envoyer une fiche au labo.');
+    showToast('👋 Bienvenue ! Ajoutez Labosync à l\'écran d\'accueil et acceptez les notifications pour les messages et factures du labo.');
   }catch(e){}
 }
 
