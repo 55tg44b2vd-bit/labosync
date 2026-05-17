@@ -16,21 +16,36 @@ function trimPreview(text, maxLen) {
   return s.length <= maxLen ? s : s.slice(0, maxLen - 1) + '…';
 }
 
-async function sendToExternalUsers({ externalUserIds, heading, body, url, data }) {
-  if (!isConfigured()) return { ok: false, skipped: true, reason: 'not_configured' };
-  const ids = [...new Set((externalUserIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
-  if (!ids.length) return { ok: false, skipped: true, reason: 'no_targets' };
+const WEB_PUSH_TYPES = new Set([
+  'web_push',
+  'WebPush',
+  'ChromePush',
+  'FirefoxPush',
+  'SafariPush',
+  'SafariLegacyPush',
+  'webpush',
+]);
 
-  const payload = {
-    app_id: process.env.ONESIGNAL_APP_ID,
-    include_aliases: { external_id: ids },
-    target_channel: 'push',
-    headings: { fr: heading, en: heading },
-    contents: { fr: body, en: body },
-    data: data || {},
-  };
-  if (url) payload.url = url;
+function isWebPushSub(sub) {
+  if (!sub || typeof sub !== 'object') return false;
+  const type = String(sub.type || sub.device_type || '').trim();
+  if (type && WEB_PUSH_TYPES.has(type)) return true;
+  if (type && /push/i.test(type) && !/mobile|ios|android|email|sms/i.test(type)) return true;
+  return !!(sub.token || sub.web_auth || sub.web_p256dh || sub.web_p256);
+}
 
+function isSubscribed(sub) {
+  if (!sub) return false;
+  if (sub.enabled === false) return false;
+  const status = String(sub.status || sub.subscription_status || '').toLowerCase();
+  if (status === 'subscribed') return true;
+  if (status === 'unsubscribed' || status === 'never subscribed') return false;
+  if (sub.enabled === true) return true;
+  if (sub.notification_types === 1 || sub.notification_types === '1') return true;
+  return isWebPushSub(sub);
+}
+
+async function postOneSignalNotification(payload) {
   const resp = await fetch(ONESIGNAL_API, {
     method: 'POST',
     headers: {
@@ -39,39 +54,141 @@ async function sendToExternalUsers({ externalUserIds, heading, body, url, data }
     },
     body: JSON.stringify(payload),
   });
+  const json = parseJson(await resp.text());
+  const recipients = typeof json?.recipients === 'number' ? json.recipients : null;
+  const hasErrors = Array.isArray(json?.errors) && json.errors.length > 0;
+  const invalidAliases =
+    json?.invalid_aliases &&
+    Array.isArray(json.invalid_aliases.external_id) &&
+    json.invalid_aliases.external_id.length > 0;
+  const invalidExternal =
+    Array.isArray(json?.invalid_external_user_ids) && json.invalid_external_user_ids.length > 0;
+  const delivered =
+    resp.ok &&
+    !hasErrors &&
+    !invalidAliases &&
+    !invalidExternal &&
+    (recipients === null || recipients > 0);
 
-  const txt = await resp.text();
-  let json = null;
+  return {
+    ok: delivered,
+    status: resp.status,
+    result: json,
+    recipients,
+    error: delivered ? null : json,
+  };
+}
+
+/** Récupère les IDs d'abonnement (User Model + API legacy /players). */
+async function getWebPushTargets(externalId) {
+  const appId = process.env.ONESIGNAL_APP_ID;
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY;
+  const out = { subscriptionIds: [], playerIds: [] };
+  const eid = String(externalId || '').trim();
+  if (!appId || !apiKey || !eid) return out;
+
   try {
-    json = txt ? JSON.parse(txt) : null;
-  } catch (_) {
-    json = { raw: txt };
+    const userResp = await fetch(
+      'https://api.onesignal.com/apps/' +
+        encodeURIComponent(appId) +
+        '/users/by/external_id/' +
+        encodeURIComponent(eid),
+      { headers: { Authorization: 'Key ' + apiKey, Accept: 'application/json' } }
+    );
+    if (userResp.ok) {
+      const user = parseJson(await userResp.text());
+      (user?.subscriptions || []).forEach((s) => {
+        if (s?.id && isWebPushSub(s) && isSubscribed(s)) out.subscriptionIds.push(String(s.id));
+      });
+    }
+  } catch (e) {
+    console.warn('[onesignal] get user subscriptions', e);
   }
 
-  if (!resp.ok) {
-    console.warn('[onesignal] send failed', resp.status, JSON.stringify(json));
-    return { ok: false, status: resp.status, error: json };
+  for (const authorization of ['Key ' + apiKey, 'Basic ' + apiKey]) {
+    try {
+      const listUrl =
+        'https://onesignal.com/api/v1/players?app_id=' +
+        encodeURIComponent(appId) +
+        '&external_user_id=' +
+        encodeURIComponent(eid) +
+        '&limit=10';
+      const resp = await fetch(listUrl, { headers: { Authorization: authorization } });
+      if (!resp.ok) continue;
+      const json = parseJson(await resp.text());
+      (json?.players || []).forEach((p) => {
+        if (
+          p?.id &&
+          p.identifier &&
+          p.invalid_identifier !== true &&
+          (p.notification_types === 1 ||
+            p.notification_types === '1' ||
+            p.notification_types == null)
+        ) {
+          out.playerIds.push(String(p.id));
+        }
+      });
+      if (out.playerIds.length) break;
+    } catch (_) {}
   }
-  const noDelivery =
-    json &&
-    ((Array.isArray(json.errors) && json.errors.length > 0) ||
-      (Array.isArray(json.invalid_external_user_ids) && json.invalid_external_user_ids.length > 0) ||
-      (json.invalid_aliases &&
-        Array.isArray(json.invalid_aliases.external_id) &&
-        json.invalid_aliases.external_id.length > 0));
-  if (noDelivery) {
-    console.warn('[onesignal] no recipients', JSON.stringify(json));
-    return {
-      ok: false,
-      status: resp.status,
-      error: json,
-      reason: 'no_subscribed_devices',
-      hint:
-        'Aucun appareil abonné pour cet identifiant. Ouvrez Labosync, cliquez « Activer les notifications » (pas seulement le cadenas du navigateur).',
-    };
+
+  out.subscriptionIds = [...new Set(out.subscriptionIds)];
+  out.playerIds = [...new Set(out.playerIds)];
+  return out;
+}
+
+async function sendToExternalUsers({ externalUserIds, heading, body, url, data }) {
+  if (!isConfigured()) return { ok: false, skipped: true, reason: 'not_configured' };
+  const ids = [...new Set((externalUserIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!ids.length) return { ok: false, skipped: true, reason: 'no_targets' };
+
+  const base = {
+    app_id: process.env.ONESIGNAL_APP_ID,
+    target_channel: 'push',
+    headings: { fr: heading, en: heading },
+    contents: { fr: body, en: body },
+    data: data || {},
+  };
+  if (url) base.url = url;
+
+  const targets = await getWebPushTargets(ids[0]);
+  const attempts = [{ include_aliases: { external_id: ids } }];
+  if (targets.subscriptionIds.length) {
+    attempts.push({ include_subscription_ids: targets.subscriptionIds });
   }
-  console.log('[onesignal] sent', ids.join(','), json?.id || '');
-  return { ok: true, result: json };
+  if (targets.playerIds.length) {
+    attempts.push({ include_player_ids: targets.playerIds });
+  }
+  attempts.push({ include_external_user_ids: ids });
+
+  let last = null;
+  for (const targeting of attempts) {
+    const via = Object.keys(targeting)[0];
+    const result = await postOneSignalNotification({ ...base, ...targeting });
+    last = result;
+    if (result.ok) {
+      console.log('[onesignal] sent', ids.join(','), via, result.recipients, result.result?.id || '');
+      return {
+        ok: true,
+        result: result.result,
+        recipients: result.recipients,
+        via,
+        targets,
+      };
+    }
+  }
+
+  console.warn('[onesignal] no delivery', ids.join(','), JSON.stringify(last?.error || last?.result));
+  return {
+    ok: false,
+    status: last?.status,
+    error: last?.error,
+    recipients: last?.recipients ?? 0,
+    targets,
+    reason: 'no_subscribed_devices',
+    hint:
+      'Aucun appareil joignable. Menu ⚙️ → Finaliser l\'enregistrement, puis réessayez. Vérifiez aussi que les notifications Windows sont activées pour Chrome/Edge.',
+  };
 }
 
 function cabinetExternalId(portalId) {
@@ -310,7 +427,12 @@ async function upsertWebPushSubscription({ externalId, endpoint, auth, p256dh, p
     p256dh,
     pushType: type,
   });
-  if (legacy.ok) return legacy;
+  if (legacy.ok) {
+    return {
+      ...legacy,
+      playerId: legacy.result?.id || null,
+    };
+  }
 
   const message = formatOnesignalApiError(json, 'OneSignal a refusé l\'enregistrement');
   console.warn('[onesignal] upsert subscription', resp.status, JSON.stringify(json));
@@ -351,6 +473,7 @@ async function hasLegacyWebPlayer(externalId) {
 module.exports = {
   isConfigured,
   sendToExternalUsers,
+  getWebPushTargets,
   upsertWebPushSubscription,
   hasLegacyWebPlayer,
   formatOnesignalApiError,

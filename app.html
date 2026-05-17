@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Labo">
 <meta name="theme-color" content="#2563eb">
 <link rel="manifest" href="/manifest.json">
-<script src="/lb-push.js?v=5" defer></script>
+<script src="/lb-push.js?v=6" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>Labosync</title>
@@ -12059,7 +12059,7 @@ async function testLabPushNotification(){
     var ext=LabosyncPush.getExternalId();
     var r=await fetch('/.netlify/functions/onesignal-test-push',{method:'POST',headers:_portalApiHeaders(),body:JSON.stringify({externalId:ext})});
     var j=await r.json();
-    if(j.ok)showToast('Notification test envoyée — vérifiez la bannière Windows','#2563eb',8000);
+    if(j.ok)showToast(j.message||('Notification test envoyée ('+(j.recipients||1)+' appareil) — vérifiez la bannière Windows'),'#2563eb',8000);
     else showToast(formatOsPushMsg(j,'Échec envoi test — finalisez l\'enregistrement d\'abord.'),'#c0392b',9000);
   }catch(e){
     showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);

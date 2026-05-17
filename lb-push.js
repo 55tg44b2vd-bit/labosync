@@ -618,7 +618,14 @@
   }
 
   function pickVapidKey(cfg) {
-    return (cfg && (cfg.onesignalVapidPublicKey || cfg.vapidPublicKey)) || '';
+    if (!cfg) return '';
+    try {
+      var ua = global.navigator && global.navigator.userAgent ? global.navigator.userAgent : '';
+      if (/firefox|fxios/i.test(ua)) {
+        return cfg.vapidPublicKey || cfg.onesignalVapidPublicKey || '';
+      }
+    } catch (e) {}
+    return cfg.onesignalVapidPublicKey || cfg.vapidPublicKey || '';
   }
 
   function ensurePushServiceWorker() {
@@ -637,12 +644,20 @@
       });
   }
 
-  function subscribeNativePush(registration, vapidKey) {
+  function subscribeNativePush(registration, vapidKey, forceNew) {
     return registration.pushManager.getSubscription().then(function (existing) {
-      if (existing) return existing;
-      return registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      if (existing && !forceNew) return existing;
+      var chain = Promise.resolve();
+      if (existing && forceNew) {
+        chain = existing.unsubscribe().catch(function () {
+          return null;
+        });
+      }
+      return chain.then(function () {
+        return registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
       });
     });
   }
@@ -703,7 +718,7 @@
           throw new Error('Clé push manquante — réessayez dans une minute.');
         }
         return ensurePushServiceWorker().then(function (reg) {
-          return subscribeNativePush(reg, vapid);
+          return subscribeNativePush(reg, vapid, true);
         });
       })
       .then(function (sub) {

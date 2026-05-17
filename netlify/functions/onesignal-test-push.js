@@ -44,7 +44,17 @@ exports.handler = async (event) => {
     data: { kind: 'test' },
   });
 
-  if (!result.ok) {
+  if (result.ok) {
+    const n = result.recipients;
+    if (n === 0) {
+      result.ok = false;
+      result.reason = 'zero_recipients';
+      result.message =
+        'OneSignal n\'a joint aucun appareil (0 destinataire). Refaites Finaliser l\'enregistrement, puis testez.';
+    } else {
+      result.message = 'Notification envoyée à ' + n + ' appareil(s).';
+    }
+  } else {
     result.message =
       result.hint ||
       formatOnesignalApiError(result.error, 'Aucun appareil enregistré — menu Finaliser l\'enregistrement d\'abord.');
