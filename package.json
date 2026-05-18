@@ -5,6 +5,8 @@
   "description": "Labosync quality tooling",
   "scripts": {
     "test": "node tests/smoke-functions.cjs",
-    "test:smoke": "node tests/smoke-functions.cjs"
+    "test:smoke": "node tests/smoke-functions.cjs",
+    "verify:functions": "node scripts/verify-netlify-functions.cjs",
+    "predeploy": "npm run verify:functions && npm test"
   }
 }

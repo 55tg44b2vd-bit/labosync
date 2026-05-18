@@ -7,7 +7,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="theme-color" content="#ffffff"/>
 <link rel="manifest" href="/manifest-cabinet.json"/>
-<script src="/lb-push.js?v=15" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="/icon.svg"/>
 <title>Espace Cabinet — Labosync</title>
@@ -226,14 +225,11 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
       <div class="brand">🔬 Labosync <span class="brand-pill">Espace Cabinet</span></div>
       <div class="cab-name-header" id="hdr-cab-name"></div>
       <button class="btn-refresh" id="btn-refresh-now">Actualiser</button>
-      <button class="btn-refresh" id="btn-cab-push" type="button" title="Notifications push">🔔</button>
       <button class="btn-logout" id="btn-logout">Déconnexion</button>
     </div>
   </header>
 
-  <div class="portal-body">
-    <div id="lb-push-banner"></div>
-    <!-- Labo info bar -->
+  <div class="portal-body"><!-- Labo info bar -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px;">
       <div>
         <div id="portal-labo-name" style="font-family:'Inter',sans-serif;font-size:1.3rem;font-weight:800;color:var(--ink);"></div>
@@ -573,22 +569,6 @@ function showPortal(){
   setTimeout(checkPortalChatNotif, 1000);
   renderPortalDraftBanner();
   showPortalWelcomeHint();
-  try{
-    if(typeof LabosyncPush!=='undefined'&&sessionPortalId){
-      LabosyncPush.prepare({role:'cabinet',externalId:'cabinet:'+String(sessionPortalId).trim().toLowerCase(),authHeaders:function(){return _portalCabHeaders();}});
-      LabosyncPush.syncIfPermissionGranted().catch(function(){});
-      LabosyncPush.getStatus().then(function(st){
-        if(st.browserPermission==='default')setTimeout(function(){openCabinetPushSheet();},2000);
-        else if(st.browserPermission==='granted'&&!st.serverRegistered){
-          showToast('Activez les notifications (🔔) pour recevoir messages et factures même app fermée.','#2563eb',9000);
-        }
-      }).catch(function(){});
-      var pushBanner=document.getElementById('lb-push-banner');
-      if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_cab_'+sessionPortalId,subtitle:'Comme WhatsApp : messages et factures du labo, même application fermée.'});
-    }
-  }catch(ePush){console.warn('push init',ePush);}
-  try{lbCabHandlePushDeepLink();}catch(eDl){}
-
   // Sync immédiat pour éviter d'afficher un snapshot session trop ancien.
   refreshPortalDataOnce(true);
   // Auto-refresh des données (factures, BDL)
@@ -612,65 +592,6 @@ function showPortal(){
     sessionStorage.removeItem('ls_portal_session');
     location.reload();
   });
-  var cabPushBtn=document.getElementById('btn-cab-push');
-  if(cabPushBtn){
-    cabPushBtn.addEventListener('click',function(){openCabinetPushSheet();});
-  }
-}
-
-function openCabinetPushSheet(){
-  if(document.getElementById('cab-push-sheet'))return;
-  var sh=document.createElement('div');
-  sh.id='cab-push-sheet';
-  sh.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:8000;display:flex;align-items:flex-end;justify-content:center;';
-  sh.innerHTML=
-    '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:18px 16px calc(18px + env(safe-area-inset-bottom));">'+
-      '<div style="font-weight:700;margin-bottom:8px;">🔔 Notifications</div>'+
-      '<p style="font-size:.76rem;color:var(--ink-soft);margin:0 0 12px;">Messages du labo et nouvelles factures sur cet appareil.</p>'+
-      '<div id="cab-push-status" style="font-size:.78rem;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:8px;">…</div>'+
-      '<button type="button" class="btn-refresh" style="width:100%;margin-bottom:8px;background:var(--accent);color:#fff;border:none;" onclick="cabActivatePush()">Finaliser l\'enregistrement</button>'+
-      '<button type="button" class="btn-refresh" style="width:100%;margin-bottom:8px;" onclick="cabTestPushLocal()">Test affichage local</button>'+
-      '<button type="button" class="btn-refresh" style="width:100%;margin-bottom:12px;" onclick="cabTestPushCloud()">Test notification cloud</button>'+
-      '<button type="button" class="btn-logout" style="width:100%;" onclick="document.getElementById(\'cab-push-sheet\').remove()">Fermer</button>'+
-    '</div>';
-  document.body.appendChild(sh);
-  sh.addEventListener('click',function(e){if(e.target===sh)sh.remove();});
-  cabRefreshPushStatus();
-}
-async function cabRefreshPushStatus(){
-  var el=document.getElementById('cab-push-status');if(!el)return;
-  var perm='?';try{perm=Notification.permission;}catch(e){}
-  if(typeof LabosyncPush==='undefined'){el.textContent='Module non chargé.';return;}
-  try{
-    var st=await LabosyncPush.getStatus();
-    el.innerHTML='Autorisation : <strong>'+perm+'</strong><br>Serveur : <strong>'+(st.serverRegistered?'oui':'non')+'</strong>';
-  }catch(e){el.textContent=String(e.message||e);}
-}
-async function cabActivatePush(){
-  if(typeof LabosyncPush==='undefined'){showToast('Module indisponible','#c0392b');return;}
-  try{
-    var fn=typeof LabosyncPush.ensureBackgroundPush==='function'?LabosyncPush.ensureBackgroundPush:LabosyncPush.activateOrFinalize;
-    var r=await fn.call(LabosyncPush,{promptIfDefault:true});
-    showToast(r.ok?'✅ Messages et factures même app fermée':'❌ '+String(r.message||'Échec'),r.ok?'#16a34a':'#c0392b');
-    cabRefreshPushStatus();
-  }catch(e){showToast(String(e.message||e).slice(0,120),'#c0392b');}
-}
-async function cabTestPushLocal(){
-  if(typeof LabosyncPush==='undefined')return;
-  try{await LabosyncPush.testLocalDisplay();showToast('Test envoyé — vérifiez les notifications du téléphone.','#16a34a');}
-  catch(e){showToast(String(e.message||e).slice(0,120),'#c0392b');}
-}
-async function cabTestPushCloud(){
-  if(typeof LabosyncPush==='undefined')return;
-  try{
-    var st=await LabosyncPush.getStatus();
-    if(!st.serverRegistered){await LabosyncPush.activateOrFinalize();st=await LabosyncPush.getStatus();}
-    var ext=LabosyncPush.getExternalId();
-    var ids=LabosyncPush.getStoredPushIds?LabosyncPush.getStoredPushIds():{};
-    var r=await fetch('/.netlify/functions/onesignal-test-push',{method:'POST',headers:_portalCabHeaders(),body:JSON.stringify({externalId:ext,playerId:ids.playerId||null})});
-    var j=await r.json();
-    showToast(j.ok?(j.message||'OK'):(j.message||'Échec'),j.ok?'#16a34a':'#c0392b');
-  }catch(e){showToast(String(e.message||e).slice(0,120),'#c0392b');}
 }
 
 function openPortalTab(id){
@@ -693,10 +614,9 @@ function restoreLastPortalTab(){
   try{
     if(!sessionPortalId)return;
     var p=new URLSearchParams(location.search||'');
-    var fromPush=p.get('from')==='push';
     var open=p.get('open')||'';
-    if(fromPush&&open){
-      if(open==='messages'||open==='factures')openPortalTab(open);
+    if(open==='messages'||open==='factures'){
+      openPortalTab(open);
       history.replaceState({},'',location.pathname);
       return;
     }
@@ -707,22 +627,13 @@ function restoreLastPortalTab(){
   }catch(e){}
 }
 
-function lbCabHandlePushDeepLink(){
-  try{
-    var p=new URLSearchParams(location.search||'');
-    if(p.get('from')!=='push')return;
-    var open=p.get('open')||'';
-    if(open==='messages'||open==='factures')setTimeout(function(){openPortalTab(open);},500);
-  }catch(e){}
-}
-
 function showPortalWelcomeHint(){
   try{
     if(!sessionPortalId)return;
     const key='cab_onboard_seen_'+sessionPortalId;
     if(localStorage.getItem(key)==='1')return;
     localStorage.setItem(key,'1');
-    showToast('👋 Bienvenue ! Ajoutez Labosync à l\'écran d\'accueil et acceptez les notifications pour les messages et factures du labo.');
+    showToast('👋 Bienvenue ! Ajoutez Labosync à l\'écran d\'accueil pour un accès rapide au portail.');
   }catch(e){}
 }
 
@@ -2248,9 +2159,6 @@ async function sendPortalMsg(){
       body:JSON.stringify(body)
     });
     if(r.ok){
-      if(typeof LabosyncPush!=='undefined'&&LabosyncPush.reportChatPushResult){
-        LabosyncPush.reportChatPushResult(r,'cabinet→labo');
-      }
       await loadPortalChat(true);
       showToast('✅ Message envoyé','#16a34a');
     } else {
@@ -2479,9 +2387,7 @@ function checkPortalChatNotif(){
           _cabChatNotifyAt[sessionPortalId]=latest.createdAt;
           const who=(portalData&&portalData.laboName)||'Laboratoire';
           const body=(latest.content||'Nouveau message').slice(0,160);
-          if(typeof LabosyncPush!=='undefined'&&typeof LabosyncPush.showAlert==='function'){
-            LabosyncPush.showAlert('💬 '+who,body,'cab-chat-'+latest.createdAt);
-          }else if('Notification' in window&&Notification.permission==='granted'){
+          if('Notification' in window&&Notification.permission==='granted'){
             try{new Notification('💬 '+who,{body:body,icon:'/icon.svg'});}catch(e){}
           }
         }

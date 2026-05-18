@@ -36,7 +36,7 @@ exports.handler = async function (event) {
     return {
       statusCode: 401,
       headers,
-      body: JSON.stringify({ error: { message: 'Connexion requise pour utiliser l\'assistant IA.' } } }),
+      body: JSON.stringify({ error: { message: 'Connexion requise pour utiliser l\'assistant IA.' } }),
     };
   }
 

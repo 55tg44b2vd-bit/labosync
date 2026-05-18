@@ -8,12 +8,6 @@ const {
   findLabUserIdForPortal,
   laboDataUpsert,
 } = require('./_labosync-auth');
-const {
-  detectNewlySentInvoices,
-  notifyChatMessage,
-  notifyInvoice,
-} = require('./_onesignal');
-
 exports.handler = async (event) => {
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
   const headers = buildCors(event);
@@ -299,38 +293,10 @@ exports.handler = async (event) => {
         }
       }
 
-      let pushMeta = null;
-      try {
-        let pushPreview = clampStr(content || '', 5000);
-        if (!pushPreview && (image || attachment)) pushPreview = 'Pièce jointe';
-
-        const pushResult = await notifyChatMessage({
-          sender,
-          portalId: normalizedId,
-          labUserId: chatLabUserId,
-          senderName: clampStr(senderName || '', 80),
-          content: pushPreview,
-          laboName,
-        });
-        pushMeta = {
-          ok: !!pushResult?.ok,
-          recipients: pushResult?.recipients ?? null,
-          reason: pushResult?.reason || (pushResult?.skipped ? 'skipped' : null),
-        };
-        if (!chatLabUserId && sender === 'cabinet') {
-          console.warn('[push] chat no labUserId', { portalId: normalizedId });
-        } else if (pushResult && !pushResult.ok) {
-          console.warn('[push] chat failed', JSON.stringify(pushResult));
-        }
-      } catch (err) {
-        console.warn('[push] chat', err);
-        pushMeta = { ok: false, reason: String(err.message || err) };
-      }
-
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ ok: true, message: newMsg, push: pushMeta }),
+        body: JSON.stringify({ ok: true, message: newMsg }),
       };
     }
 
@@ -439,18 +405,6 @@ exports.handler = async (event) => {
       });
     } catch (e) {
       console.warn('[portal] portal_owner index', e);
-    }
-
-    const newInvoices = detectNewlySentInvoices(prevFactures, safePayload.factures || []);
-    const laboName = clampStr(safePayload.laboName || 'Votre laboratoire', 80);
-    const cabName = clampStr(safePayload.cabName || '', 80);
-    for (const fac of newInvoices) {
-      notifyInvoice({
-        portalId: normalizedId,
-        facture: fac,
-        laboName,
-        cabName,
-      }).catch((err) => console.warn('[push] invoice', fac.id, err));
     }
 
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };

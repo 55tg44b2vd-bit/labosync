@@ -8,7 +8,6 @@
 <meta name="apple-mobile-web-app-title" content="Labo">
 <meta name="theme-color" content="#2563eb">
 <link rel="manifest" href="/manifest.json">
-<script src="/lb-push.js?v=15" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>Labosync</title>
@@ -500,9 +499,39 @@ body.has-sidebar #drawer{transform:translateX(0);}
 #btn-logout{background:#f1f5f9;border:1px solid #e2e8f0;color:#475569;font-family:'Inter',sans-serif;font-size:.72rem;font-weight:500;border-radius:20px;padding:5px 13px;cursor:pointer;transition:all .15s;}
 #btn-logout:hover{background:#e2e8f0;color:#0f172a;}
 @keyframes slideUp{from{transform:translateY(100%);opacity:0;}to{transform:translateY(0);opacity:1;}}
+/* ── Hub espaces labo ── */
+#lab-hub{position:fixed;inset:0;z-index:800;background:linear-gradient(160deg,#f8fafc 0%,#eff6ff 45%,#f1f5f9 100%);display:none;align-items:center;justify-content:center;padding:24px 16px;overflow-y:auto;}
+.lab-hub-inner{width:100%;max-width:920px;}
+.lab-hub-brand{font-family:'Inter',sans-serif;font-size:1.5rem;font-weight:800;color:#0f172a;margin-bottom:4px;letter-spacing:-.03em;}
+.lab-hub-brand span{color:#2563eb;}
+.lab-hub-sub{font-size:.88rem;color:#64748b;margin-bottom:28px;line-height:1.5;}
+.lab-hub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;}
+.lab-hub-card{background:#fff;border:1.5px solid #e2e8f0;border-radius:16px;padding:26px 24px;text-align:left;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s;box-shadow:0 4px 20px rgba(15,23,42,.06);position:relative;overflow:hidden;}
+.lab-hub-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(37,99,235,.12);border-color:#93c5fd;}
+.lab-hub-card:focus-visible{outline:3px solid #2563eb;outline-offset:2px;}
+.lab-hub-card-icon{font-size:2rem;margin-bottom:12px;}
+.lab-hub-card h3{font-size:1.05rem;font-weight:700;color:#0f172a;margin-bottom:8px;}
+.lab-hub-card p{font-size:.8rem;color:#64748b;line-height:1.5;margin:0;}
+.lab-hub-card-tag{display:inline-block;margin-top:14px;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:4px 10px;border-radius:99px;}
+.lab-hub-card--admin .lab-hub-card-tag{background:#fef3c7;color:#92400e;}
+.lab-hub-card--prog .lab-hub-card-tag{background:#dbeafe;color:#1d4ed8;}
+.lab-hub-card--disabled{opacity:.55;cursor:not-allowed;pointer-events:none;}
+.lab-hub-foot{margin-top:22px;font-size:.74rem;color:#94a3b8;text-align:center;}
+#workspace-badge{font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:99px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;white-space:nowrap;}
+#workspace-badge.ws-prog{background:#f0fdf4;color:#166534;border-color:#bbf7d0;}
+#btn-workspace-switch{background:#fff;border:1px solid #e2e8f0;color:#475569;font-size:.72rem;font-weight:600;border-radius:20px;padding:5px 12px;cursor:pointer;}
+#btn-workspace-switch:hover{background:#f8fafc;color:#0f172a;}
+#admin-pin-overlay{position:fixed;inset:0;z-index:900;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;padding:20px;}
+#admin-pin-box{background:#fff;border-radius:16px;padding:28px 24px;max-width:380px;width:100%;box-shadow:0 20px 50px rgba(15,23,42,.2);}
+#courier-ws-banner{display:none;margin-bottom:14px;padding:12px 16px;border-radius:10px;font-size:.8rem;line-height:1.45;}
+#courier-ws-banner.ws-admin{display:block;background:#fef9c3;border:1px solid #fde047;color:#854d0e;}
+#courier-ws-banner.ws-prog{display:block;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;}
+#courier-billing-block[data-ws-only="admin"]{}
+.drawer-ws-label{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;padding:8px 12px 4px;}
 </style>
 </head>
 <script src="/vendor/supabase.min.js"></script>
+<script src="/scripts/lab-workspace.js"></script>
 <body>
 
 <!-- ÉCRAN DE CHARGEMENT -->
@@ -598,11 +627,47 @@ body.has-sidebar #drawer{transform:translateX(0);}
 
 <!-- APPLICATION PRINCIPALE -->
 <div id="app-main">
-<div id="lb-push-banner" style="max-width:1320px;margin:0 auto;padding:12px 24px 0;"></div>
+<div id="lab-hub" role="dialog" aria-modal="true" aria-labelledby="lab-hub-title">
+  <div class="lab-hub-inner">
+    <div class="lab-hub-brand" id="lab-hub-title">Labo<span>sync</span></div>
+    <p class="lab-hub-sub" id="lab-hub-sub">Choisissez votre espace de travail. La comptabilité et la production sont séparées pour plus de clarté et de sécurité.</p>
+    <div class="lab-hub-grid">
+      <button type="button" class="lab-hub-card lab-hub-card--admin" id="hub-enter-admin" onclick="enterWorkspace('admin')">
+        <div class="lab-hub-card-icon">📋</div>
+        <h3>Administratif</h3>
+        <p>Saisir les travaux, bons de livraison, factures et cabinets. Réservé à la comptabilité.</p>
+        <span class="lab-hub-card-tag">🔒 Code compta possible</span>
+      </button>
+      <button type="button" class="lab-hub-card lab-hub-card--prog" id="hub-enter-prog" onclick="enterWorkspace('prog')">
+        <div class="lab-hub-card-icon">🔬</div>
+        <h3>Programmation</h3>
+        <p>Planifier les travaux saisis en administratif : techniciens, étapes, dates et créneaux coursier.</p>
+        <span class="lab-hub-card-tag">Équipe &amp; planning</span>
+      </button>
+    </div>
+    <p class="lab-hub-foot" id="lab-hub-foot">Les deux espaces partagent les mêmes données : un travail créé en administratif apparaît en programmation.</p>
+  </div>
+</div>
+<div id="admin-pin-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-pin-title">
+  <div id="admin-pin-box">
+    <h3 id="admin-pin-title" style="font-size:1.05rem;font-weight:700;margin-bottom:6px;">🔒 Espace administratif</h3>
+    <p style="font-size:.8rem;color:#64748b;margin-bottom:16px;line-height:1.45;">Entrez le code comptabilité du laboratoire.</p>
+    <div class="fl" style="margin-bottom:12px;">
+      <label>Code (4 à 8 chiffres)</label>
+      <input type="password" id="admin-pin-input" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••" style="font-size:1.2rem;letter-spacing:.25em;text-align:center;"/>
+    </div>
+    <p id="admin-pin-err" style="display:none;font-size:.78rem;color:#b91c1c;margin-bottom:10px;"></p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-a" id="btn-admin-pin-submit" style="flex:1;">Valider</button>
+      <button type="button" class="btn btn-b" id="btn-admin-pin-cancel">Retour</button>
+    </div>
+  </div>
+</div>
 <header>
   <div style="display:flex;align-items:center;gap:2px;">
     <button id="btn-drawer" onclick="toggleDrawer()" aria-label="Menu">☰</button>
     <h1 id="header-labname" onclick="goHome()" style="cursor:pointer;user-select:none;transition:opacity .15s;" onmouseover="this.style.opacity=.7" onmouseout="this.style.opacity=1" title="Retour à l'accueil">Labo<span>sync</span></h1>
+    <span id="workspace-badge" style="display:none;margin-left:8px;">Administratif</span>
   </div>
   <div style="font-size:.62rem;color:var(--ink-soft);font-style:italic;margin-top:-4px;margin-bottom:2px;" data-i18n="header.tagline">Fait par des prothésistes pour des prothésistes</div>
   <div style="display:flex;align-items:center;gap:10px;">
@@ -612,14 +677,12 @@ body.has-sidebar #drawer{transform:translateX(0);}
     </div>
     <div class="hd-meta" id="hd-date"></div>
     <button id="btn-messages-hd" onclick="goMessages()" aria-label="Messagerie" title="Messagerie" style="position:relative;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:.78rem;font-weight:600;border-radius:20px;padding:5px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;">💬 Messagerie<span id="hd-msg-badge" style="display:none;background:#e53935;color:#fff;border-radius:99px;padding:1px 7px;font-size:.65rem;font-weight:700;margin-left:2px;">●</span></button>
-    <!-- Cog menu : langue, mobile, paramètres, déconnexion -->
+    <button type="button" id="btn-workspace-switch" onclick="showLabHub()" style="display:none;">↩ Espace</button>
     <div style="position:relative;">
       <button id="btn-account" onclick="toggleAccountMenu(event)" aria-label="Menu compte" title="Compte et paramètres" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:1.05rem;border-radius:50%;width:36px;height:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">⚙️</button>
       <div id="account-menu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);min-width:220px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 28px rgba(15,23,42,.12);z-index:1000;overflow:hidden;">
         <button class="account-item" onclick="toggleLang();closeAccountMenu();">🌐 <span>Changer de langue</span></button>
         <button class="account-item" onclick="localStorage.setItem('lb_env','mobile');window.location.href='labo-mobile.html';">📱 <span>Passer en vue mobile</span></button>
-        <button class="account-item" onclick="closeAccountMenu();lbActivatePush();">🔔 <span id="lb-push-menu-label">Activer les notifications</span></button>
-        <button class="account-item" onclick="closeAccountMenu();testLabPushNotification();">📣 <span>Tester une notification</span></button>
         <button class="account-item" onclick="goSettings();closeAccountMenu();">⚙️ <span>Paramètres</span></button>
         <button class="account-item" id="btn-quick-admin" style="display:none;" onclick="switchToAdminRole(true);closeAccountMenu();">🔓 <span>Revenir en mode admin</span></button>
         <button class="account-item" onclick="closeAccountMenu();replayOnboardingTour();">🧭 <span>Refaire le tour guidé</span></button>
@@ -642,25 +705,25 @@ body.has-sidebar #drawer{transform:translateX(0);}
     <button class="mode-btn on" data-mode="labo" style="display:none;"><span class="mode-icon">🔬</span> <span data-i18n="mode.labo">Laboratoire</span></button>
     <div class="drawer-nav-label">Principal</div>
     <div id="tabs-labo" class="drawer-nav-main">
-      <div class="drawer-tab-wrap"><button type="button" class="tab on" data-pane="dashboard"><span class="drawer-tab-icon" aria-hidden="true">🏠</span><span class="drawer-tab-text"><span class="drawer-tab-title">Accueil</span><span class="drawer-tab-sub">À faire aujourd'hui</span></span></button></div>
-      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="saisie"><span class="drawer-tab-icon" aria-hidden="true">🔧</span><span class="drawer-tab-text"><span class="drawer-tab-title">Travaux</span><span class="drawer-tab-sub">En cours · <span class="queue-badge" id="queue-badge-tab">0</span></span></span></button></div>
-      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="livraisons"><span class="drawer-tab-icon" aria-hidden="true">📦</span><span class="drawer-tab-text"><span class="drawer-tab-title">Livraisons</span><span class="drawer-tab-sub">Bons de livraison</span></span></button></div>
-      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="facturation"><span class="drawer-tab-icon" aria-hidden="true">💰</span><span class="drawer-tab-text"><span class="drawer-tab-title">Factures</span><span class="drawer-tab-sub">Facturation cabinets</span></span></button></div>
-      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="cabinets"><span class="drawer-tab-icon" aria-hidden="true">🦷</span><span class="drawer-tab-text"><span class="drawer-tab-title">Dentistes</span><span class="drawer-tab-sub">Cabinets et portails</span></span></button></div>
-      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="coursiers"><span class="drawer-tab-icon" aria-hidden="true">🛵</span><span class="drawer-tab-text"><span class="drawer-tab-title">Coursiers <span id="courier-tab-badge" style="display:none;background:#e53935;color:#fff;border-radius:99px;padding:1px 7px;font-size:.62rem;font-weight:700;margin-left:4px;vertical-align:middle;">0</span></span><span class="drawer-tab-sub" id="courier-tab-status">Missions &amp; dispatch</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab on" data-pane="dashboard" data-ws="both"><span class="drawer-tab-icon" aria-hidden="true">🏠</span><span class="drawer-tab-text"><span class="drawer-tab-title">Accueil</span><span class="drawer-tab-sub">À faire aujourd'hui</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="saisie" data-ws="both"><span class="drawer-tab-icon" aria-hidden="true">🔧</span><span class="drawer-tab-text"><span class="drawer-tab-title">Travaux</span><span class="drawer-tab-sub">En cours · <span class="queue-badge" id="queue-badge-tab">0</span></span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="livraisons" data-ws="admin"><span class="drawer-tab-icon" aria-hidden="true">📦</span><span class="drawer-tab-text"><span class="drawer-tab-title">Livraisons</span><span class="drawer-tab-sub">Bons de livraison</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="facturation" data-ws="admin"><span class="drawer-tab-icon" aria-hidden="true">💰</span><span class="drawer-tab-text"><span class="drawer-tab-title">Factures</span><span class="drawer-tab-sub">Facturation cabinets</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="cabinets" data-ws="both"><span class="drawer-tab-icon" aria-hidden="true">🦷</span><span class="drawer-tab-text"><span class="drawer-tab-title">Dentistes</span><span class="drawer-tab-sub">Cabinets et portails</span></span></button></div>
+      <div class="drawer-tab-wrap"><button type="button" class="tab" data-pane="coursiers" data-ws="both"><span class="drawer-tab-icon" aria-hidden="true">🛵</span><span class="drawer-tab-text"><span class="drawer-tab-title">Coursiers <span id="courier-tab-badge" style="display:none;background:#e53935;color:#fff;border-radius:99px;padding:1px 7px;font-size:.62rem;font-weight:700;margin-left:4px;vertical-align:middle;">0</span></span><span class="drawer-tab-sub" id="courier-tab-status">Missions &amp; dispatch</span></span></button></div>
       <div class="drawer-tab-wrap"><button type="button" class="tab drawer-tab-messages" data-drawer-messages="1"><span class="drawer-tab-icon" aria-hidden="true">💬</span><span class="drawer-tab-text"><span class="drawer-tab-title">Messages</span><span class="drawer-tab-sub">Discussions <span id="msg-mode-badge" style="display:none;background:#e53935;color:#fff;border-radius:99px;padding:1px 6px;font-size:.6rem;">●</span></span></span></button></div>
     </div>
     <div id="tabs-fact" style="display:none !important;">
       <button class="tab" data-pane="cabinets">Dentistes</button>
-      <button class="tab" data-pane="calendrier">Planning</button>
+      <button class="tab" data-pane="calendrier" data-ws="prog">Planning</button>
     </div>
     <div id="drawer-nav-secondary" style="display:none;">
-      <button type="button" class="tab" data-pane="calendrier" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📅</span><span class="drawer-tab-text"><span class="drawer-tab-title">Planning</span><span class="drawer-tab-sub">Calendrier</span></span></button>
-      <button type="button" class="tab" data-pane="stats" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📊</span><span class="drawer-tab-text"><span class="drawer-tab-title">Statistiques</span><span class="drawer-tab-sub">Chiffres</span></span></button>
-      <button type="button" class="tab" data-pane="historique" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📁</span><span class="drawer-tab-text"><span class="drawer-tab-title">Historique</span><span class="drawer-tab-sub">Archives</span></span></button>
-      <button type="button" class="tab prog-tab" data-pane="impression" data-drawer-more="1" style="display:none;"><span class="drawer-tab-icon" aria-hidden="true">🖨️</span><span class="drawer-tab-text"><span class="drawer-tab-title">Impression</span><span class="drawer-tab-sub">Fiches techniciens</span></span></button>
-      <button type="button" class="tab prog-tab" data-pane="attente" id="tab-attente" data-drawer-more="1" style="display:none;"><span class="drawer-tab-icon" aria-hidden="true">⏳</span><span class="drawer-tab-text"><span class="drawer-tab-title">En attente</span><span class="drawer-tab-sub">Pièces manquantes <span id="attente-badge" style="display:none;background:#e67e22;color:#fff;border-radius:99px;padding:1px 7px;font-size:.65rem;">0</span></span></span></button>
-      <button type="button" class="tab prog-tab" data-pane="equipe" data-drawer-more="1" style="display:none;"><span class="drawer-tab-icon" aria-hidden="true">👥</span><span class="drawer-tab-text"><span class="drawer-tab-title">Équipe</span><span class="drawer-tab-sub">Techniciens</span></span></button>
+      <button type="button" class="tab" data-pane="calendrier" data-ws="prog" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📅</span><span class="drawer-tab-text"><span class="drawer-tab-title">Planning</span><span class="drawer-tab-sub">Calendrier</span></span></button>
+      <button type="button" class="tab" data-pane="stats" data-ws="both" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📊</span><span class="drawer-tab-text"><span class="drawer-tab-title">Statistiques</span><span class="drawer-tab-sub">Chiffres</span></span></button>
+      <button type="button" class="tab" data-pane="historique" data-ws="both" data-drawer-more="1"><span class="drawer-tab-icon" aria-hidden="true">📁</span><span class="drawer-tab-text"><span class="drawer-tab-title">Historique</span><span class="drawer-tab-sub">Archives</span></span></button>
+      <button type="button" class="tab prog-tab" data-pane="impression" data-ws="prog" data-drawer-more="1" style="display:none;"><span class="drawer-tab-icon" aria-hidden="true">🖨️</span><span class="drawer-tab-text"><span class="drawer-tab-title">Impression</span><span class="drawer-tab-sub">Fiches techniciens</span></span></button>
+      <button type="button" class="tab prog-tab" data-pane="attente" data-ws="prog" id="tab-attente" data-drawer-more="1" style="display:none;"><span class="drawer-tab-icon" aria-hidden="true">⏳</span><span class="drawer-tab-text"><span class="drawer-tab-title">En attente</span><span class="drawer-tab-sub">Pièces manquantes <span id="attente-badge" style="display:none;background:#e67e22;color:#fff;border-radius:99px;padding:1px 7px;font-size:.65rem;">0</span></span></span></button>
+      <button type="button" class="tab prog-tab" data-pane="equipe" data-ws="prog" data-drawer-more="1" style="display:none;"><span class="drawer-tab-icon" aria-hidden="true">👥</span><span class="drawer-tab-text"><span class="drawer-tab-title">Équipe</span><span class="drawer-tab-sub">Techniciens</span></span></button>
     </div>
     <span class="prog-tab" id="prog-separator" style="display:none;"></span>
     <button class="mode-btn drawer-standalone" data-mode="messages" id="mode-btn-messages" style="display:none !important;"><span class="mode-icon">💬</span> Messages</button>
@@ -691,9 +754,9 @@ body.has-sidebar #drawer{transform:translateX(0);}
 <div class="pane" id="pane-saisie">
   <!-- Commandes en attente envoyées par les cabinets -->
   <div id="saisie-pending-orders"></div>
-  <div class="card">
+  <div class="card" id="saisie-new-job-card">
     <h2 data-i18n="job.card.title">📝 Nouveau travail</h2>
-    <p style="font-size:.76rem;color:var(--ink-soft);margin-bottom:14px;" data-i18n="job.card.sub">Entrez les informations du travail à réaliser.</p>
+    <p id="saisie-card-sub" style="font-size:.76rem;color:var(--ink-soft);margin-bottom:14px;" data-i18n="job.card.sub">Entrez les informations du travail à réaliser.</p>
     <div class="frow">
       <div class="fl"><label data-i18n="form.patient">Code patient <button type="button" onclick="openPatientCodeGenerator('saisie-ip')" title="Générer un code à partir d'un nom (le nom n'est ni sauvegardé ni envoyé)" style="background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;padding:1px 7px;font-size:.7rem;cursor:pointer;color:#475569;font-weight:500;margin-left:4px;">🪄 Générer</button><span style="font-weight:400;color:#94a3b8;font-size:.7rem;margin-left:6px;">— anonyme uniquement (RGPD)</span></label><input type="text" id="saisie-ip" data-i18n-ph="form.ph.patient" placeholder="DUP-MAR-001"/></div>
       <div class="fl"><label data-i18n="form.type">Type</label>
@@ -740,11 +803,11 @@ body.has-sidebar #drawer{transform:translateX(0);}
     <div class="frow2" style="margin-top:10px;">
       <div class="fl" style="flex:1;min-width:180px;"><label data-i18n="form.note">Note / instructions</label><input type="text" id="saisie-inote" data-i18n-ph="form.ph.note" placeholder="teinte A2, instructions..."/></div>
       <div class="fl" style="min-width:150px;"><label>📅 Date demandée (cabinet)</label><input type="date" id="saisie-ireq-delivery" onchange="onSaisieRequestedDateChange()"/></div>
-      <div class="fl" style="min-width:150px;"><label>📦 Date labo (coursier)</label><input type="date" id="saisie-ilab-delivery" onchange="onSaisieLabDateChange()" title="Dernier jour ouvré avant la livraison (hors week-ends et congés)"/></div>
-      <div class="fl" style="min-width:140px;"><label>🚚 Créneau coursier</label><select id="saisie-idelivery-slot" style="width:100%;border:1.5px solid var(--border);border-radius:7px;padding:9px;font-size:.88rem;background:#fff;"><option value="9">9h — finir avant</option><option value="12" selected>12h — finir avant</option><option value="18">18h — finir avant</option></select></div>
+      <div class="fl field-prog-only" style="min-width:150px;"><label>📦 Date labo (coursier)</label><input type="date" id="saisie-ilab-delivery" onchange="onSaisieLabDateChange()" title="Dernier jour ouvré avant la livraison (hors week-ends et congés)"/></div>
+      <div class="fl field-prog-only" style="min-width:140px;"><label>🚚 Créneau coursier</label><select id="saisie-idelivery-slot" style="width:100%;border:1.5px solid var(--border);border-radius:7px;padding:9px;font-size:.88rem;background:#fff;"><option value="9">9h — finir avant</option><option value="12" selected>12h — finir avant</option><option value="18">18h — finir avant</option></select></div>
       <div class="fl" style="min-width:150px;"><label data-i18n="form.cabinet">🏥 Cabinet</label><select id="saisie-icab"><option value="" data-i18n="form.none">— Aucun —</option></select></div>
       <label class="chk chk-red"><input type="checkbox" id="saisie-iurg"/><span data-i18n="form.urgent">🔴 Urgent</span></label>
-      <label class="chk prog-tab" id="saisie-emp-wrap" style="display:none;"><input type="checkbox" id="saisie-iemp"/><span data-i18n="form.digital">📡 Empreinte numérique</span></label>
+      <label class="chk field-prog-only prog-tab" id="saisie-emp-wrap" style="display:none;"><input type="checkbox" id="saisie-iemp"/><span data-i18n="form.digital">📡 Empreinte numérique</span></label>
       <label class="chk" style="border-color:#fb923c;background:#fff7ed;color:#c2410c;"><input type="checkbox" id="saisie-imissing" onchange="document.getElementById('saisie-missing-wrap').style.display=this.checked?'':'none';if(this.checked)renderMissingChipsSaisie();"/><span>❓ Infos manquantes</span></label>
     </div>
     <div id="saisie-missing-wrap" style="display:none;margin-top:10px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;">
@@ -1093,11 +1156,6 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <span class="settings-row-body"><span class="settings-row-title">Visite guidée</span><span class="settings-row-desc">Revoir les écrans (optionnel)</span></span>
           <span class="settings-row-chevron">›</span>
         </button>
-        <button type="button" class="settings-row" onclick="openSettingsSection('notifications')">
-          <span class="settings-row-icon">🔔</span>
-          <span class="settings-row-body"><span class="settings-row-title">Notifications push</span><span class="settings-row-desc">Alertes messages et factures sur cet ordinateur</span></span>
-          <span class="settings-row-chevron">›</span>
-        </button>
       </div>
       <div class="settings-group" data-settings-group="labo">
         <div class="settings-group-label">Laboratoire</div>
@@ -1178,6 +1236,17 @@ body.has-sidebar #drawer{transform:translateX(0);}
         </div>
         <div style="font-size:.72rem;color:var(--ink-soft);margin-top:12px;">Résiliation à tout moment depuis le portail Stripe. Pas d'engagement.</div>
       </div>
+            <div class="card" data-settings-req="role-admin" id="admin-pin-settings-card">
+        <h2>🔐 Code espace administratif</h2>
+        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;">Protège l'accès comptabilité (factures, BL). 4 à 8 chiffres, vérifié côté serveur.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;max-width:520px;">
+          <div class="fl" style="flex:1;min-width:140px;"><label>Nouveau code</label><input type="password" id="admin-pin-set" inputmode="numeric" maxlength="8" autocomplete="new-password"/></div>
+          <div class="fl" style="flex:1;min-width:140px;"><label>Code actuel (si déjà défini)</label><input type="password" id="admin-pin-set-current" inputmode="numeric" maxlength="8" autocomplete="off"/></div>
+          <button type="button" class="btn btn-a" id="btn-admin-pin-save">Enregistrer</button>
+          <button type="button" class="btn btn-b" id="btn-admin-pin-clear">Supprimer le code</button>
+        </div>
+        <p id="admin-pin-set-msg" style="font-size:.74rem;color:var(--ink-soft);margin-top:8px;min-height:16px;"></p>
+      </div>
       <div class="card" data-settings-req="role-admin">
         <h2>🔐 Rôle utilisateur</h2>
         <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;">Contrôle des droits dans l'interface (socle RBAC).</p>
@@ -1194,27 +1263,6 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <button class="btn btn-a" id="btn-role-save">Appliquer le rôle</button>
         </div>
         <div id="role-msg" style="font-size:.74rem;color:var(--ink-soft);margin-top:8px;min-height:16px;"></div>
-      </div>
-    </div>
-
-    <div id="settings-sec-notifications" class="settings-section">
-      <div class="settings-topbar">
-        <button type="button" class="settings-back" onclick="closeSettingsSection()" aria-label="Retour">←</button>
-        <h2>Notifications push</h2>
-        <span class="settings-topbar-spacer"></span>
-      </div>
-      <div class="card">
-        <h2>🔔 Notifications (téléphone + PC)</h2>
-        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;">Comme <strong>WhatsApp</strong> : activez une fois sur chaque appareil (PC, iPhone, Android). Vous recevrez le <strong>texte du message</strong> en notification, <strong>même quand Labosync est fermé</strong> — inutile de rester devant l'écran.</p>
-        <div id="lb-push-settings-status" style="font-size:.78rem;color:var(--ink);margin-bottom:14px;padding:12px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;line-height:1.55;">Chargement…</div>
-        <div style="display:flex;flex-direction:column;gap:10px;max-width:420px;">
-          <button type="button" class="btn btn-a" onclick="lbActivatePush()">1. Finaliser l'enregistrement</button>
-          <button type="button" class="btn btn-b" onclick="testLabPushLocal()">2. Test affichage (sans OneSignal)</button>
-          <button type="button" class="btn btn-b" onclick="testLabPushNotification()">3. Test notification cloud</button>
-        </div>
-        <div style="font-size:.72rem;color:var(--ink-soft);margin-top:16px;line-height:1.55;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;">
-          <strong>Si rien n'apparaît à l'écran :</strong> Windows → Paramètres → Système → Notifications → activer <strong>Google Chrome</strong> ou <strong>Microsoft Edge</strong> (pas seulement Cursor). Désactivez « Ne pas déranger », réduisez le navigateur, puis regardez l'icône 🔔 en bas à droite de Windows.
-        </div>
       </div>
     </div>
 
@@ -1648,6 +1696,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
 </div>
 
 <div class="pane" id="pane-coursiers">
+  <div id="courier-ws-banner" role="status"></div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
     <h2 style="font-family:serif;font-size:1.3rem;margin:0;">🛵 Coursiers</h2>
     <button type="button" class="btn btn-b" onclick="goSettings();setTimeout(function(){openSettingsSection('coursiers');},200);">Gérer les coursiers</button>
@@ -1672,7 +1721,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
   </div>
   <h3 style="font-size:.78rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin:0 0 10px;">Suivi des missions</h3>
   <div id="courier-missions-board"></div>
-  <div class="card" style="margin-top:18px;padding:16px 18px;">
+  <div id="courier-billing-block" class="card" style="margin-top:18px;padding:16px 18px;">
     <h3 style="font-size:.92rem;font-weight:700;margin:0 0 10px;">Relevés coursier (facturation)</h3>
     <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.4;">Relevé des courses terminées. Le montant estimé reprend le tarif défini par le coursier (forfait + supplément par arrêt supplémentaire).</p>
     <div class="frow" style="margin-bottom:10px;flex-wrap:wrap;gap:10px;">
@@ -2699,7 +2748,6 @@ function openSettingsSection(id){
   if(id==='paiements'){loadStripeConnectUI();}
   if(id==='tarifs'){renderCustomTypesList();}
   if(id==='labo'){setTimeout(function(){initAllSignaturePads();},80);}
-  if(id==='notifications'){lbRefreshPushSettingsUI();}
   try{sec.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}
 }
 function closeSettingsSection(){
@@ -2735,7 +2783,6 @@ function toggleAccountMenu(e){
   if(e)e.stopPropagation();
   const m=document.getElementById('account-menu');if(!m)return;
   m.style.display=(m.style.display==='block')?'none':'block';
-  if(m.style.display==='block')lbUpdatePushMenuLabel();
 }
 function closeAccountMenu(){
   const m=document.getElementById('account-menu');if(m)m.style.display='none';
@@ -6636,6 +6683,12 @@ document.addEventListener('click',function(e){
   // Onglets
   if(bcl.contains('tab')){
     const pane=btn.dataset.pane;if(!pane)return;
+    var _wsTab=typeof getWorkspace==='function'?getWorkspace():'admin';
+    var _tw=btn.getAttribute('data-ws');
+    if(_wsTab!=='hub'&&_tw&&_tw!=='both'&&_tw!==_wsTab){
+      showToast('⛔ Onglet réservé à l\'autre espace (Administratif / Programmation).','#c0392b',3200);
+      return;
+    }
     if(!canAccessPane(pane)){
       showToast('⛔ Vous n\'avez pas accès à cet onglet.','#c0392b',3200);
       reportAudit({action:'permission_denied',target:'pane:'+pane});
@@ -6700,7 +6753,7 @@ document.addEventListener('click',function(e){
   if(bid==='cal-next'){calView==='week'?calCursor.setDate(calCursor.getDate()+7):calCursor.setMonth(calCursor.getMonth()+1);renderCal();}
   // Travaux
   if(bid==='btn-add')addJob();
-  if(bid==='btn-saisie-add'){if(isProgActif())addToQueue();else addDirect();}
+  if(bid==='btn-saisie-add'){if(typeof handleSaisieAdd==='function')handleSaisieAdd();else if(isProgActif())addToQueue();else addDirect();}
   if(bid==='btn-tm-close')closeTaskModal();
   if(bid==='btn-tm-delete')deleteTask();
   if(bcl.contains('btn-del'))delJob(btn.dataset.id);
@@ -6779,7 +6832,7 @@ document.addEventListener('change',function(e){
   if(e.target.classList&&e.target.classList.contains('batch-ls-cb'))_updateBatchLabSheetPrintBtn();
 });
 
-document.getElementById('saisie-ip').addEventListener('keydown',function(e){if(e.key==='Enter'){if(isProgActif())addToQueue();else addDirect();}});
+document.getElementById('saisie-ip').addEventListener('keydown',function(e){if(e.key==='Enter'){if(typeof handleSaisieAdd==='function')handleSaisieAdd();else if(isProgActif())addToQueue();else addDirect();}});
 var _reqDel=document.getElementById('saisie-ireq-delivery');if(_reqDel)_reqDel.addEventListener('change',onSaisieRequestedDateChange);
 document.getElementById('scan-in').addEventListener('keydown',e=>{if(e.key==='Enter')processScan();});
 document.addEventListener('keydown',function(e){const sv=document.getElementById('sv-search-in');if(e.key==='Enter'&&document.activeElement===sv){const code=sv.value.trim().toUpperCase();const res=document.getElementById('sv-result-area');if(code){const job=jobs.find(j=>j.trackCode&&j.trackCode.toUpperCase()===code);renderSuiviResult(job||null,res);}}});
@@ -9950,13 +10003,6 @@ document.getElementById('bill-docs-list').addEventListener('click',function(e){
     const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
     if(cab){
       publishPortal(cab);
-      lbPushNotifyServer({
-        type:'invoice',
-        portalId:cab.portalId,
-        facture:{id:doc.id,num:doc.num,total:doc.total,type:doc.type||'facture',status:'envoye'},
-        laboName:localStorage.getItem('lb_name')||'',
-        cabName:cab.name||''
-      });
     }
     // Auto-envoi email si le cabinet a une adresse
     const cabForEmail=cabinets.find(function(c){return c.id===doc.cabinet;});
@@ -11251,7 +11297,7 @@ function goToAddTech(){
 }
 
 function applyProgMode(){
-  const on=isProgActif();
+  const on=typeof isProgDisplayActive==='function'?isProgDisplayActive():isProgActif();
   // Onglets réservés à la programmation (équipe, impression, attente…)
   document.querySelectorAll('.prog-tab').forEach(function(el){
     el.style.display=on?'':'none';
@@ -11939,7 +11985,7 @@ setTimeout(checkStripePayments, 3000);
    ══════════════════════════════════════════ */
 // Réinitialisation forcée si ?reset=1 dans l'URL
 if(new URLSearchParams(window.location.search).get('reset')==='1'){
-  Object.keys(localStorage).forEach(function(k){if(k.startsWith('sb-'))localStorage.removeItem(k);});
+  Object.keys(localStorage).forEach(function(k){if(k.startsWith('sb-')||k==='lb_workspace')localStorage.removeItem(k);});sessionStorage.removeItem('lb_admin_unlocked_until');
   window.location.href=window.location.pathname;
 }
 const sbClient = supabase.createClient(SB_URL, SB_KEY);
@@ -11948,10 +11994,16 @@ const _clientTraceId = 'tr_' + Date.now().toString(36) + '_' + Math.random().toS
 let _userRole = localStorage.getItem('lb_user_role') || 'admin';
 const _ROLE_PERMS = {
   admin: ['*'],
-  production: ['pane:dashboard','pane:saisie','pane:calendrier','pane:livraisons','pane:historique','pane:stats','pane:attente','pane:impression','pane:messages','pane:cabinets','pane:coursiers'],
-  billing: ['pane:dashboard','pane:cabinets','pane:livraisons','pane:facturation','pane:historique','pane:stats','pane:messages','action:billing_generate','action:billing_credit','action:data_import'],
-  support: ['pane:dashboard','pane:cabinets','pane:livraisons','pane:historique','pane:messages'],
+  production: ['workspace:prog','pane:dashboard','pane:saisie','pane:calendrier','pane:historique','pane:stats','pane:attente','pane:impression','pane:messages','pane:cabinets','pane:coursiers'],
+  billing: ['workspace:admin','pane:dashboard','pane:saisie','pane:cabinets','pane:livraisons','pane:facturation','pane:historique','pane:stats','pane:messages','action:billing_generate','action:billing_credit','action:data_import'],
+  support: ['workspace:admin','pane:dashboard','pane:cabinets','pane:livraisons','pane:historique','pane:messages'],
 };
+function canAccessWorkspace(ws){
+  if(hasPerm('*'))return true;
+  if(ws==='admin')return hasPerm('workspace:admin');
+  if(ws==='prog')return hasPerm('workspace:prog');
+  return false;
+}
 function hasPerm(key){
   const perms=_ROLE_PERMS[_userRole]||[];
   return perms.includes('*')||perms.includes(key);
@@ -11982,6 +12034,10 @@ function switchToAdminRole(showToastMsg){
     if(showToastMsg)showToast('Vous êtes déjà en mode admin.','#2a6049',2200);
     return;
   }
+  if(!hasPerm('*')){
+    showToast('⛔ Réservé au compte principal du laboratoire.','#c0392b',3500);
+    return;
+  }
   _userRole='admin';
   localStorage.setItem('lb_user_role','admin');
   applyRoleUi();
@@ -11992,9 +12048,12 @@ function switchToAdminRole(showToastMsg){
 }
 function applyRoleUi(){
   try{
+    var _wsUi=typeof getWorkspace==='function'?getWorkspace():'admin';
     document.querySelectorAll('.tab[data-pane]').forEach(function(tab){
       const pane=tab.dataset.pane;
-      const ok=canAccessPane(pane);
+      var tw=tab.getAttribute('data-ws');
+      var ok=canAccessPane(pane);
+      if(ok&&_wsUi!=='hub'&&tw&&tw!=='both'&&tw!==_wsUi)ok=false;
       tab.style.opacity=ok?'1':'.4';
       tab.style.pointerEvents=ok?'auto':'none';
       if(!ok) tab.title='Accès restreint';
@@ -12042,56 +12101,7 @@ function _portalApiHeaders(extra){
   if(_cachedAccessToken)h.Authorization='Bearer '+_cachedAccessToken;
   return Object.assign(h,extra||{});
 }
-function lbUpdatePushMenuLabel(){
-  var el=document.getElementById('lb-push-menu-label');
-  if(!el)return;
-  try{
-    if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
-      el.textContent='Finaliser l\'enregistrement';
-    }else{
-      el.textContent='Activer les notifications';
-    }
-  }catch(e){}
-}
-async function lbRefreshPushSettingsUI(){
-  var el=document.getElementById('lb-push-settings-status');
-  if(!el)return;
-  var perm='inconnu';
-  try{perm=typeof Notification!=='undefined'?Notification.permission:'non supporté';}catch(e){}
-  if(typeof LabosyncPush==='undefined'){
-    el.innerHTML='Module notifications non chargé — rechargez la page (Ctrl+F5).';
-    return;
-  }
-  try{
-    var st=await LabosyncPush.getStatus();
-    var ids=typeof LabosyncPush.getStoredPushIds==='function'?LabosyncPush.getStoredPushIds():{};
-    var lines=[
-      '<strong>Navigateur (cet écran) :</strong> '+perm,
-      '<strong>Appareils enregistrés sur votre compte :</strong> '+(st.activeDeviceCount||0),
-      '<strong>Cet appareil enregistré :</strong> '+(st.serverRegistered?'oui':'non'),
-    ];
-    if(ids.playerId)lines.push('<strong>ID appareil :</strong> '+String(ids.playerId).slice(0,12)+'…');
-    lines.push('<span style="color:#475569;">Comme WhatsApp : le PC et le téléphone doivent chacun être activés une fois.</span>');
-    if(perm!=='granted')lines.push('<span style="color:#b45309;">Autorisez les notifications via le cadenas à gauche de l\'adresse.</span>');
-    else if(!st.serverRegistered)lines.push('<span style="color:#b45309;">Cliquez « Finaliser l\'enregistrement » sur <em>cet</em> appareil.</span>');
-    else lines.push('<span style="color:#166534;">Cet appareil est prêt. Ouvrez Labosync sur votre téléphone → Profil → Notifications push → Finaliser.</span>');
-    el.innerHTML=lines.join('<br>');
-  }catch(e){
-    el.textContent=String(e&&e.message?e.message:e);
-  }
-}
-async function lbActivatePush(){
-  if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
-  try{
-    var fn=typeof LabosyncPush.ensureBackgroundPush==='function'?LabosyncPush.ensureBackgroundPush:LabosyncPush.activateOrFinalize;
-    var r=await fn.call(LabosyncPush,{promptIfDefault:true});
-    showToast(formatOsPushMsg(r,r.ok?'Cet appareil reçoit les messages (app fermée)':'Échec'),r.ok?'#2563eb':'#c0392b',9000);
-    lbRefreshPushSettingsUI();
-  }catch(e){
-    showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);
-  }
-}
-function lbHandlePushDeepLink(){
+function lbHandleOpenDeepLink(){
   try{
     var p=new URLSearchParams(location.search||'');
     if(p.get('open')!=='messages')return;
@@ -12106,60 +12116,8 @@ function lbHandlePushDeepLink(){
       }
     }
     setTimeout(go,800);
-    if(p.get('from')==='push')history.replaceState({},'',location.pathname);
+    history.replaceState({},'',location.pathname);
   }catch(e){}
-}
-async function testLabPushLocal(){
-  if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
-  try{
-    await LabosyncPush.testLocalDisplay();
-    showToast('Test envoyé — regardez en bas à droite de Windows (icône cloche). Réduisez le navigateur si besoin.','#2563eb',10000);
-  }catch(e){
-    showToast(String(e&&e.message?e.message:e).slice(0,200),'#c0392b',9000);
-  }
-}
-function formatOsPushMsg(j,fallback){
-  if(!j)return fallback||'Erreur';
-  if(typeof j.message==='string'&&j.message)return j.message;
-  if(j.hint)return String(j.hint);
-  if(j.reason)return String(j.reason);
-  var e=j.error;
-  if(e&&Array.isArray(e.errors)){
-    var parts=e.errors.map(function(x){
-      if(typeof x==='string')return x;
-      if(x&&typeof x==='object')return x.title||x.message||x.code||'';
-      return '';
-    }).filter(Boolean);
-    if(parts.length)return parts.join(' — ').slice(0,200);
-  }
-  return fallback||'Erreur';
-}
-async function testLabPushNotification(){
-  if(typeof LabosyncPush==='undefined'){showToast('Module notifications indisponible','#c0392b',6000);return;}
-  try{
-    var st=await LabosyncPush.getStatus();
-    if(!st.serverRegistered){
-      var reg=await LabosyncPush.activateOrFinalize();
-      showToast(formatOsPushMsg(reg,reg.ok?'OK':'Enregistrement requis'),reg.ok?'#2563eb':'#c0392b',8000);
-      if(!reg.ok)return;
-      st=await LabosyncPush.getStatus();
-      if(!st.serverRegistered){
-        showToast('Enregistrement incomplet — menu ⚙️ → Finaliser l\'enregistrement, puis réessayez.','#c0392b',9000);
-        return;
-      }
-    }
-    var ext=LabosyncPush.getExternalId();
-    var ids=typeof LabosyncPush.getStoredPushIds==='function'?LabosyncPush.getStoredPushIds():{};
-    var r=await fetch('/.netlify/functions/onesignal-test-push',{method:'POST',headers:_portalApiHeaders(),body:JSON.stringify({externalId:ext,playerId:ids.playerId||null,subscriptionId:ids.subscriptionId||null})});
-    var j=await r.json();
-    if(j.ok){
-      showToast((j.message||'Notification cloud envoyée.')+' Si rien n\'apparaît : faites d\'abord le test « affichage local » (bouton 2).','#2563eb',12000);
-      try{await LabosyncPush.testLocalDisplay();}catch(_){}
-    }else showToast(formatOsPushMsg(j,'Échec envoi test — finalisez l\'enregistrement d\'abord.'),'#c0392b',9000);
-    lbRefreshPushSettingsUI();
-  }catch(e){
-    showToast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',8000);
-  }
 }
 function _aiApiHeaders(extra){
   return _portalApiHeaders(extra);
@@ -12225,6 +12183,8 @@ async function completeLabBoot(session){
       return;
     }
     applyRoleUi();
+    if(typeof applyWorkspaceUi==='function')applyWorkspaceUi();
+    if(typeof resolveWorkspaceAfterBoot==='function')resolveWorkspaceAfterBoot();
     if(access.sub)showTrialBanner(access.sub);
     if(access.degraded){
       showToast('Connexion lente au cloud — l\'app reste utilisable.','#d97706',4500);
@@ -12234,9 +12194,10 @@ async function completeLabBoot(session){
     _withTimeout(cloudRestore(true),18000,'cloudRestore').then(function(){
       if(typeof render==='function')render();
       refreshTechSelects();refreshTypeSelects();applyProgMode();
+      if(typeof applyWorkspaceUi==='function')applyWorkspaceUi();
       if(typeof renderMessagesPane==='function')renderMessagesPane();
       try{startChatBgPoll();startChatRealtimeAll();}catch(eChat){}
-      try{lbHandlePushDeepLink();}catch(eDl){}
+      try{lbHandleOpenDeepLink();}catch(eDl){}
       republishAllPortals().catch(function(e){console.warn('republishAllPortals',e);});
     }).catch(function(e2){console.warn('cloudRestore',e2);});
 
@@ -12244,24 +12205,6 @@ async function completeLabBoot(session){
     try{startCourierLabRealtime();}catch(e3){console.warn('courier rt',e3);}
     try{startCourierMissionPolling();}catch(e5){console.warn('courier poll',e5);}
     try{_maybeRunOnboarding();}catch(e4){console.warn('onboarding',e4);}
-    try{
-      if(typeof LabosyncPush!=='undefined'&&session&&session.user){
-        LabosyncPush.prepare({role:'lab',externalId:'lab:'+session.user.id,authHeaders:function(){return _portalApiHeaders();}});
-        lbUpdatePushMenuLabel();
-        LabosyncPush.syncIfPermissionGranted().catch(function(){});
-        LabosyncPush.getStatus().then(function(st){
-          if(st.browserPermission==='default'){
-            setTimeout(function(){lbActivatePush();},2500);
-          }else if(st.browserPermission==='granted'&&!st.serverRegistered){
-            setTimeout(function(){
-              showToast('Activez les notifications sur cet appareil (Paramètres → Notifications push) pour recevoir les messages comme sur WhatsApp.','var(--accent)',10000);
-            },2000);
-          }
-        }).catch(function(){});
-        var pushBanner=document.getElementById('lb-push-banner');
-        if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab',title:'Messages comme WhatsApp (app fermée)'});
-      }
-    }catch(ePush){console.warn('push init',ePush);}
   }finally{
     _labBootInProgress=false;
   }
@@ -13343,11 +13286,7 @@ async function sendChatMsg(){
       body:JSON.stringify(body)
     });
     if(r.ok){
-      if(typeof LabosyncPush!=='undefined'&&LabosyncPush.reportChatPushResult){
-        LabosyncPush.reportChatPushResult(r,'labo→cabinet');
-      }
       await loadChatMessages(true);
-      lbPushNotifyServer({type:'chat',portalId:_chatPortalId,sender:'labo',senderName:laboName,content:content||'Pièce jointe',laboName:laboName});
     }
     else { showToast(ti('toast.error',{msg:'Échec envoi message'}),'#c0392b'); }
   }catch(e){ showToast(ti('toast.network_error',{msg:String(e).slice(0,50)}),'#c0392b'); }
@@ -13990,17 +13929,6 @@ function labDesktopNotify(title,body,tag){
   var b=body||'';
   var tg=tag||'labosync';
   try{new Notification(t,{body:b,tag:tg,icon:'/icon.svg'});}catch(e){}
-  if(typeof LabosyncPush!=='undefined'&&typeof LabosyncPush.showAlert==='function'){
-    LabosyncPush.showAlert(t,b,tg).catch(function(){});
-  }
-}
-function lbPushNotifyServer(payload){
-  if(!_cachedAccessToken)return Promise.resolve();
-  return fetch('/.netlify/functions/onesignal-push',{
-    method:'POST',
-    headers:_portalApiHeaders(),
-    body:JSON.stringify(payload)
-  }).then(function(r){return r.json();}).catch(function(e){console.warn('lbPushNotifyServer',e);return null;});
 }
 function labCourierNotify(title,body,tag){
   labDesktopNotify(title,body,tag||'labosync-lab-courier');

@@ -1,4 +1,5 @@
 [build]
+  command = "node scripts/clean-push-artifacts.cjs && npm run verify:functions"
   functions = "netlify/functions"
 
 # Aliases pratiques pour l'app (la racine "/" sert index.html = landing par défaut)
@@ -39,11 +40,6 @@
   status = 200
 
 [[redirects]]
-  from = "/open"
-  to = "/open.html"
-  status = 200
-
-[[redirects]]
   from = "/manifest-mobile.json"
   to = "/manifest-mobile.json"
   status = 200
@@ -53,8 +49,6 @@
   to = "/courier.html"
   status = 200
 
-# OneSignal : fichiers statiques dans /vendor/ (onesignal-sdk.js = bundle ES6 complet, pas le loader CDN)
-
 [[headers]]
   for = "/*"
   [headers.values]
@@ -62,19 +56,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=(), notifications=(self)"
-    Content-Security-Policy = "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' https://cdn.onesignal.com https://onesignal.com https://media.onesignal.com 'unsafe-inline'; script-src-attr 'unsafe-inline'; style-src 'self' https://onesignal.com https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https: wss:; worker-src 'self' https://cdn.onesignal.com https://onesignal.com https://media.onesignal.com https://cdnjs.cloudflare.com blob:; img-src 'self' https: data: blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
-
-[[headers]]
-  for = "/OneSignalSDKWorker.js"
-  [headers.values]
-    Content-Type = "application/javascript; charset=utf-8"
-    Cache-Control = "public, max-age=300"
-
-[[headers]]
-  for = "/OneSignalSDKUpdaterWorker.js"
-  [headers.values]
-    Content-Type = "application/javascript; charset=utf-8"
-    Cache-Control = "public, max-age=300"
+    Content-Security-Policy = "default-src 'self' https: data: blob: 'unsafe-inline'; script-src 'self' 'unsafe-inline'; script-src-attr 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https: wss:; worker-src 'self' blob:; img-src 'self' https: data: blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
 
 [[headers]]
   for = "/manifest.json"

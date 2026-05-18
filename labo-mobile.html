@@ -8,7 +8,6 @@
 <meta name="apple-mobile-web-app-title" content="Labosync"/>
 <meta name="theme-color" content="#ffffff"/>
 <link rel="manifest" href="/manifest-mobile.json"/>
-<script src="/lb-push.js?v=15" defer></script>
 <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="/icon.svg"/>
 <script src="/lb-env-routing.js"></script>
@@ -16,6 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="/vendor/supabase.min.js"></script>
+<script src="/scripts/lab-workspace.js"></script>
+<script src="/scripts/lab-workspace-mobile.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -234,6 +235,30 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 .env-selector{display:none;position:fixed;inset:0;z-index:9000;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:20px;}
 .env-selector.on{display:flex;}
 .env-selector h2{color:#fff;font-size:1.3rem;text-align:center;margin-bottom:4px;}
+/* ── Hub espaces mobile ── */
+#mobile-workspace-hub[aria-hidden="true"]{display:none!important;}
+#mobile-workspace-hub{position:fixed;inset:0;z-index:200;background:linear-gradient(160deg,#f8fafc 0%,#eff6ff 50%,#f1f5f9 100%);display:none;flex-direction:column;padding:calc(20px + env(safe-area-inset-top)) 18px calc(20px + env(safe-area-inset-bottom));overflow-y:auto;}
+.mob-hub-inner{max-width:420px;margin:0 auto;width:100%;flex:1;display:flex;flex-direction:column;justify-content:center;}
+.mob-hub-brand{font-size:1.45rem;font-weight:800;text-align:center;margin-bottom:6px;}
+.mob-hub-brand span{color:var(--accent);}
+.mob-hub-sub{font-size:.88rem;color:var(--ink-soft);text-align:center;line-height:1.5;margin-bottom:24px;}
+.mob-hub-cards{display:flex;flex-direction:column;gap:14px;}
+.mob-hub-card{width:100%;text-align:left;background:var(--surface);border:2px solid var(--border);border-radius:16px;padding:20px 18px;cursor:pointer;min-height:88px;box-shadow:var(--shadow);font-family:inherit;color:inherit;}
+.mob-hub-card:active{transform:scale(.98);}
+.mob-hub-card--admin{border-color:#fde047;background:linear-gradient(135deg,#fff 0%,#fefce8 100%);}
+.mob-hub-card--prog{border-color:#bfdbfe;background:linear-gradient(135deg,#fff 0%,#eff6ff 100%);}
+.mob-hub-card--disabled{opacity:.5;pointer-events:none;}
+.mob-hub-card-icon{font-size:1.8rem;margin-bottom:8px;}
+.mob-hub-card h2{font-size:1.05rem;font-weight:700;margin-bottom:6px;}
+.mob-hub-card p{font-size:.82rem;color:var(--ink-soft);line-height:1.45;margin:0;}
+.mob-hub-tag{display:inline-block;margin-top:12px;font-size:.65rem;font-weight:700;text-transform:uppercase;padding:4px 10px;border-radius:99px;background:#f1f5f9;color:#64748b;}
+.mob-hub-foot{font-size:.72rem;color:var(--ink-soft);text-align:center;margin-top:20px;line-height:1.45;}
+.mob-ws-badge{font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;background:#fef3c7;color:#92400e;margin-left:6px;vertical-align:middle;}
+.mob-ws-badge--prog{background:#dbeafe;color:#1d4ed8;}
+#mob-admin-pin-sheet{position:fixed;inset:0;z-index:300;background:rgba(15,23,42,.5);display:none;align-items:flex-end;justify-content:center;}
+.mob-pin-sheet{background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px 20px calc(24px + env(safe-area-inset-bottom));}
+.mob-prog-hint{font-size:.72rem;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.45;}
+#btn-mob-workspace-switch{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:.7rem;font-weight:600;color:var(--ink-soft);cursor:pointer;min-height:36px;}
 .env-selector p{color:rgba(255,255,255,.6);font-size:.82rem;text-align:center;margin-bottom:16px;}
 .env-btn{width:100%;max-width:340px;background:var(--surface);border:none;border-radius:16px;padding:20px;display:flex;align-items:center;gap:16px;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 20px rgba(0,0,0,.2);}
 .env-btn:active{transform:scale(.97);}
@@ -260,7 +285,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
   <div class="auth-card">
     <div class="auth-brand">
       <h1>Labo<span>sync</span></h1>
-      <p>Version mobile — Facturation</p>
+      <p>Version mobile — Laboratoire</p>
     </div>
     <div id="auth-login-form">
       <div class="field"><label>Email</label><input type="email" id="inp-email" placeholder="email@labo.fr" autocomplete="email"/></div>
@@ -309,25 +334,57 @@ input,select,textarea{font-size:16px;font-family:inherit;}
     <div class="env-btn-icon">📱</div>
     <div class="env-btn-text">
       <div class="env-btn-title">Version mobile</div>
-      <div class="env-btn-sub">Travaux, livraisons, facturation, messages</div>
+      <div class="env-btn-sub">Saisie, livraisons, factures — file atelier en onglet</div>
     </div>
   </button>
+</div>
+
+<!-- ===== HUB ESPACES ===== -->
+<div id="mobile-workspace-hub" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="mob-hub-title">
+  <div class="mob-hub-inner">
+    <div class="mob-hub-brand" id="mob-hub-title">Labo<span>sync</span></div>
+    <p class="mob-hub-sub">Où voulez-vous aller ? Même compte, mêmes données.</p>
+    <div class="mob-hub-cards">
+      <button type="button" class="mob-hub-card mob-hub-card--admin" id="mob-hub-enter-admin" aria-describedby="mob-hub-admin-desc">
+        <div class="mob-hub-card-icon" aria-hidden="true">📋</div>
+        <h2>Administratif</h2>
+        <p id="mob-hub-admin-desc">Créer des travaux, bons de livraison et factures.</p>
+        <span class="mob-hub-tag">Code compta possible</span>
+      </button>
+      <button type="button" class="mob-hub-card mob-hub-card--prog" id="mob-hub-enter-prog" aria-describedby="mob-hub-prog-desc">
+        <div class="mob-hub-card-icon" aria-hidden="true">🔬</div>
+        <h2>Programmation</h2>
+        <p id="mob-hub-prog-desc">Planifier les travaux saisis en administratif.</p>
+        <span class="mob-hub-tag">Équipe &amp; planning</span>
+      </button>
+    </div>
+    <p class="mob-hub-foot" id="mob-hub-foot"></p>
+  </div>
+</div>
+<div id="mob-admin-pin-sheet" role="dialog" aria-modal="true" aria-labelledby="mob-pin-title">
+  <div class="mob-pin-sheet">
+    <h3 id="mob-pin-title" style="font-size:1.05rem;font-weight:700;margin-bottom:6px;">Code comptabilité</h3>
+    <p style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;line-height:1.45;">L'espace administratif est protégé. Entrez le code défini par votre responsable (4 à 8 chiffres).</p>
+    <div class="field"><label for="mob-admin-pin-input">Code</label><input type="password" id="mob-admin-pin-input" inputmode="numeric" maxlength="8" autocomplete="one-time-code" style="font-size:20px;letter-spacing:.2em;text-align:center;"/></div>
+    <p id="mob-admin-pin-err" role="alert" style="display:none;color:var(--red);font-size:.78rem;margin-bottom:10px;"></p>
+    <button type="button" class="btn btn-primary" id="mob-admin-pin-ok">Valider</button>
+    <button type="button" class="btn btn-secondary" id="mob-admin-pin-cancel" style="margin-top:8px;">Retour au choix d'espace</button>
+  </div>
 </div>
 
 <!-- ===== APP ===== -->
 <div id="app">
   <div class="topbar">
-    <div class="topbar-brand">Labo<span>sync</span></div>
+    <div class="topbar-brand">Labo<span>sync</span> <span id="mob-workspace-badge" class="mob-ws-badge" style="display:none;">Administratif</span></div>
     <div class="topbar-sync" id="sync-status"></div>
+    <button type="button" id="btn-mob-workspace-switch" style="display:none;" aria-label="Changer d'espace">Espace</button>
     <button id="btn-topbar-profile" onclick="openProfileSheet()" aria-label="Profil et paramètres" style="background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent);border-radius:50%;width:36px;height:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;line-height:1;">👤</button>
   </div>
 
   <div class="main">
     <!-- ── DASHBOARD / AUJOURD'HUI ── -->
-    <div class="view on" id="view-home">
-      <div id="lb-ios-push-banner" style="display:none;margin-bottom:12px;"></div>
-      <div id="lb-push-banner"></div>
-      <div id="home-greeting" style="margin-bottom:14px;"></div>
+    <div class="view on" id="view-home"><div id="home-greeting" style="margin-bottom:14px;"></div>
+      <p id="mob-home-ws-hint" style="font-size:.78rem;color:var(--ink-soft);margin:-8px 0 14px;line-height:1.4;"></p>
       <div class="stats-grid" id="stats-grid"></div>
 
       <div class="mcard" id="home-urgent-card" style="display:none;border-left:4px solid var(--red);">
@@ -401,6 +458,16 @@ input,select,textarea{font-size:16px;font-family:inherit;}
       </div>
     </div>
 
+    <!-- ── PROGRAMMATION (file rapide) ── -->
+    <div class="view" id="view-prog">
+      <div style="margin-bottom:14px;">
+        <div style="font-size:1.05rem;font-weight:700;">À programmer <span id="mob-prog-queue-cnt" style="color:var(--accent);"></span></div>
+        <p style="font-size:.78rem;color:var(--ink-soft);margin-top:4px;line-height:1.45;">Videz la file en un geste. Pour le planning détaillé (techniciens, dates), utilisez la version ordinateur.</p>
+      </div>
+      <p id="mob-prog-desktop-hint" class="mob-prog-hint" role="note">🖥️ Planning complet : version ordinateur (Réglages → Programmation).</p>
+      <div id="mob-prog-queue"></div>
+    </div>
+
     <!-- ── TRAVAUX (feed pur) ── -->
     <div class="view" id="view-travaux">
       <div class="mcard" id="travaux-pending-orders-card" style="display:none;border-left:4px solid #3b82f6;margin-bottom:14px;">
@@ -423,7 +490,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
       <button id="btn-add-job" style="display:none;"></button>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div style="font-size:1.05rem;font-weight:700;color:var(--ink);">Travaux en cours <span id="mj-count" style="font-weight:600;color:var(--ink-soft);font-size:.86rem;"></span></div>
+        <div id="mob-travaux-title" style="font-size:1.05rem;font-weight:700;color:var(--ink);">Travaux en cours <span id="mj-count" style="font-weight:600;color:var(--ink-soft);font-size:.86rem;"></span></div>
         <div class="search-bar" style="margin:0;flex:1;max-width:60%;"><input type="text" id="mj-search" placeholder="🔍 Rechercher…" oninput="renderJobList()" style="padding:8px 12px;font-size:.84rem;"/></div>
       </div>
       <div id="mj-job-list"></div>
@@ -509,6 +576,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
   <nav class="bottom-nav">
     <button class="nav-item on" data-view="home"><span class="nav-icon">🏠</span>Accueil</button>
     <button class="nav-item" data-view="travaux" style="position:relative;"><span class="nav-icon">🦷</span>Travaux<span id="jobs-nav-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 20px);background:var(--accent);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;"></span></button>
+    <button class="nav-item" data-view="prog" id="nav-prog" style="display:none;"><span class="nav-icon">🔬</span>À prog.</button>
     <button class="nav-item" data-view="livraisons" style="position:relative;"><span class="nav-icon">📦</span>Livraisons<span id="livr-nav-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 20px);background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;"></span></button>
     <button class="nav-item" data-view="docs" style="position:relative;"><span class="nav-icon">💰</span>Factures<span id="docs-nav-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 20px);background:var(--orange);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;"></span></button>
     <button class="nav-item" data-view="messages" style="position:relative;"><span class="nav-icon">💬</span>Messages<span id="msg-nav-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 20px);background:var(--green);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;"></span></button>
@@ -573,6 +641,10 @@ window.addEventListener('unhandledrejection',function(ev){
   reportClientError({level:'error',message:r&&r.message?r.message:String(r||'unhandledrejection'),stack:r&&r.stack?r.stack:''});
 });
 
+let _userRole=localStorage.getItem('lb_user_role')||'admin';
+const _ROLE_PERMS={admin:['*'],production:['workspace:prog'],billing:['workspace:admin'],support:['workspace:admin']};
+function hasPerm(key){const p=_ROLE_PERMS[_userRole]||[];return p.includes('*')||p.includes(key);}
+function canAccessWorkspace(ws){if(hasPerm('*'))return true;if(ws==='admin')return hasPerm('workspace:admin');if(ws==='prog')return hasPerm('workspace:prog');return false;}
 let jobs=[], archive=[], cabinets=[], bdl=[], documents=[], tarifs=[];
 let waiting=[], queue=[], conges=[], absences=[];
 let TECHS={}, customTypes=[], syns=[], scanHist=[], fourns=[], bdc=[];
@@ -674,6 +746,7 @@ function _purgeLaboStorageLogoutMobile(){
     var lastMob=localStorage.getItem('lb_last_email_mobile');
     Object.keys(localStorage).forEach(function(k){
       if(k.indexOf('lb_')===0&&k.indexOf('lb_onb_')!==0)localStorage.removeItem(k);
+      if(k==='lb_workspace')localStorage.removeItem(k);
       if(k.indexOf('chat_seen_')===0)localStorage.removeItem(k);
     });
     if(lang)localStorage.setItem('lb_lang',lang);
@@ -843,11 +916,6 @@ function openProfileSheet(){
         '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🔑</span>'+
         '<span style="font-size:.94rem;font-weight:500;">Changer le mot de passe</span>'+
       '</button>'+
-      '<button class="ps-item" onclick="closeProfileSheet();openPushSheet();" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
-        '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🔔</span>'+
-        '<span style="font-size:.94rem;font-weight:500;">Notifications push</span>'+
-      '</button>'+
-      '<div style="height:1px;background:var(--border);margin:8px 6px;"></div>'+
       '<button class="ps-item" onclick="closeProfileSheet();localStorage.setItem(\'lb_env\',\'desktop\');window.location.href=\'app.html\';" style="display:flex;align-items:center;gap:14px;width:100%;padding:13px 10px;background:none;border:none;text-align:left;cursor:pointer;border-radius:9px;font-family:inherit;color:var(--ink);min-height:50px;">'+
         '<span style="font-size:1.3rem;width:28px;text-align:center;flex-shrink:0;">🖥️</span>'+
         '<span style="font-size:.94rem;font-weight:500;">Réglages complets (bureau)</span>'+
@@ -970,148 +1038,6 @@ function clearStripeMobile(){
   toast('Clé effacée','var(--ink-soft)');
 }
 
-function formatOsPushMsg(j,fallback){
-  if(!j)return fallback||'Erreur';
-  if(typeof j.message==='string'&&j.message)return j.message;
-  if(j.hint)return String(j.hint);
-  if(j.reason)return String(j.reason);
-  var e=j.error;
-  if(e&&Array.isArray(e.errors)){
-    var parts=e.errors.map(function(x){
-      if(typeof x==='string')return x;
-      if(x&&typeof x==='object')return x.title||x.message||x.code||'';
-      return '';
-    }).filter(Boolean);
-    if(parts.length)return parts.join(' — ').slice(0,200);
-  }
-  return fallback||'Erreur';
-}
-function updateIosPushBanner(){
-  var el=document.getElementById('lb-ios-push-banner');
-  if(!el||typeof LabosyncPush==='undefined')return;
-  LabosyncPush.getStatus().then(function(st){
-    if(!st.isIos){el.style.display='none';return;}
-    if(!st.isStandalone){
-      el.style.display='block';
-      el.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px;font-size:.8rem;color:#991b1b;line-height:1.45;"><strong>iPhone — étape obligatoire</strong><br>Les notifications <em>app fermée</em> ne marchent pas dans Safari. Safari → <strong>Partager</strong> → <strong>Sur l\'écran d\'accueil</strong>, puis ouvrez Labosync depuis l\'<strong>icône</strong> et revenez ici.</div>';
-      return;
-    }
-    if(!st.serverRegistered){
-      el.style.display='block';
-      el.innerHTML='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px;font-size:.8rem;color:#92400e;line-height:1.45;"><strong>Presque prêt</strong><br>Profil → <strong>Notifications push → Finaliser</strong>, puis fermez complètement l\'app et testez un message.</div>';
-      return;
-    }
-    el.style.display='none';
-  }).catch(function(){});
-}
-
-async function lbRefreshPushMobileUI(){
-  var el=document.getElementById('lb-push-mobile-status');
-  if(!el)return;
-  var perm='inconnu';
-  try{perm=typeof Notification!=='undefined'?Notification.permission:'non supporté';}catch(e){}
-  if(typeof LabosyncPush==='undefined'){
-    el.innerHTML='Module non chargé — rechargez la page.';
-    return;
-  }
-  try{
-    var st=await LabosyncPush.getStatus();
-    var ids=typeof LabosyncPush.getStoredPushIds==='function'?LabosyncPush.getStoredPushIds():{};
-    var lines=[
-      '<strong>Cet appareil :</strong> '+perm,
-      '<strong>Mode iPhone (icône écran d\'accueil) :</strong> '+(st.isStandalone?'oui ✓':'non — obligatoire'),
-      '<strong>Ce téléphone joignable :</strong> '+(st.thisDeviceRegistered||st.serverRegistered?'oui ✓':'non'),
-      '<strong>Total compte (tous PC/téléphones) :</strong> '+(st.accountDeviceCount||st.activeDeviceCount||0),
-    ];
-    if(ids.subscriptionId)lines.push('<strong>ID abonnement :</strong> '+String(ids.subscriptionId).slice(0,14)+'…');
-    else if(ids.playerId)lines.push('<strong>ID appareil :</strong> '+String(ids.playerId).slice(0,14)+'…');
-    if(perm!=='granted')lines.push('<span style="color:#b45309;">Autorisez les notifications quand Safari/Chrome le demande.</span>');
-    else if(!(st.thisDeviceRegistered||st.serverRegistered))lines.push('<span style="color:#c2410c;"><strong>Ce téléphone n\'est pas reconnu par OneSignal.</strong> Appuyez sur Finaliser (attendez le message de succès).</span>');
-    else lines.push('<span style="color:#059669;">Ce téléphone peut recevoir les messages <strong>même app fermée</strong>. Testez « notification cloud ».</span>');
-    el.innerHTML=lines.join('<br>');
-  }catch(e){
-    el.textContent=String(e&&e.message?e.message:e);
-  }
-}
-async function lbActivatePushMobile(){
-  if(typeof LabosyncPush==='undefined'){toast('Module notifications indisponible','var(--red)',4000);return;}
-  try{
-    var fn=typeof LabosyncPush.ensureBackgroundPush==='function'?LabosyncPush.ensureBackgroundPush:LabosyncPush.activateOrFinalize;
-    var r=await fn.call(LabosyncPush,{promptIfDefault:true});
-    toast(formatOsPushMsg(r,r.ok?'Messages reçus même app fermée':'Échec'),r.ok?'#2563eb':'#c0392b',7000);
-    lbRefreshPushMobileUI();
-    updateIosPushBanner();
-  }catch(e){
-    toast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',5000);
-  }
-}
-async function testLabPushLocalMobile(){
-  if(typeof LabosyncPush==='undefined'){toast('Module notifications indisponible','var(--red)',4000);return;}
-  try{
-    await LabosyncPush.testLocalDisplay();
-    toast('Test envoyé — vérifiez le centre de notifications du téléphone.','var(--accent)',8000);
-  }catch(e){
-    toast(String(e&&e.message?e.message:e).slice(0,200),'#c0392b',7000);
-  }
-}
-async function testLabPushCloudMobile(){
-  if(typeof LabosyncPush==='undefined'){toast('Module notifications indisponible','var(--red)',4000);return;}
-  try{
-    var st=await LabosyncPush.getStatus();
-    if(!(st.thisDeviceRegistered||st.serverRegistered)){
-      var reg=await LabosyncPush.activateOrFinalize();
-      toast(formatOsPushMsg(reg,reg.ok?'OK':'Enregistrement requis'),reg.ok?'var(--accent)':'#c0392b',6000);
-      if(!reg.ok)return;
-      st=await LabosyncPush.getStatus();
-      if(!(st.thisDeviceRegistered||st.serverRegistered)){
-        toast('Ce téléphone n\'est pas reconnu — refaites Finaliser puis test cloud.','#c0392b',8000);
-        return;
-      }
-    }
-    var ext=LabosyncPush.getExternalId();
-    var ids=typeof LabosyncPush.getStoredPushIds==='function'?LabosyncPush.getStoredPushIds():{};
-    var r=await fetch('/.netlify/functions/onesignal-test-push',{
-      method:'POST',
-      headers:mobileStripeHeaders(),
-      body:JSON.stringify({externalId:ext,playerId:ids.playerId||null,subscriptionId:ids.subscriptionId||null})
-    });
-    var j=await r.json();
-    if(j.ok){
-      toast((j.message||'Notification cloud envoyée.')+' Si rien n\'apparaît, faites d\'abord le test local.','var(--accent)',9000);
-      try{await LabosyncPush.testLocalDisplay();}catch(_){}
-    }else{
-      toast(formatOsPushMsg(j,'Échec envoi test'),'#c0392b',7000);
-    }
-    lbRefreshPushMobileUI();
-  }catch(e){
-    toast(String(e&&e.message?e.message:e).slice(0,160),'#c0392b',5000);
-  }
-}
-function openPushSheet(){
-  if(document.getElementById('push-mobile-sheet'))return;
-  var ios=/iPhone|iPod|iPad/i.test(navigator.userAgent||'');
-  var sh=document.createElement('div');
-  sh.id='push-mobile-sheet';
-  sh.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5600;display:flex;align-items:flex-end;justify-content:center;';
-  sh.innerHTML=
-    '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch;">'+
-      '<div style="font-weight:700;margin-bottom:6px;font-size:1rem;">🔔 Notifications push</div>'+
-      '<p style="font-size:.76rem;color:var(--ink-soft);margin:0 0 12px;line-height:1.45;">Comme WhatsApp : enregistrez <strong>ce téléphone</strong> ici, puis faites pareil sur votre PC (Paramètres → Notifications push). iPhone : ajoutez Labosync à l\'écran d\'accueil d\'abord.</p>'+
-      (ios?'<p style="font-size:.72rem;color:#b45309;margin:0 0 12px;line-height:1.45;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;"><strong>iPhone :</strong> ajoutez Labosync à l\'écran d\'accueil (Safari → Partager), ouvrez depuis l\'icône, puis finalisez ici.</p>':'')+
-      '<div id="lb-push-mobile-status" style="font-size:.78rem;margin-bottom:14px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;line-height:1.55;">Chargement…</div>'+
-      '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">'+
-        '<button type="button" class="btn btn-primary" onclick="lbActivatePushMobile()">1. Finaliser l\'enregistrement</button>'+
-        '<button type="button" class="btn btn-secondary" onclick="testLabPushLocalMobile()">2. Test affichage local</button>'+
-        '<button type="button" class="btn btn-secondary" onclick="testLabPushCloudMobile()">3. Test notification cloud</button>'+
-      '</div>'+
-      '<p style="font-size:.7rem;color:var(--ink-soft);line-height:1.45;margin:0;">Autorisez les notifications dans les réglages du téléphone pour Chrome, Safari ou Edge selon votre navigateur.</p>'+
-      '<button type="button" class="btn btn-secondary" onclick="document.getElementById(\'push-mobile-sheet\').remove();" style="width:100%;margin-top:14px;">Fermer</button>'+
-    '</div>';
-  document.body.appendChild(sh);
-  sh.addEventListener('click',function(e){if(e.target===sh)sh.remove();});
-  lbRefreshPushMobileUI();
-}
-
 document.getElementById('env-desktop').addEventListener('click',function(){
   localStorage.setItem('lb_env','desktop');
   window.location.href='app.html';
@@ -1119,7 +1045,6 @@ document.getElementById('env-desktop').addEventListener('click',function(){
 document.getElementById('env-mobile').addEventListener('click',function(){
   localStorage.setItem('lb_env','mobile');
   document.getElementById('env-selector').classList.remove('on');
-  document.getElementById('app').style.display='flex';
   initMobileApp();
 });
 
@@ -1131,7 +1056,7 @@ async function initMobileApp(){
   _mobileInitDone=true;
   document.getElementById('env-selector').classList.remove('on');
   document.getElementById('auth-screen').style.display='none';
-  document.getElementById('app').style.display='flex';
+  document.getElementById('app').style.display='none';
   try{
     await Promise.race([
       loadData(),
@@ -1141,7 +1066,8 @@ async function initMobileApp(){
     console.warn('loadData',eLoad);
     toast('Connexion lente — réessayez dans un instant','#d97706',5000);
   }
-  try{lbMobHandlePushDeepLink();}catch(eDl){}
+  if(typeof resolveMobileWorkspaceAfterBoot==='function')resolveMobileWorkspaceAfterBoot();
+  try{lbMobHandleOpenDeepLink();}catch(eDl){}
   startPoll();
   populateJobForm();
   setTimeout(function(){
@@ -1149,22 +1075,14 @@ async function initMobileApp(){
       const k='lb_mobile_onboard_seen';
       if(localStorage.getItem(k)!=='1'){
         localStorage.setItem(k,'1');
-        toast('👋 Bienvenue ! Ajoutez Labosync à l\'écran d\'accueil et acceptez les notifications pour les messages des cabinets.','var(--accent)');
+        toast('👋 Bienvenue sur Labosync mobile ! Ajoutez l\'app à l\'écran d\'accueil pour un accès rapide.','var(--accent)');
       }
     }catch(e){}
-    initMobilePushDeferred();
+    initMobileChatPoll();
   },300);
 }
 
-function initMobilePushDeferred(){
-  try{
-    if(typeof LabosyncPush==='undefined'||!currentUser)return;
-    LabosyncPush.prepare({role:'lab',externalId:'lab:'+currentUser.id,authHeaders:function(){return {'Content-Type':'application/json','Authorization':_token?'Bearer '+_token:''};}});
-    LabosyncPush.syncIfPermissionGranted().catch(function(){});
-    var pushBanner=document.getElementById('lb-push-banner');
-    if(pushBanner)LabosyncPush.showInstallBanner(pushBanner,{storageKey:'lb_push_install_lab_mobile',title:'Notifications sur ce téléphone'});
-    updateIosPushBanner();
-  }catch(ePush){console.warn('push init',ePush);}
+function initMobileChatPoll(){
   if(!_msgBgInterval){
     _msgBgInterval=setInterval(function(){
       if(currentUser&&typeof loadLastMessages==='function')loadLastMessages();
@@ -1172,15 +1090,16 @@ function initMobilePushDeferred(){
     startMobChatRealtime();
   }
 }
+
 document.addEventListener('visibilitychange',function(){
   if(!document.hidden&&currentUser&&typeof loadLastMessages==='function')loadLastMessages();
 });
-function lbMobHandlePushDeepLink(){
+function lbMobHandleOpenDeepLink(){
   try{
     var p=new URLSearchParams(location.search||'');
     if(p.get('open')==='messages'&&typeof showView==='function'){
       setTimeout(function(){showView('messages');},600);
-      if(p.get('from')==='push')history.replaceState({},'',location.pathname);
+      history.replaceState({},'',location.pathname);
     }
   }catch(e){}
 }
@@ -1210,7 +1129,6 @@ async function enterApp(env){
     if(!ok)return;
     document.getElementById('auth-screen').style.display='none';
     document.getElementById('env-selector').classList.remove('on');
-    document.getElementById('app').style.display='flex';
     initMobileApp();
     try{handleStripeConnectReturnMobile();}catch(e){}
   } else if(env==='desktop'){
@@ -1490,6 +1408,7 @@ function renderAll(){
   if(_cntEl){var pCnt=bdl.filter(function(b){return!b.invoiced;}).length;_cntEl.textContent=pCnt?'('+pCnt+')':'';}
   if(_docsTab==='bl')renderDocBdlList();
   updateNavBadges();
+  if(typeof renderProgQueue==='function')renderProgQueue();
   if(_currentCabId)renderCabDetail(_currentCabId);
 }
 
@@ -3138,9 +3057,6 @@ async function sendChat(){
       body:JSON.stringify(body)
     });
     if(r.ok){
-      if(typeof LabosyncPush!=='undefined'&&LabosyncPush.reportChatPushResult){
-        LabosyncPush.reportChatPushResult(r,'labo→cabinet');
-      }
       var msgs=await _fetchPortalChat(cab.portalId);
       renderChat(msgs);
       if(msgs.length)_msgLastMessages[cab.id]=msgs[msgs.length-1];
@@ -3496,9 +3412,7 @@ function mobNotifyCabinetMessages(cab,msgs){
     var dedupeKey='lb_mnotif_'+cab.portalId+'_'+(msg.id||msg.createdAt||'');
     try{if(localStorage.getItem(dedupeKey)==='1')return;localStorage.setItem(dedupeKey,'1');}catch(e){}
     var body=(msg.content||(msg.image?'📷 Photo':(msg.attachment?'📎 Fichier':'Message'))).slice(0,160);
-    if(typeof LabosyncPush!=='undefined'&&typeof LabosyncPush.showAlert==='function'){
-      LabosyncPush.showAlert('💬 '+(msg.senderName||cab.name),body,'mchat-'+dedupeKey);
-    }else if('Notification' in window&&Notification.permission==='granted'){
+    if('Notification' in window&&Notification.permission==='granted'){
       try{new Notification('💬 '+(msg.senderName||cab.name),{body:body,icon:'/icon.svg'});}catch(e){}
     }
   });
@@ -4157,6 +4071,16 @@ function openQuickJobSheet(){
     if(!items.length){toast('Ajoutez au moins un type','var(--red)');return;}
     var totalNb=items.reduce(function(s,it){return s+it.nb;},0);
     var lbl=totalNb>1?patient+' ('+totalNb+' éléments)':patient;
+    var ws=typeof getWorkspace==='function'?getWorkspace():'admin';
+    if(ws==='admin'&&typeof addMobileAdminJob==='function'){
+      if(!addMobileAdminJob({patient:lbl,items:items,cabinet:cab,deliveryDate:delivery,note:note,urgent:urgent,missingItems:missingItems}))return;
+      overlay.remove();
+      toast('✅ Travail enregistré','var(--green)');
+      await saveData();
+      if(cab){var c2=cabinets.find(function(c){return c.id===cab;});if(c2)publishPortal(c2);}
+      renderAll();
+      return;
+    }
     var tasks=[];
     if(localStorage.getItem('lb_prog_actif')==='1'){
       items.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type));});
