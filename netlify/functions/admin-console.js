@@ -245,32 +245,61 @@ exports.handler = async (event) => {
     };
   }
 
+  const MS_DAY = 86400000;
+
+  function computeItemAlerts(row) {
+    const alerts = [];
+    const sub = row.subscription || {};
+    const now = Date.now();
+    if (sub.blocked) alerts.push('blocked');
+    if (sub.status === 'past_due' || sub.status === 'unpaid') alerts.push('past_due');
+    if (sub.status === 'checkout_pending') alerts.push('checkout');
+    const trialEnd = Date.parse(sub.trialEndsAt || sub.trialEnd || '') || 0;
+    if (trialEnd && trialEnd > now && trialEnd - now <= 7 * MS_DAY) alerts.push('trial_expiring');
+    if (trialEnd && trialEnd < now && (sub.status === 'trialing' || !sub.status)) alerts.push('trial_expired');
+    const granted = Date.parse(sub.grantedAccessUntil || '') || 0;
+    if (granted && granted < now && sub.status !== 'active' && !sub.blocked) alerts.push('access_expired');
+    const lastIn = Date.parse(row.lastSignInAt || '') || 0;
+    if (!lastIn || now - lastIn > 30 * MS_DAY) alerts.push('inactive');
+    if (!row.emailConfirmed && row.email) alerts.push('email_unconfirmed');
+    return alerts;
+  }
+
   function mergeOverview(subRows, users) {
     const byUserId = new Map();
     users.forEach((u) => {
       byUserId.set(u.id, {
         userId: u.id,
         email: u.email || '',
+        emailConfirmed: !!u.email_confirmed_at,
         createdAt: u.created_at || null,
         lastSignInAt: u.last_sign_in_at || null,
         subscription: null,
+        adminTags: [],
       });
     });
     subRows.forEach((row) => {
       const sub = row && row.data ? row.data : {};
-      const userId = String(sub.userId || String(row.id || '').replace(/^sub_/, ''));
+      const userId = String(sub.userId || sub.labUserId || String(row.id || '').replace(/^sub_/, ''));
       const existing = byUserId.get(userId) || {
         userId,
         email: sub.email || '',
+        emailConfirmed: false,
         createdAt: null,
         lastSignInAt: null,
         subscription: null,
+        adminTags: [],
       };
       existing.email = existing.email || sub.email || '';
       existing.subscription = Object.assign({}, sub, { _updatedAt: row.updated_at || sub.updatedAt || null });
+      existing.adminTags = Array.isArray(sub.adminTags) ? sub.adminTags : [];
       byUserId.set(userId, existing);
     });
-    const items = Array.from(byUserId.values()).sort((a, b) => {
+    const items = Array.from(byUserId.values()).map((row) => {
+      const alerts = computeItemAlerts(row);
+      return Object.assign({}, row, { alerts, needsAttention: alerts.length > 0 });
+    }).sort((a, b) => {
+      if (a.needsAttention !== b.needsAttention) return a.needsAttention ? -1 : 1;
       const ad = Date.parse((a.subscription && (a.subscription.updatedAt || a.subscription._updatedAt)) || a.lastSignInAt || a.createdAt || 0) || 0;
       const bd = Date.parse((b.subscription && (b.subscription.updatedAt || b.subscription._updatedAt)) || b.lastSignInAt || b.createdAt || 0) || 0;
       return bd - ad;
@@ -281,14 +310,123 @@ exports.handler = async (event) => {
       trialingSubs: items.filter((x) => x.subscription && x.subscription.status === 'trialing').length,
       blockedUsers: items.filter((x) => x.subscription && x.subscription.blocked).length,
       pastDueSubs: items.filter((x) => x.subscription && (x.subscription.status === 'past_due' || x.subscription.status === 'unpaid')).length,
+      needsAttention: items.filter((x) => x.needsAttention).length,
+      trialExpiring: items.filter((x) => (x.alerts || []).includes('trial_expiring')).length,
+      inactiveUsers: items.filter((x) => (x.alerts || []).includes('inactive')).length,
     };
     return { summary, items };
+  }
+
+  async function readLabStats(userId) {
+    const stats = {
+      hasCloudData: false,
+      lastSync: null,
+      labName: '',
+      jobs: 0,
+      cabinets: 0,
+      queue: 0,
+      portals: 0,
+      recentErrors: [],
+    };
+    try {
+      const mainR = await fetch(`${SB_URL}/rest/v1/labo_data?id=eq.${encodeURIComponent(userId)}&select=data,updated_at`, {
+        headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+      });
+      const rows = await mainR.json().catch(() => []);
+      if (rows[0]) {
+        stats.hasCloudData = true;
+        stats.lastSync = rows[0].updated_at || null;
+        const d = rows[0].data || {};
+        stats.labName = String(d.labName || d.name || '').slice(0, 120);
+        stats.jobs = Array.isArray(d.jobs) ? d.jobs.length : 0;
+        stats.cabinets = Array.isArray(d.cabinets) ? d.cabinets.length : 0;
+        stats.queue = Array.isArray(d.queue) ? d.queue.length : 0;
+      }
+    } catch (_) {}
+    try {
+      const pr = await fetch(
+        `${SB_URL}/rest/v1/labo_data?data->>labUserId=eq.${encodeURIComponent(userId)}&id=like.portal_*&select=id&limit=300`,
+        { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } },
+      );
+      const portals = await pr.json().catch(() => []);
+      stats.portals = Array.isArray(portals) ? portals.length : 0;
+    } catch (_) {}
+    try {
+      const er = await fetch(
+        `${SB_URL}/rest/v1/labo_data?id=like.err_*&data->>userId=eq.${encodeURIComponent(userId)}&select=id,data,updated_at&order=updated_at.desc&limit=8`,
+        { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } },
+      );
+      const errRows = await er.json().catch(() => []);
+      stats.recentErrors = (errRows || []).map((row) => ({
+        at: row.updated_at || (row.data && row.data.createdAt),
+        level: row.data && row.data.level,
+        message: row.data && row.data.message,
+        page: row.data && row.data.page,
+      }));
+    } catch (_) {}
+    return stats;
+  }
+
+  async function readStripeConnect(userId) {
+    const empty = { connected: false, stripeAccountId: null, connectedAt: null, livemode: null };
+    try {
+      const r = await fetch(
+        `${SB_URL}/rest/v1/labo_data?id=eq.${encodeURIComponent('stripe_connect_' + userId)}&select=data,updated_at`,
+        { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } },
+      );
+      const rows = await r.json().catch(() => []);
+      const data = rows[0] && rows[0].data ? rows[0].data : null;
+      if (!data || !data.stripeAccountId) return empty;
+      return {
+        connected: true,
+        stripeAccountId: String(data.stripeAccountId),
+        connectedAt: data.connectedAt || rows[0].updated_at || null,
+        livemode: data.livemode != null ? !!data.livemode : null,
+      };
+    } catch (_) {
+      return empty;
+    }
+  }
+
+  function stripeDashboardUrls(sub, connect) {
+    const out = {};
+    if (sub && sub.stripeCustomerId) {
+      out.customer = `https://dashboard.stripe.com/customers/${encodeURIComponent(sub.stripeCustomerId)}`;
+    }
+    if (sub && sub.stripeSubscriptionId) {
+      out.subscription = `https://dashboard.stripe.com/subscriptions/${encodeURIComponent(sub.stripeSubscriptionId)}`;
+    }
+    if (connect && connect.stripeAccountId) {
+      out.connectAccount = `https://dashboard.stripe.com/connect/accounts/${encodeURIComponent(connect.stripeAccountId)}`;
+    }
+    return out;
+  }
+
+  async function generateAuthLink(email, type) {
+    const r = await fetch(`${SB_URL}/auth/v1/admin/generate_link`, {
+      method: 'POST',
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type: type || 'recovery',
+        email: String(email || '').trim(),
+      }),
+    });
+    const payload = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(payload.msg || payload.error_description || payload.message || `Auth link ${r.status}`);
+    }
+    return payload.action_link || payload.redirect_to || '';
   }
 
   if (action === 'verify') {
     return json(200, {
       ok: true,
       isAdmin: true,
+      role: 'admin',
       email: me.email,
       requiresSecret: !!ADMIN_CONSOLE_SECRET,
       mfaRequired: ADMIN_REQUIRE_MFA,
@@ -325,20 +463,58 @@ exports.handler = async (event) => {
 
   if (action === 'user_detail') {
     if (!userId) return json(400, { error: 'userId manquant' });
-    const [sub, authDetail] = await Promise.all([readSubByUserId(userId), getAuthUserDetail(userId)]);
+    const [sub, authDetail, labStats, stripeConnect] = await Promise.all([
+      readSubByUserId(userId),
+      getAuthUserDetail(userId),
+      readLabStats(userId),
+      readStripeConnect(userId),
+    ]);
     let subData = sub || { userId, email: '', status: 'trialing' };
     const user = authDetail || {
       id: userId,
       email: subData.email || '',
       created_at: null,
       last_sign_in_at: null,
+      email_confirmed_at: null,
     };
     const adminNotes = Array.isArray(subData.adminNotes) ? subData.adminNotes : [];
+    const adminTags = Array.isArray(subData.adminTags) ? subData.adminTags : [];
+    const overviewRow = {
+      userId,
+      email: user.email || subData.email,
+      emailConfirmed: !!user.email_confirmed_at,
+      lastSignInAt: user.last_sign_in_at,
+      subscription: subData,
+    };
+    const alerts = computeItemAlerts(overviewRow);
+    const hasStripeSubscription = !!(subData.stripeCustomerId || subData.stripeSubscriptionId);
+    const health = {
+      emailConfirmed: !!user.email_confirmed_at,
+      hasCloudData: labStats.hasCloudData,
+      hasActiveAccess: (() => {
+        if (subData.blocked) return false;
+        if (subData.status === 'active' || subData.status === 'trialing') return true;
+        const g = Date.parse(subData.grantedAccessUntil || '') || 0;
+        if (g > Date.now()) return true;
+        const t = Date.parse(subData.trialEndsAt || subData.trialEnd || '') || 0;
+        return t > Date.now();
+      })(),
+      stripeConnectLinked: !!(stripeConnect && stripeConnect.connected),
+      stripeSubscriptionLinked: hasStripeSubscription,
+      stripeSubscriptionExpected: subData.status === 'trialing' && !hasStripeSubscription,
+      stripeLinked: hasStripeSubscription || !!(stripeConnect && stripeConnect.connected),
+    };
     return json(200, {
       ok: true,
       user,
       subscription: subData,
+      stripeConnect,
       adminNotes,
+      adminTags,
+      labStats,
+      alerts,
+      health,
+      stripeUrls: stripeDashboardUrls(subData, stripeConnect),
     });
   }
 
@@ -467,6 +643,52 @@ exports.handler = async (event) => {
     await upsertSub(userId, nextData);
     await writeAdminAudit('set_blocked', { userId, blocked, reason: blocked ? reason.slice(0, 500) : '' });
     return json(200, { ok: true, blocked });
+  }
+
+  if (action === 'set_trial_until') {
+    const until = String(body.trialEndsAt || body.until || '').trim();
+    const parsed = Date.parse(until);
+    if (!parsed || Number.isNaN(parsed)) return json(400, { error: 'Date de fin d’essai invalide' });
+    const iso = new Date(parsed).toISOString();
+    const nextData = Object.assign({}, existing, {
+      trialEndsAt: iso,
+      trialEnd: iso,
+      status: 'trialing',
+      trialExtendedBy: me.email,
+      trialExtendedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await upsertSub(userId, nextData);
+    await writeAdminAudit('set_trial_until', { userId, trialEndsAt: iso });
+    return json(200, { ok: true, trialEndsAt: iso });
+  }
+
+  if (action === 'set_tags') {
+    const raw = body.tags;
+    const tags = Array.isArray(raw)
+      ? raw.map((t) => String(t || '').trim().slice(0, 40)).filter(Boolean).slice(0, 12)
+      : String(raw || '').split(',').map((t) => t.trim().slice(0, 40)).filter(Boolean).slice(0, 12);
+    const nextData = Object.assign({}, existing, {
+      adminTags: tags,
+      adminTagsUpdatedAt: new Date().toISOString(),
+      adminTagsUpdatedBy: me.email,
+      updatedAt: new Date().toISOString(),
+    });
+    await upsertSub(userId, nextData);
+    await writeAdminAudit('set_tags', { userId, tags });
+    return json(200, { ok: true, adminTags: tags });
+  }
+
+  if (action === 'auth_link') {
+    const linkType = String(body.linkType || 'recovery').trim();
+    const email = String(body.email || existing.email || '').trim();
+    if (!email) return json(400, { error: 'Email manquant' });
+    const allowed = ['recovery', 'signup', 'magiclink', 'invite'];
+    if (!allowed.includes(linkType)) return json(400, { error: 'Type de lien invalide' });
+    const link = await generateAuthLink(email, linkType);
+    if (!link) return json(502, { error: 'Lien non généré' });
+    await writeAdminAudit('auth_link', { userId, linkType, email });
+    return json(200, { ok: true, link, linkType });
   }
 
   return json(400, { error: 'Action inconnue' });

@@ -1,5 +1,24 @@
 const crypto = require('crypto');
-const { verifySupabaseUser, buildCors, laboDataGet, laboDataUpsert } = require('./_labosync-auth');
+const { verifySupabaseUser, buildCors, laboDataGet, laboDataUpsert, SB_URL } = require('./_labosync-auth');
+
+function supabaseAnonKey() {
+  return (process.env.SUPABASE_ANON_KEY || process.env.SB_PUBLISHABLE_KEY || '').trim();
+}
+
+async function verifyAccountPassword(email, password) {
+  const key = supabaseAnonKey();
+  if (!key || !email || !password) return false;
+  try {
+    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { apikey: key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: String(email).trim(), password: String(password) }),
+    });
+    return r.ok;
+  } catch (_) {
+    return false;
+  }
+}
 
 const PBKDF2_ITERATIONS = 120000;
 
@@ -98,6 +117,52 @@ exports.handler = async (event) => {
         pinHash: hashPin(pin, salt),
         pinSalt: salt,
         updatedAt: new Date().toISOString(),
+      };
+      await laboDataUpsert(user.id, data);
+      return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
+    }
+
+    if (event.httpMethod === 'POST' && action === 'reset') {
+      const password = String(body.password || '');
+      const newPin = String(body.newPin || '').trim();
+      const email = (user.email || '').trim();
+      if (!email) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'Email du compte introuvable.' }),
+        };
+      }
+      if (!password) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'Mot de passe du compte requis.' }),
+        };
+      }
+      if (!/^\d{4,8}$/.test(newPin)) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'Le nouveau code doit contenir 4 à 8 chiffres.' }),
+        };
+      }
+      const pwdOk = await verifyAccountPassword(email, password);
+      if (!pwdOk) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Mot de passe du compte incorrect.' }),
+        };
+      }
+      const row = await laboDataGet(user.id);
+      const data = row && row.data && typeof row.data === 'object' ? Object.assign({}, row.data) : {};
+      const salt = crypto.randomBytes(16).toString('hex');
+      data.adminAccess = {
+        pinHash: hashPin(newPin, salt),
+        pinSalt: salt,
+        updatedAt: new Date().toISOString(),
+        resetAt: new Date().toISOString(),
       };
       await laboDataUpsert(user.id, data);
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };

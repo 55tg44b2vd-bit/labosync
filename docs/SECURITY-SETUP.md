@@ -12,7 +12,10 @@ Ce guide complète le déploiement des correctifs Netlify + clients. À faire **
 | `ALLOWED_ORIGINS` | Recommandé | Ex. `https://labosync.app,https://www.labosync.app` |
 | `ANTHROPIC_API_KEY` | Si IA | Assistant + import |
 | `ADMIN_EMAILS` | Si console admin | Emails autorisés, séparés par des virgules |
+| `ADMIN_CONSOLE_SECRET` | Optionnel | Code supplémentaire demandé à la connexion sur `/admin` |
+| `ADMIN_REQUIRE_MFA` | Optionnel | `true` pour exiger la MFA Supabase sur le compte admin |
 | Clés Stripe | Si paiements | Selon vos fonctions existantes |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Si fichiers STL | Stockage empreintes cabinet → voir [R2-SETUP.md](./R2-SETUP.md) |
 
 Après modification : **Deploys → Trigger deploy** (ou push git).
 
@@ -58,7 +61,20 @@ Sans cela, le labo ne pourra plus lire/écrire ces lignes après activation des 
 - **503 portal** : `SUPABASE_SERVICE_KEY` manquante sur Netlify.
 - **IA 401** : utilisateur non connecté ou token expiré.
 
-## 5. Optionnel
+## 5. Console administrateur (`/admin`)
+
+Page dédiée : `admin-console.html` (alias Netlify `/admin`).
+
+1. Créer un compte Supabase Auth pour l’administrateur (email + mot de passe).
+2. Ajouter cet email dans `ADMIN_EMAILS` sur Netlify.
+3. (Recommandé) Définir `ADMIN_CONSOLE_SECRET` : code saisi en plus du mot de passe à la connexion.
+4. Ouvrir `https://votre-domaine/admin`, se connecter.
+
+**Outils disponibles** : tableau des comptes, file « À traiter », journal d’audit, fiche support (santé du compte, stats labo cloud, erreurs client, tags, prolongation essai, liens auth Stripe, export CSV).
+
+Cette console est **séparée** de l’application labo : pas d’onglet caché dans `app.html`.
+
+## 6. Optionnel
 
 - Configurer Sentry ou surveiller `/.netlify/functions/log-client-error`
 - Rotation de `PORTAL_SESSION_SECRET` (invalide les sessions cabinet en cours)

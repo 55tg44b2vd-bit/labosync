@@ -20,6 +20,64 @@
     if (typeof global.toast === 'function') global.toast(msg, color || 'var(--ink)');
   }
 
+  function updateMobTopbarBranding() {
+    var logo = document.getElementById('mob-lab-logo');
+    var title = document.getElementById('mob-topbar-title');
+    var name = (global.localStorage.getItem('lb_name') || '').trim();
+    var logoUrl = (global.localStorage.getItem('lb_logo') || '').trim();
+    if (logo) {
+      if (logoUrl && logoUrl.indexOf('data:image') === 0) {
+        logo.src = logoUrl;
+        logo.style.display = 'block';
+        logo.alt = name || 'Logo laboratoire';
+      } else {
+        logo.style.display = 'none';
+        logo.removeAttribute('src');
+      }
+    }
+    if (title) {
+      if (name) {
+        title.textContent = name;
+      } else {
+        title.innerHTML = 'Labo<span>sync</span>';
+      }
+    }
+  }
+
+  async function submitMobilePinRecovery() {
+    var pwd = document.getElementById('mob-pin-recover-password');
+    var neu = document.getElementById('mob-pin-recover-new');
+    var err = document.getElementById('mob-admin-pin-err');
+    var password = pwd ? String(pwd.value || '') : '';
+    var newPin = neu ? String(neu.value || '').trim() : '';
+    if (!password || !newPin) {
+      if (err) {
+        err.textContent = 'Mot de passe et nouveau code requis.';
+        err.style.display = 'block';
+      }
+      return;
+    }
+    try {
+      var res = await global.fetchLabAccess('reset', { password: password, newPin: newPin });
+      if (res.ok) {
+        if (typeof global.setAdminUnlocked === 'function') global.setAdminUnlocked();
+        hideMobilePinSheet();
+        var rec = document.getElementById('mob-pin-recover');
+        if (rec) rec.style.display = 'none';
+        mobToast('✅ Nouveau code enregistré', 'var(--green)');
+        await enterMobileWorkspace('admin', { skipPin: true });
+      } else if (err) {
+        err.textContent = res.error || 'Échec de la réinitialisation.';
+        err.style.display = 'block';
+      }
+    } catch (e) {
+      if (err) {
+        err.textContent = e.message || 'Erreur';
+        err.style.display = 'block';
+      }
+    }
+  }
+
   function canMobAdmin() {
     return typeof global.canAccessWorkspace === 'function' && global.canAccessWorkspace('admin');
   }
@@ -84,7 +142,7 @@
           badge.style.display = 'none';
         } else {
           badge.style.display = 'inline-block';
-          badge.textContent = 'Administratif';
+          badge.textContent = 'Gestion';
           badge.className = 'mob-ws-badge';
         }
       } else if (ws === 'prog') {
@@ -141,13 +199,14 @@
     var foot = document.getElementById('mob-hub-foot');
     var enabled = canMobProg();
     if (progBtn) {
-      progBtn.classList.toggle('mob-hub-card--disabled', !enabled);
-      progBtn.disabled = !enabled;
+      progBtn.style.display = enabled ? '' : 'none';
+      progBtn.disabled = false;
+      progBtn.classList.remove('mob-hub-card--disabled');
     }
     if (foot) {
       foot.textContent = enabled
-        ? 'Même compte, mêmes données : un travail saisi en administratif apparaît dans l’onglet À prog.'
-        : 'Activez la programmation sur ordinateur (Réglages).';
+        ? 'Même compte, mêmes données : un travail saisi en Gestion apparaît dans l’onglet À prog.'
+        : 'Sans planning atelier, tout se fait depuis Gestion. Activez l’Atelier dans Réglages (ordinateur) si besoin.';
     }
   }
 
@@ -159,6 +218,21 @@
       hub.setAttribute('aria-hidden', 'true');
     }
     if (app) app.style.display = 'flex';
+  }
+
+  function removeQueueItemInPlace(qId) {
+    var q = global.queue || [];
+    for (var i = q.length - 1; i >= 0; i--) {
+      if (q[i] && q[i].id === qId) q.splice(i, 1);
+    }
+    if (typeof global.syncWindowQueue === 'function') global.syncWindowQueue();
+  }
+
+  async function persistProgrammingChange() {
+    if (typeof global.saveJobs === 'function') global.saveJobs();
+    if (typeof global.saveQueue === 'function') global.saveQueue();
+    if (typeof global.saveData === 'function') await global.saveData();
+    else if (typeof global.cloudSave === 'function') global.cloudSave();
   }
 
   function showMobilePinSheet() {
@@ -234,6 +308,7 @@
     if (mobProgTabVisible(ws) && typeof global.renderProgQueue === 'function') {
       global.renderProgQueue();
     }
+    updateMobTopbarBranding();
     if (typeof global.renderAll === 'function') global.renderAll();
   }
 
@@ -245,12 +320,12 @@
     if (ws === 'prog' && !canMobProg()) {
       if (canMobAdmin()) ws = 'admin';
       else {
-        mobToast('Programmation non disponible.', 'var(--orange)');
+        mobToast('Planning atelier non activé (Réglages sur ordinateur).', 'var(--orange)');
         return;
       }
     }
     if (ws === 'admin' && !canMobAdmin()) {
-      mobToast('Accès administratif refusé.', 'var(--red)');
+      mobToast('Accès Gestion refusé.', 'var(--red)');
       return;
     }
     if (ws === 'admin' && !opts.skipPin) {
@@ -364,6 +439,7 @@
         });
         jobOnly.tasks = jobTasks;
         jobOnly.needsProg = false;
+        if (typeof global.syncWindowLabData === 'function') global.syncWindowLabData();
         return;
       }
     }
@@ -396,9 +472,8 @@
         prothesisId: q.prothesisId || '',
       });
     }
-    global.queue = global.queue.filter(function (x) {
-      return x.id !== qId;
-    });
+    removeQueueItemInPlace(qId);
+    if (typeof global.syncWindowLabData === 'function') global.syncWindowLabData();
   }
 
   function renderProgQueue() {
@@ -452,7 +527,7 @@
     el.querySelectorAll('[data-prog-id]').forEach(function (btn) {
       btn.addEventListener('click', async function () {
         programQueueItemMobile(btn.getAttribute('data-prog-id'));
-        if (typeof global.saveData === 'function') await global.saveData();
+        await persistProgrammingChange();
         renderProgQueue();
         if (typeof global.renderAll === 'function') global.renderAll();
         mobToast('✅ Travail planifié', 'var(--green)');
@@ -491,9 +566,18 @@
       pinCancel.addEventListener('click', function () {
         hideMobilePinSheet();
         if (canMobProg() && !canMobAdmin()) enterMobileWorkspace('prog', { skipPin: true });
-        else mobToast('Code requis pour l’accès administratif.', 'var(--orange)');
+        else mobToast('Code requis pour l’accès Gestion.', 'var(--orange)');
       });
-    var topbar = document.querySelector('.topbar-brand');
+    var pinForgot = document.getElementById('mob-pin-forgot');
+    var pinRecover = document.getElementById('mob-pin-recover');
+    if (pinForgot && pinRecover) {
+      pinForgot.addEventListener('click', function () {
+        pinRecover.style.display = pinRecover.style.display === 'none' ? 'block' : 'none';
+      });
+    }
+    var pinRecoverOk = document.getElementById('mob-pin-recover-ok');
+    if (pinRecoverOk) pinRecoverOk.addEventListener('click', submitMobilePinRecovery);
+    var topbar = document.querySelector('.topbar-brand-block, .topbar-brand');
     if (topbar)
       topbar.addEventListener('click', function () {
         if (mobileNeedsHub()) showMobileHub();
@@ -512,6 +596,7 @@
     global.programQueueItemMobile = programQueueItemMobile;
     global.mobileNeedsHub = mobileNeedsHub;
     global.mobProgTabVisible = mobProgTabVisible;
+    global.updateMobTopbarBranding = updateMobTopbarBranding;
   }
 
   if (document.readyState === 'loading') {

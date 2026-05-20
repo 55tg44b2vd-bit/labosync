@@ -1,0 +1,10 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const D = 'di' + 'v';
+const p = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'labo-mobile.html');
+let s = fs.readFileSync(p, 'utf8');
+s = s.replace('<motion class="mcard-title">', `<${D} class="mcard-title">`);
+s = s.replace('📦 Sans bon de livraison</motion>', `📦 Sans bon de livraison</${D}>`);
+fs.writeFileSync(p, s);
+console.log('fixed');

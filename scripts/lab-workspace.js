@@ -1,4 +1,4 @@
-/* Labosync — espaces Administratif / Programmation */
+/* Labosync — espaces Gestion / Atelier (planning optionnel) */
 (function (global) {
   'use strict';
 
@@ -19,6 +19,47 @@
 
   function isProgEnabled() {
     return localStorage.getItem('lb_prog_actif') === '1';
+  }
+
+  function readSaisiePatientSex() {
+    var m = document.getElementById('saisie-isex-m');
+    var f = document.getElementById('saisie-isex-f');
+    if (m && m.checked) return 'M';
+    if (f && f.checked) return 'F';
+    var legacy = document.getElementById('saisie-isex');
+    return legacy ? String(legacy.value || '').trim() : '';
+  }
+
+  function resetSaisiePatientSex() {
+    var m = document.getElementById('saisie-isex-m');
+    var f = document.getElementById('saisie-isex-f');
+    if (m) m.checked = false;
+    if (f) f.checked = false;
+    var legacy = document.getElementById('saisie-isex');
+    if (legacy) legacy.value = '';
+  }
+
+  function wsLabel(ws) {
+    if (ws === 'admin') return 'Gestion';
+    if (ws === 'prog') return 'Atelier';
+    return '';
+  }
+
+  /** Travail prêt pour BL / livraison (sans prog : pas de tâches = OK). */
+  function isJobCompleteForWorkflow(job) {
+    if (!job) return false;
+    if (!job.tasks || !job.tasks.length) {
+      if (job.needsProg && isProgEnabled()) return false;
+      return true;
+    }
+    return job.tasks.every(function (t) {
+      return !!t.done;
+    });
+  }
+
+  function shouldShowLabHub() {
+    if (!isProgEnabled()) return false;
+    return canAccessWorkspace('admin') && canAccessWorkspace('prog');
   }
 
   function isProgDisplayActive() {
@@ -50,7 +91,9 @@
   }
 
   async function fetchLabAccess(action, body) {
-    var token = global._cachedAccessToken;
+    var token = global.ensureFreshAccessToken
+      ? await global.ensureFreshAccessToken(false)
+      : global._cachedAccessToken;
     if (!token) throw new Error('Non connecté');
     var url =
       action === 'status'
@@ -76,7 +119,7 @@
       var st = await fetchLabAccess('status');
       _adminPinHas = !!st.hasPin;
     } catch (e) {
-      console.warn('admin pin status', e);
+      if (!e || e.message !== 'Non connecté') console.warn('admin pin status', e);
       _adminPinHas = false;
     }
     return _adminPinHas;
@@ -127,16 +170,40 @@
 
   function updateHubCards() {
     var progBtn = document.getElementById('hub-enter-prog');
+    var adminBtn = document.getElementById('hub-enter-admin');
+    var sub = document.getElementById('lab-hub-sub');
     var foot = document.getElementById('lab-hub-foot');
     var enabled = isProgEnabled();
     if (progBtn) {
-      progBtn.classList.toggle('lab-hub-card--disabled', !enabled);
-      progBtn.disabled = !enabled;
+      progBtn.style.display = enabled ? '' : 'none';
+      progBtn.disabled = false;
+      progBtn.classList.remove('lab-hub-card--disabled');
+    }
+    if (adminBtn) {
+      var ah = adminBtn.querySelector('h3');
+      var ap = adminBtn.querySelector('p');
+      if (ah) ah.textContent = 'Gestion';
+      if (ap)
+        ap.textContent =
+          'Saisie des travaux, bons de livraison, factures et dossiers dentistes. Code compta possible.';
+    }
+    if (progBtn && enabled) {
+      var ph = progBtn.querySelector('h3');
+      var pp = progBtn.querySelector('p');
+      if (ph) ph.textContent = 'Atelier';
+      if (pp)
+        pp.textContent =
+          'Planning optionnel : techniciens, étapes et dates pour les labos en équipe.';
+    }
+    if (sub) {
+      sub.textContent = enabled
+        ? 'Deux espaces complémentaires : la gestion au quotidien et le planning atelier si vous en avez besoin.'
+        : 'Espace Gestion : saisie, livraisons et facturation. Le planning atelier reste disponible dans Réglages si un jour vous en avez besoin.';
     }
     if (foot) {
       foot.textContent = enabled
-        ? 'Les deux espaces partagent les mêmes données : un travail créé en administratif apparaît en programmation.'
-        : 'La programmation est désactivée. Activez-la dans Réglages → Équipe et planning si vous travaillez en équipe.';
+        ? 'Les deux espaces partagent les mêmes travaux : ce qui est saisi en Gestion apparaît en Atelier.'
+        : 'Le planning atelier est désactivé — votre labo fonctionne très bien sans. Activez-le dans Réglages → Équipe et planning quand vous le souhaitez.';
     }
   }
 
@@ -221,7 +288,7 @@
     });
     var label = document.querySelector('.drawer-nav-label');
     if (label) {
-      label.textContent = ws === 'admin' ? 'Administratif' : ws === 'prog' ? 'Programmation' : 'Principal';
+      label.textContent = wsLabel(ws) || 'Principal';
     }
   }
 
@@ -244,17 +311,20 @@
       if (newJobCard) newJobCard.style.display = '';
       if (cardSub)
         cardSub.textContent =
-          'Saisissez le travail pour le bon de livraison et la facturation. La programmation atelier est optionnelle.';
-      if (btn) btn.textContent = '+ Enregistrer le travail';
+          'Saisissez le travail pour le bon de livraison et la facturation. Le planning atelier est optionnel (Réglages).';
+      if (btn) btn.textContent = '+ Ajouter le travail';
       if (queueSec) queueSec.style.display = 'none';
       if (tgrid) tgrid.style.display = 'none';
       if (tgridTitle) tgridTitle.style.display = 'none';
       if (jobsTable) jobsTable.style.display = '';
+      document.querySelectorAll('.lab-sheet-batch-btn').forEach(function (el) {
+        el.style.display = isProgEnabled() ? '' : 'none';
+      });
     } else if (ws === 'prog') {
       if (newJobCard) newJobCard.style.display = 'none';
       if (cardSub)
         cardSub.textContent =
-          'Travaux saisis en administratif : planifiez techniciens, dates et créneaux coursier.';
+          'Travaux saisis en Gestion : planifiez techniciens, dates et créneaux coursier.';
       if (btn) btn.textContent = '+ Mettre en file (à programmer)';
       if (queueSec && isProgEnabled()) queueSec.style.display = '';
       if (jobsTable) jobsTable.style.display = isProgEnabled() ? '' : 'none';
@@ -271,11 +341,11 @@
       if (ws === 'admin') {
         banner.className = 'ws-admin';
         banner.innerHTML =
-          '<b>Coursier — administratif</b> Demandez une course pour un enlèvement ou une livraison liée à un bon de livraison.';
+          '<b>Coursier — Gestion</b> Demandez une course pour un enlèvement ou une livraison liée à un bon de livraison.';
       } else if (ws === 'prog') {
         banner.className = 'ws-prog';
         banner.innerHTML =
-          '<b>Coursier — programmation</b> Planifiez les courses en lien avec les dates labo et le planning du jour.';
+          '<b>Coursier — Atelier</b> Planifiez les courses en lien avec les dates labo et le planning du jour.';
       }
     }
     if (billing) billing.style.display = ws === 'admin' ? '' : 'none';
@@ -289,7 +359,7 @@
         badge.style.display = 'none';
       } else {
         badge.style.display = 'inline-block';
-        badge.textContent = ws === 'admin' ? 'Administratif' : 'Programmation';
+        badge.textContent = wsLabel(ws);
         badge.className = ws === 'prog' ? 'ws-prog' : '';
       }
     }
@@ -340,8 +410,16 @@
     }
     if (ws === 'prog' && !isProgEnabled()) {
       if (typeof global.showToast === 'function')
-        global.showToast('Activez la programmation dans les réglages.', '#d97706', 4000);
-      showLabHub();
+        global.showToast(
+          'Le planning atelier n\'est pas activé. Réglages → Équipe et planning.',
+          '#d97706',
+          4500
+        );
+      if (canAccessWorkspace('admin')) {
+        enterWorkspace('admin', { skipPin: opts.skipPin });
+      } else {
+        showLabHub();
+      }
       return;
     }
     if (ws === 'admin' && !opts.skipPin) {
@@ -359,9 +437,38 @@
 
   function resolveWorkspaceAfterBoot() {
     refreshAdminPinStatus().catch(function () {});
+    if (
+      typeof global.LabMultiPoste !== 'undefined' &&
+      typeof global.LabMultiPoste.applyPostePresetOnBoot === 'function'
+    ) {
+      global.LabMultiPoste.applyPostePresetOnBoot();
+    }
+
+    function enterGestion() {
+      enterWorkspace('admin', { skipPin: false });
+    }
+
+    if (!isProgEnabled()) {
+      if (canAccessWorkspace('admin')) {
+        enterGestion();
+        return;
+      }
+      if (global._userRole === 'production' && canAccessWorkspace('prog')) {
+        if (typeof global.showToast === 'function')
+          global.showToast(
+            'Le planning atelier n\'est pas activé pour ce laboratoire. Demandez à l\'administrateur de l\'activer dans Réglages si besoin.',
+            '#d97706',
+            6000
+          );
+        setWorkspace('hub');
+        applyWorkspaceUi();
+        return;
+      }
+    }
+
     if (typeof global._userRole === 'string') {
       if (global._userRole === 'billing' && canAccessWorkspace('admin')) {
-        enterWorkspace('admin', { skipPin: false });
+        enterGestion();
         return;
       }
       if (global._userRole === 'production' && canAccessWorkspace('prog') && isProgEnabled()) {
@@ -369,8 +476,24 @@
         return;
       }
     }
+
+    if (!shouldShowLabHub()) {
+      if (canAccessWorkspace('admin')) {
+        enterGestion();
+        return;
+      }
+      if (canAccessWorkspace('prog') && isProgEnabled()) {
+        enterWorkspace('prog', { skipPin: true });
+        return;
+      }
+    }
+
     var ws = getWorkspace();
     if ((ws === 'admin' || ws === 'prog') && canAccessWorkspace(ws)) {
+      if (ws === 'prog' && !isProgEnabled()) {
+        enterGestion();
+        return;
+      }
       enterWorkspace(ws, { skipPin: ws !== 'admin' });
     } else {
       setWorkspace('hub');
@@ -393,6 +516,7 @@
     var cabEl = document.getElementById('saisie-icab');
     var cab = cabEl ? cabEl.value : '';
     var urg = document.getElementById('saisie-iurg').checked;
+    var patientSex = readSaisiePatientSex();
     var missingItems =
       typeof global._readMissingItems === 'function' ? global._readMissingItems() : [];
     var allItems =
@@ -421,13 +545,10 @@
       teeth: toothD.teeth,
       links: toothD.links,
       needsProg: isProgEnabled(),
+      patientSex: patientSex,
     };
     if (missingItems.length) job.missingInfoItems = missingItems;
-    if (typeof global.jobs !== 'undefined') {
-      global.jobs.push(job);
-      if (typeof global.saveJobs === 'function') global.saveJobs();
-    }
-    if (isProgEnabled() && typeof global.queue !== 'undefined') {
+    if (isProgEnabled() && typeof global.promptAdminJobFinish === 'function') {
       var queueItem = {
         id: job.id + '_q',
         patient: name,
@@ -442,14 +563,18 @@
         links: toothD.links,
         requestedDeliveryDate: req,
         jobId: job.id,
+        patientSex: patientSex,
       };
       if (missingItems.length) queueItem.missingInfoItems = missingItems;
-      global.queue.push(queueItem);
-      if (typeof global.saveQueue === 'function') global.saveQueue();
-      if (typeof global.updateQueueBadge === 'function') global.updateQueueBadge();
-      if (typeof global.renderQueueMain === 'function') global.renderQueueMain();
+      global.promptAdminJobFinish({ job: job, queueItem: queueItem });
+      return;
+    }
+    if (typeof global.jobs !== 'undefined') {
+      global.jobs.push(job);
+      if (typeof global.saveJobs === 'function') global.saveJobs();
     }
     if (nameEl) nameEl.value = '';
+    resetSaisiePatientSex();
     document.getElementById('saisie-inb').value = '1';
     document.getElementById('saisie-inote').value = '';
     if (reqDate) reqDate.value = '';
@@ -459,13 +584,7 @@
     if (typeof global._resetSaisieTeethPick === 'function') global._resetSaisieTeethPick();
     if (typeof global.render === 'function') global.render();
     if (typeof global.showToast === 'function')
-      global.showToast(
-        isProgEnabled()
-          ? '✅ Travail enregistré — visible en programmation'
-          : '✅ Travail enregistré',
-        '#2a6049',
-        3500
-      );
+      global.showToast('✅ Travail enregistré', '#2a6049', 3500);
   }
 
   function handleSaisieAdd() {
@@ -501,6 +620,35 @@
     }
   }
 
+  async function submitAdminPinRecovery() {
+    var pwd = document.getElementById('admin-pin-recover-password');
+    var neu = document.getElementById('admin-pin-recover-new');
+    var err = document.getElementById('admin-pin-err');
+    var password = pwd ? String(pwd.value || '') : '';
+    var newPin = neu ? String(neu.value || '').trim() : '';
+    if (!password || !newPin) {
+      if (err) {
+        err.textContent = 'Mot de passe et nouveau code requis.';
+        err.style.display = 'block';
+      }
+      return;
+    }
+    try {
+      await fetchLabAccess('reset', { password: password, newPin: newPin });
+      setAdminUnlocked();
+      hideAdminPinModal();
+      var rec = document.getElementById('admin-pin-recover');
+      if (rec) rec.style.display = 'none';
+      if (typeof global.showToast === 'function') global.showToast('Nouveau code enregistré', '#2a6049', 3000);
+      await enterWorkspace('admin', { skipPin: true });
+    } catch (e) {
+      if (err) {
+        err.textContent = e.message || 'Erreur';
+        err.style.display = 'block';
+      }
+    }
+  }
+
   async function clearAdminPinFromSettings() {
     var cur = document.getElementById('admin-pin-set-current');
     var msg = document.getElementById('admin-pin-set-msg');
@@ -533,6 +681,15 @@
     var pinClear = document.getElementById('btn-admin-pin-clear');
     if (pinSave) pinSave.addEventListener('click', saveAdminPinFromSettings);
     if (pinClear) pinClear.addEventListener('click', clearAdminPinFromSettings);
+    var pinForgot = document.getElementById('admin-pin-forgot');
+    var pinRecover = document.getElementById('admin-pin-recover');
+    if (pinForgot && pinRecover) {
+      pinForgot.addEventListener('click', function () {
+        pinRecover.style.display = pinRecover.style.display === 'none' ? 'block' : 'none';
+      });
+    }
+    var pinRecoverBtn = document.getElementById('btn-admin-pin-recover');
+    if (pinRecoverBtn) pinRecoverBtn.addEventListener('click', submitAdminPinRecovery);
   }
 
   if (document.readyState === 'loading') {
@@ -545,12 +702,17 @@
   global.setWorkspace = setWorkspace;
   global.isProgEnabled = isProgEnabled;
   global.isProgDisplayActive = isProgDisplayActive;
+  global.wsLabel = wsLabel;
+  global.isJobCompleteForWorkflow = isJobCompleteForWorkflow;
+  global.shouldShowLabHub = shouldShowLabHub;
   global.showLabHub = showLabHub;
   global.enterWorkspace = enterWorkspace;
   global.applyWorkspaceUi = applyWorkspaceUi;
   global.resolveWorkspaceAfterBoot = resolveWorkspaceAfterBoot;
   global.addAdminJob = addAdminJob;
   global.handleSaisieAdd = handleSaisieAdd;
+  global.readSaisiePatientSex = readSaisiePatientSex;
+  global.resetSaisiePatientSex = resetSaisiePatientSex;
   global.refreshAdminPinStatus = refreshAdminPinStatus;
   global.fetchLabAccess = fetchLabAccess;
   global.isAdminUnlocked = isAdminUnlocked;

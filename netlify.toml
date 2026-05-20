@@ -1,5 +1,5 @@
 [build]
-  command = "node scripts/clean-push-artifacts.cjs && npm run verify:functions"
+  command = "node scripts/create-deploy-backup.cjs --required --reason netlify-build && node scripts/clean-push-artifacts.cjs && npm run verify:functions"
   functions = "netlify/functions"
 
 # Aliases pratiques pour l'app (la racine "/" sert index.html = landing par défaut)
@@ -28,10 +28,10 @@
   to = "/app.html?signup=1"
   status = 200
 
-# Lien direct console admin (après connexion : même compte Labosync si email dans ADMIN_EMAILS)
+# Console administrateur (page dédiée, hors app labo)
 [[redirects]]
   from = "/admin"
-  to = "/app.html?admin=1"
+  to = "/admin-console.html"
   status = 200
 
 [[redirects]]

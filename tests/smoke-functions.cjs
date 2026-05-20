@@ -11,6 +11,7 @@ const logClientError = require('../netlify/functions/log-client-error.js');
 const auditLog = require('../netlify/functions/audit-log.js');
 const courierApi = require('../netlify/functions/courier-api.js');
 const labAccess = require('../netlify/functions/lab-access.js');
+const r2Storage = require('../netlify/functions/r2-storage.js');
 
 async function run() {
   const tests = [];
@@ -73,6 +74,16 @@ async function run() {
   tests.push((async () => {
     const res = await labAccess.handler({ httpMethod: 'GET', headers: {} });
     assert.equal(res.statusCode, 401);
+  })());
+
+  tests.push((async () => {
+    const res = await r2Storage.handler({ httpMethod: 'OPTIONS', headers: {} });
+    assert.equal(res.statusCode, 200);
+  })());
+
+  tests.push((async () => {
+    const res = await r2Storage.handler({ httpMethod: 'GET', headers: {} });
+    assert.equal(res.statusCode, 405);
   })());
 
   await Promise.all(tests);

@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Labosync — Logiciel de gestion pour laboratoires de prothèse dentaire</title>
-<meta name="description" content="Planification, bons de livraison, factures, portail cabinet. Prévu compatible facturation électronique B2B (PDP) 2026–2027. Essai gratuit 14 jours."/>
+<title>Labosync — Portail cabinet et gestion moderne pour laboratoires dentaires</title>
+<meta name="description" content="Le logiciel moderne pour laboratoires dentaires : portail cabinet, fiches de commande, fichiers STL, planning, BL, factures, coursiers et paiement Stripe. Essai gratuit 14 jours."/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -36,6 +36,13 @@
   .compliance-banner strong{display:block;font-size:1rem;color:var(--ink);margin-bottom:6px;}
   .compliance-banner p{font-size:.88rem;color:var(--ink-soft);line-height:1.55;margin:0;}
   .feature.feature-fe{border-color:#93c5fd;background:linear-gradient(180deg,#f8fbff 0%,#fff 100%);}
+  .positioning{display:grid;grid-template-columns:1.05fr .95fr;gap:22px;align-items:stretch;}
+  .positioning-card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:26px;text-align:left;}
+  .positioning-card h3{font-size:1.15rem;margin-bottom:10px;}
+  .positioning-card p{color:var(--ink-soft);font-size:.92rem;margin-bottom:14px;}
+  .positioning-list{list-style:none;margin-top:14px;}
+  .positioning-list li{padding:7px 0;font-size:.9rem;color:#334155;}
+  .positioning-list li::before{content:'✓ ';color:var(--accent);font-weight:800;margin-right:6px;}
   .hero-mock{margin:34px auto 0;max-width:920px;background:#fff;border:1px solid var(--border);border-radius:18px;box-shadow:0 18px 45px rgba(37,99,235,.15);padding:18px;}
   .hero-mock-inner{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;}
   .mock-card{border:1px solid var(--border);border-radius:12px;padding:14px;background:#f8fafc;text-align:left;}
@@ -95,7 +102,7 @@
     .hero{padding:50px 0 40px;}
     .section{padding:56px 0;}
     nav a:not(.btn){display:none;}
-    .hero-mock-inner,.how-grid,.testi-grid{grid-template-columns:1fr;}
+    .hero-mock-inner,.how-grid,.testi-grid,.positioning{grid-template-columns:1fr;}
     .compliance-banner{flex-direction:column;gap:12px;padding:18px;}
   }
 </style>
@@ -107,7 +114,7 @@
     <div class="brand">Labo<span>sync</span></div>
     <nav>
       <a href="#features">Fonctionnalités</a>
-      <a href="#pricing">Tarif</a>
+      <a href="#pricing">Tarif fondateur</a>
       <a href="#faq">FAQ</a>
       <a href="connexion.html" class="btn btn-ghost" style="padding:8px 16px;">Se connecter</a>
     </nav>
@@ -116,18 +123,18 @@
 
 <section class="hero">
   <div class="container">
-    <h1>Reprenez le contrôle du labo <span class="accent">sans Excel, sans stress</span></h1>
-    <p>Labosync centralise production, livraisons, facturation et relation cabinets dans une interface claire. Vos équipes gagnent du temps, vos cabinets gagnent en visibilité.</p>
+    <h1>Le portail cabinet moderne pour <span class="accent">laboratoires dentaires</span></h1>
+    <p>Labosync centralise les fiches de commande, fichiers STL, messages cabinets, coursiers, production, bons de livraison et factures. Un flux plus propre pour le labo, plus simple pour vos praticiens.</p>
     <div class="hero-cta">
       <a href="app.html?signup=1" class="btn btn-primary">🚀 Essai gratuit 14 jours</a>
-      <a href="#features" class="btn btn-ghost">Voir la démo</a>
+      <a href="#features" class="btn btn-ghost">Voir les fonctionnalités</a>
     </div>
-    <div class="hero-trust">Sans carte bancaire · Setup en 2 minutes · Données hébergées en Europe</div>
+    <div class="hero-trust">Sans carte bancaire · Mise en route rapide · Données hébergées en Europe</div>
     <div class="hero-proof">
-      <div class="pill">✅ Essai complet, pas une version bridée</div>
-      <div class="pill">📱 Mobile + Desktop synchronisés</div>
+      <div class="pill">✅ Fiches de commande cabinet</div>
+      <div class="pill">📎 Envoi de fichiers STL</div>
       <div class="pill">💳 Paiement Stripe intégré</div>
-      <div class="pill pill-fe">📨 Facturation électronique 2026–2027</div>
+      <div class="pill pill-fe">🚚 Gestion des coursiers</div>
     </div>
     <div class="hero-mock" aria-hidden="true">
       <div class="hero-mock-inner">
@@ -145,7 +152,7 @@
           </div>
         </div>
         <div class="mock-card">
-          <div class="mock-title">Messagerie cabinets</div>
+          <div class="mock-title">Portail cabinet</div>
           <div class="mock-line"></div>
           <div class="mock-line w70"></div>
           <div class="mock-line"></div>
@@ -171,11 +178,43 @@
 <section class="section section-soft">
   <div class="container">
     <h2 class="section-title">Comment ça marche ?</h2>
-    <p class="section-sub">Un flux simple qui sécurise toute la chaîne labo ↔ cabinet.</p>
+    <p class="section-sub">Un flux simple qui sécurise toute la chaîne labo ↔ cabinet, sans imposer une migration lourde dès le premier jour.</p>
     <div class="how-grid">
-      <div class="how-step"><div class="n">1</div><h3>Le cabinet envoie sa demande</h3><p>Via son portail dédié, avec étapes de cas et pièces jointes si besoin.</p></div>
-      <div class="how-step"><div class="n">2</div><h3>Le labo pilote la production</h3><p>Planification équipe, suivi des étapes, BL conformes et échanges centralisés.</p></div>
-      <div class="how-step"><div class="n">3</div><h3>Facturation et paiement fluides</h3><p>Facture générée, lien Stripe envoyé, paiement et statut automatiquement synchronisés.</p></div>
+      <div class="how-step"><div class="n">1</div><h3>Le cabinet crée sa fiche</h3><p>Le praticien saisit la commande, ajoute les informations utiles et joint les STL, PDF ou photos depuis son portail.</p></div>
+      <div class="how-step"><div class="n">2</div><h3>Le labo pilote sans ressaisie</h3><p>La demande arrive au bon endroit : planning, étapes, coursier, messages et production sont centralisés.</p></div>
+      <div class="how-step"><div class="n">3</div><h3>Livraison, facture, paiement</h3><p>BL, facture, lien Stripe et suivi cabinet restent connectés au même dossier patient anonymisé.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">Une alternative moderne aux logiciels historiques</h2>
+    <p class="section-sub">Vous n'avez pas besoin de tout remplacer d'un coup. Labosync peut d'abord devenir votre portail cabinet, puis prendre plus de place dans votre organisation.</p>
+    <div class="positioning">
+      <div class="positioning-card">
+        <h3>Ce que Labosync améliore tout de suite</h3>
+        <p>Moins de commandes incomplètes, moins de fichiers perdus, moins d'appels pour demander “où en est le cas ?”.</p>
+        <ul class="positioning-list">
+          <li>Fiche de commande créée directement par le cabinet</li>
+          <li>Dépôt de fichiers STL, OBJ, PLY, ZIP et PDF</li>
+          <li>Messagerie rattachée au cas, pas dispersée dans les emails</li>
+          <li>Messages de suivi pour réengager les cabinets</li>
+          <li>Suivi des coursiers et des livraisons</li>
+          <li>Paiement Stripe disponible sur les factures</li>
+        </ul>
+      </div>
+      <div class="positioning-card">
+        <h3>Pourquoi le tester même si vous avez déjà un outil</h3>
+        <p>Les logiciels installés rassurent. Labosync se positionne autrement : plus léger à démarrer, plus orienté cabinet, plus adapté aux flux numériques actuels.</p>
+        <ul class="positioning-list">
+          <li>Essai complet 14 jours, sans carte bancaire</li>
+          <li>Vos cabinets n'ont rien à payer</li>
+          <li>Vous pouvez commencer par quelques cabinets pilotes</li>
+          <li>Tarif fondateur à 49 €/mois pendant le lancement</li>
+          <li>Support direct pendant la mise en route</li>
+        </ul>
+      </div>
     </div>
   </div>
 </section>
@@ -198,8 +237,8 @@
       </div>
       <div class="feature">
         <div class="feature-icon">💰</div>
-        <h3>Facturation et encaissement intégrés</h3>
-        <p>Factures prêtes en quelques clics, lien de paiement immédiat, suivi du règlement sans ressaisie.</p>
+        <h3>Facturation et paiement intégrés</h3>
+        <p>Factures prêtes en quelques clics, lien Stripe immédiat, suivi du règlement sans ressaisie.</p>
       </div>
       <div class="feature feature-fe">
         <div class="feature-icon">📨</div>
@@ -209,7 +248,7 @@
       <div class="feature">
         <div class="feature-icon">🏥</div>
         <h3>Portail cabinet inclus</h3>
-        <p>Chaque cabinet dispose de son espace sécurisé pour consulter ses BL, factures et discuter avec vous.</p>
+        <p>Chaque cabinet dispose de son espace sécurisé pour créer une fiche de commande, joindre ses fichiers et suivre ses dossiers.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">📱</div>
@@ -219,17 +258,17 @@
       <div class="feature">
         <div class="feature-icon">💬</div>
         <h3>Messagerie cabinet contextualisée</h3>
-        <p>Les échanges sont rattachés aux cas, plus besoin de fouiller dans des emails ou WhatsApp.</p>
+        <p>Les échanges sont rattachés aux cas, plus besoin de fouiller dans les emails, SMS ou WhatsApp.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">📊</div>
-        <h3>Statistiques & suivi</h3>
-        <p>Tableau de bord, KPI de production, montants en attente, revenus mensuels. Pilotez votre labo d'un coup d'œil.</p>
+        <div class="feature-icon">🚚</div>
+        <h3>Coursiers et livraisons</h3>
+        <p>Organisez les tournées, suivez les livraisons et gardez les informations utiles au même endroit que les travaux.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">🔒</div>
-        <h3>Conçu pour la conformité</h3>
-        <p>Codes patients anonymes, architecture RGPD, export des données et contrôle des accès.</p>
+        <div class="feature-icon">📎</div>
+        <h3>Fichiers STL et pièces jointes</h3>
+        <p>Recevez les empreintes numériques et documents associés sans WeTransfer, sans fichiers éparpillés, avec accès sécurisé.</p>
       </div>
     </div>
   </div>
@@ -258,35 +297,37 @@
 
 <section class="section" id="pricing" style="background:#fff;">
   <div class="container">
-    <h2 class="section-title">Un tarif simple, rentable dès le 1er mois</h2>
-    <p class="section-sub">Un seul abonnement pour tout le labo, sans surprise.</p>
+    <h2 class="section-title">Tarif fondateur : 49 €/mois</h2>
+    <p class="section-sub">Un prix de lancement volontairement accessible pour les premiers laboratoires qui veulent moderniser leur flux cabinet.</p>
 
     <div class="pricing">
       <div class="plan">
-        <div class="plan-name">Mensuel</div>
+        <div class="plan-badge">Tarif lancement</div>
+        <div class="plan-name">Fondateur mensuel</div>
         <div class="plan-price">49&nbsp;€<small> / mois</small></div>
-        <div class="plan-note">Facturation mensuelle · sans engagement</div>
+        <div class="plan-note">Prix fondateur · sans engagement · tout le labo inclus</div>
         <ul>
           <li>Utilisateurs illimités</li>
           <li>Cabinets illimités</li>
+          <li>Fiches de commande cabinet</li>
+          <li>Envoi de fichiers STL et pièces jointes</li>
           <li>Facturation Stripe intégrée</li>
-          <li>Portail cabinet inclus</li>
-          <li>Mobile + desktop</li>
-          <li>Support par email</li>
+          <li>Gestion des coursiers</li>
+          <li>Support direct pendant la mise en route</li>
         </ul>
         <a href="app.html?signup=1" class="btn btn-primary" style="width:100%;">Essai gratuit 14 jours</a>
       </div>
 
       <div class="plan featured">
-        <div class="plan-badge">−20%</div>
-        <div class="plan-name">Annuel</div>
+        <div class="plan-badge">2 mois offerts</div>
+        <div class="plan-name">Fondateur annuel</div>
         <div class="plan-price">470,40&nbsp;€<small> / an</small></div>
         <div class="plan-note">Soit <strong>39,20 €/mois</strong> — 2 mois offerts</div>
         <ul>
           <li>Tout du plan mensuel</li>
           <li>Feuille de route PDP incluse</li>
           <li>Économie de 117,60 €</li>
-          <li>Support prioritaire</li>
+          <li>Support prioritaire de lancement</li>
           <li>Accès anticipé aux nouveautés</li>
           <li>Facturation annuelle</li>
         </ul>
@@ -295,7 +336,7 @@
     </div>
 
     <p style="text-align:center;font-size:.82rem;color:var(--ink-soft);margin-top:28px;">
-      TVA non applicable (art. 261-4-1° ter du CGI) · Paiement sécurisé par Stripe
+      Tarif de lancement réservé aux premiers laboratoires · TVA non applicable (art. 261-4-1° ter du CGI) · Paiement sécurisé par Stripe
     </p>
   </div>
 </section>
@@ -311,6 +352,7 @@
       <details><summary>Est-ce compatible avec mon logiciel de compta ?</summary><p>Vous pouvez exporter vos factures en PDF. L'export comptable au format FEC est en préparation, en complément de la future émission PDP.</p></details>
       <details><summary>Combien d'utilisateurs peuvent se connecter ?</summary><p>Illimité. Le prix est par laboratoire, pas par utilisateur. Tous vos techniciens et l'administration peuvent utiliser Labosync.</p></details>
       <details><summary>Y a-t-il une version mobile ?</summary><p>Oui, une version mobile optimisée pour iPhone et Android, synchronisée avec le desktop. Créez des travaux, générez des BL, facturez — depuis votre téléphone.</p></details>
+      <details><summary>Puis-je utiliser Labosync si j'ai déjà un autre logiciel ?</summary><p>Oui. Vous pouvez commencer par utiliser Labosync comme portail cabinet : demandes, fichiers STL, messages, suivi et documents. Vous n'êtes pas obligé de migrer toute votre organisation dès le premier jour.</p></details>
       <details><summary>Les cabinets dentaires doivent-ils payer pour accéder à leur portail ?</summary><p>Non. Le portail cabinet est inclus gratuitement dans votre abonnement. Vos dentistes se connectent sur labosync.app (→ Cabinet) avec le code et le mot de passe que vous leur transmettez — sans lien personnalisé obligatoire.</p></details>
       <details><summary>Puis-je changer de formule en cours de route ?</summary><p>Oui, vous pouvez passer du mensuel à l'annuel (ou inversement) à tout moment depuis votre espace client Stripe. Le calcul est fait au prorata.</p></details>
     </div>
@@ -320,8 +362,8 @@
 <section class="section">
   <div class="container">
     <div class="cta-section">
-      <h2>Essayez Labosync avec votre vrai flux métier</h2>
-      <p>14 jours gratuits, sans CB. En 2 minutes vous avez un compte, un cabinet, un cas et une facture test.</p>
+      <h2>Testez Labosync sur quelques cabinets pilotes</h2>
+      <p>14 jours gratuits, sans CB. Créez un labo, ajoutez un cabinet, envoyez une fiche avec fichier STL et voyez si le flux vous fait gagner du temps.</p>
       <a href="app.html?signup=1" class="btn btn-primary">🚀 Lancer mon essai gratuit</a>
     </div>
   </div>

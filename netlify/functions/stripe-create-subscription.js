@@ -155,7 +155,10 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         id: `sub_${userId}`,
         data: Object.assign({}, existing, {
-          userId, email, laboName: laboName || existing.laboName || '',
+          userId,
+          labUserId: userId,
+          email,
+          laboName: laboName || existing.laboName || '',
           stripeCustomerId: customerId,
           status: 'checkout_pending',
           plan,

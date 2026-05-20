@@ -1,7 +1,7 @@
 /**
  * Routage automatique Labosync mobile ↔ desktop.
  * Priorité : lb_env (choix explicite) > détection appareil.
- * Ne pas router : cabinet.html, ?noenv=1, entrée admin (?admin=1).
+ * Ne pas router : cabinet.html, admin-console.html, ?noenv=1, /admin.
  */
 (function (global) {
   function detect() {
@@ -26,9 +26,8 @@
   }
 
   function isAdminEntry() {
-    var qs = location.search || '';
     var path = (location.pathname || '').replace(/\/+$/, '');
-    return /[?&]admin=1(?:&|$)/.test(qs) || path === '/admin';
+    return path === '/admin' || /admin-console\.html$/i.test(path);
   }
 
   function shouldSkipRouting() {
@@ -51,13 +50,7 @@
       path === '/admin';
     var isMobile = /\/labo-mobile\.html$/i.test(path) || path === '/mobile';
 
-    if (isAdminEntry()) {
-      if (isMobile) {
-        location.replace('/app.html' + qs + hash);
-        return true;
-      }
-      return false;
-    }
+    if (isAdminEntry()) return false;
 
     var env = detect();
     if (env === 'mobile' && isApp && !isMobile) {

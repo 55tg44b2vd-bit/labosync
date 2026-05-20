@@ -17,6 +17,7 @@
 <script src="/vendor/supabase.min.js"></script>
 <script src="/scripts/lab-workspace.js"></script>
 <script src="/scripts/lab-workspace-mobile.js"></script>
+<script src="/scripts/lab-r2-files.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -56,6 +57,17 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;}
 .topbar-brand{font-weight:800;font-size:1rem;color:var(--ink);flex:1;}
 .topbar-brand span{color:var(--accent);}
+.topbar-brand-block{display:flex;align-items:center;gap:10px;flex:1;min-width:0;}
+.topbar-lab-logo{width:36px;height:36px;border-radius:10px;object-fit:contain;background:#fff;border:1px solid var(--border);flex-shrink:0;}
+.topbar-title-wrap{min-width:0;}
+.topbar-brand{font-weight:800;font-size:.92rem;color:var(--ink);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.topbar-brand span{color:var(--accent);}
+.sync-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:transparent;}
+.sync-dot--ok{background:var(--green);}
+.sync-dot--busy{background:var(--orange);animation:pulse-sync 1s ease infinite;}
+.sync-dot--err{background:var(--red);}
+@keyframes pulse-sync{50%{opacity:.35}}
+#sync-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 .topbar-sync{font-size:.65rem;color:var(--ink-soft);}
 .topbar-logout{background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:.72rem;color:var(--ink-soft);cursor:pointer;min-height:36px;}
 
@@ -327,7 +339,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
     <div class="env-btn-icon">🖥️</div>
     <div class="env-btn-text">
       <div class="env-btn-title">Version ordinateur</div>
-      <div class="env-btn-sub">Planning, programmation, gestion complète</div>
+      <div class="env-btn-sub">Gestion complète, planning atelier optionnel</div>
     </div>
   </button>
   <button class="env-btn" id="env-mobile">
@@ -347,15 +359,15 @@ input,select,textarea{font-size:16px;font-family:inherit;}
     <div class="mob-hub-cards">
       <button type="button" class="mob-hub-card mob-hub-card--admin" id="mob-hub-enter-admin" aria-describedby="mob-hub-admin-desc">
         <div class="mob-hub-card-icon" aria-hidden="true">📋</div>
-        <h2>Administratif</h2>
+        <h2>Gestion</h2>
         <p id="mob-hub-admin-desc">Créer des travaux, bons de livraison et factures.</p>
         <span class="mob-hub-tag">Code compta possible</span>
       </button>
       <button type="button" class="mob-hub-card mob-hub-card--prog" id="mob-hub-enter-prog" aria-describedby="mob-hub-prog-desc">
         <div class="mob-hub-card-icon" aria-hidden="true">🔬</div>
-        <h2>Programmation</h2>
-        <p id="mob-hub-prog-desc">Planifier les travaux saisis en administratif.</p>
-        <span class="mob-hub-tag">Équipe &amp; planning</span>
+        <h2>Atelier</h2>
+        <p id="mob-hub-prog-desc">Planning optionnel : techniciens et étapes (si activé dans Réglages).</p>
+        <span class="mob-hub-tag">Optionnel · Réglages</span>
       </button>
     </div>
     <p class="mob-hub-foot" id="mob-hub-foot"></p>
@@ -364,10 +376,17 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 <div id="mob-admin-pin-sheet" role="dialog" aria-modal="true" aria-labelledby="mob-pin-title">
   <div class="mob-pin-sheet">
     <h3 id="mob-pin-title" style="font-size:1.05rem;font-weight:700;margin-bottom:6px;">Code comptabilité</h3>
-    <p style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;line-height:1.45;">L'espace administratif est protégé. Entrez le code défini par votre responsable (4 à 8 chiffres).</p>
+    <p style="font-size:.8rem;color:var(--ink-soft);margin-bottom:16px;line-height:1.45;">L’espace Gestion est protégé. Entrez le code défini par votre responsable (4 à 8 chiffres).</p>
     <div class="field"><label for="mob-admin-pin-input">Code</label><input type="password" id="mob-admin-pin-input" inputmode="numeric" maxlength="8" autocomplete="one-time-code" style="font-size:20px;letter-spacing:.2em;text-align:center;"/></div>
     <p id="mob-admin-pin-err" role="alert" style="display:none;color:var(--red);font-size:.78rem;margin-bottom:10px;"></p>
     <button type="button" class="btn btn-primary" id="mob-admin-pin-ok">Valider</button>
+    <p style="margin:12px 0 0;text-align:center;"><button type="button" id="mob-pin-forgot" style="background:none;border:none;color:var(--accent);font-size:.78rem;font-weight:600;cursor:pointer;text-decoration:underline;">Code oublié ?</button></p>
+    <div id="mob-pin-recover" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+      <p style="font-size:.78rem;color:var(--ink-soft);margin-bottom:10px;line-height:1.45;">Confirmez avec le <strong>mot de passe Labosync</strong> du compte, puis choisissez un nouveau code.</p>
+      <div class="field"><label for="mob-pin-recover-password">Mot de passe du compte</label><input type="password" id="mob-pin-recover-password" autocomplete="current-password"/></div>
+      <div class="field"><label for="mob-pin-recover-new">Nouveau code (4 à 8 chiffres)</label><input type="password" id="mob-pin-recover-new" inputmode="numeric" maxlength="8"/></div>
+      <button type="button" class="btn btn-primary" id="mob-pin-recover-ok">Réinitialiser le code</button>
+    </div>
     <button type="button" class="btn btn-secondary" id="mob-admin-pin-cancel" style="margin-top:8px;">Retour au choix d'espace</button>
   </div>
 </div>
@@ -375,8 +394,15 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 <!-- ===== APP ===== -->
 <div id="app">
   <div class="topbar">
-    <div class="topbar-brand">Labo<span>sync</span> <span id="mob-workspace-badge" class="mob-ws-badge" style="display:none;">Administratif</span></div>
-    <div class="topbar-sync" id="sync-status"></div>
+    <div class="topbar-brand-block">
+      <img id="mob-lab-logo" class="topbar-lab-logo" alt="" style="display:none;"/>
+      <div class="topbar-title-wrap">
+        <div class="topbar-brand" id="mob-topbar-title">Labo<span>sync</span></div>
+        <span id="mob-workspace-badge" class="mob-ws-badge" style="display:none;">Gestion</span>
+      </div>
+    </div>
+    <span id="sync-dot" class="sync-dot" role="status" aria-label=""></span>
+    <div class="topbar-sync" id="sync-status" aria-live="polite"></div>
     <button type="button" id="btn-mob-workspace-switch" style="display:none;" aria-label="Changer d'espace">Espace</button>
     <button id="btn-topbar-profile" onclick="openProfileSheet()" aria-label="Profil et paramètres" style="background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent);border-radius:50%;width:36px;height:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;line-height:1;">👤</button>
   </div>
@@ -413,7 +439,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 
       <div class="mcard" id="home-ready-card" style="display:none;">
         <div class="mcard-header">
-          <div class="mcard-title">✅ Prêts à livrer</div>
+          <div class="mcard-title">📦 Sans bon de livraison</div>
           <button onclick="showView('livraisons')" style="background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:5px 10px;font-size:.7rem;font-weight:600;cursor:pointer;">Voir tout →</button>
         </div>
         <div id="home-ready"></div>
@@ -464,7 +490,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
         <div style="font-size:1.05rem;font-weight:700;">À programmer <span id="mob-prog-queue-cnt" style="color:var(--accent);"></span></div>
         <p style="font-size:.78rem;color:var(--ink-soft);margin-top:4px;line-height:1.45;">Videz la file en un geste. Pour le planning détaillé (techniciens, dates), utilisez la version ordinateur.</p>
       </div>
-      <p id="mob-prog-desktop-hint" class="mob-prog-hint" role="note">🖥️ Planning complet : version ordinateur (Réglages → Programmation).</p>
+      <p id="mob-prog-desktop-hint" class="mob-prog-hint" role="note">🖥️ Planning complet : version ordinateur (Réglages → Équipe et planning).</p>
       <div id="mob-prog-queue"></div>
     </div>
 
@@ -562,6 +588,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 
     <!-- ── MESSAGES ── -->
     <div class="view" id="view-messages">
+      <div id="msg-missing-section"></div>
       <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-bottom:12px;">Conversations avec les cabinets</div>
       <div id="msg-cab-list"></div>
     </div>
@@ -678,7 +705,11 @@ function genBLNum(){
   return 'BL-'+y+'-'+String(n).padStart(3,'0');
 }
 function isJobComplete(job){
-  if(!job.tasks||!job.tasks.length)return false;
+  if(typeof isJobCompleteForWorkflow==='function')return isJobCompleteForWorkflow(job);
+  if(!job.tasks||!job.tasks.length){
+    if(job.needsProg&&localStorage.getItem('lb_prog_actif')==='1')return false;
+    return true;
+  }
   return job.tasks.every(function(t){return !!t.done;});
 }
 function fmtDate(d){if(!d)return'';try{return new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});}catch(e){return d;}}
@@ -1255,19 +1286,112 @@ sbClient.auth.onAuthStateChange(async function(event,session){
 
 /* ── DATA SYNC ── */
 var _isBackgroundPoll=false;
+var _syncErrShownAt=0;
+var _mobileRestoreDone=false;
+var _lastMobileCloudSnapshot=null;
+var _savingMobile=false;
+function setMobSyncUi(state){
+  var dot=document.getElementById('sync-dot');
+  if(dot){
+    dot.className='sync-dot'+(state==='ok'?' sync-dot--ok':state==='busy'?' sync-dot--busy':state==='err'?' sync-dot--err':'');
+    dot.setAttribute('aria-label',state==='ok'?'Données à jour':state==='busy'?'Synchronisation…':state==='err'?'Connexion limitée':'');
+  }
+}
+function _mobileRecordKey(item){
+  return item&&typeof item==='object'?String(item.id||item.jobId||item.trackCode||''):'';
+}
+function _mobileRecordTime(item){
+  var raw=item&&(item.updatedAt||item.modifiedAt||item.savedAt||item.createdAt);
+  var t=new Date(raw||0).getTime();
+  return isNaN(t)?0:t;
+}
+function _mergeMobileRecords(localArr,remoteArr){
+  var map=Object.create(null);
+  function put(item){
+    var k=_mobileRecordKey(item);
+    if(!k)return;
+    var prev=map[k];
+    if(!prev||_mobileRecordTime(item)>=_mobileRecordTime(prev))map[k]=item;
+  }
+  (remoteArr||[]).forEach(put);
+  (localArr||[]).forEach(put);
+  return Object.keys(map).map(function(k){return map[k];});
+}
+function _mobileCountsFrom(data){
+  data=data||{};
+  var jobList=(data.jobs||jobs||[]).concat(data.queue||queue||[],data.archive||archive||[]);
+  return{
+    jobs:(data.jobs||jobs||[]).length,
+    queue:(data.queue||queue||[]).length,
+    archive:(data.archive||archive||[]).length,
+    cabinets:(data.cabinets||cabinets||[]).length,
+    documents:(data.documents||documents||[]).length,
+    bdl:(data.bdl||bdl||[]).length,
+    techs:Object.keys(data.techs||TECHS||{}).length,
+    customTypes:(data.customTypes||customTypes||[]).length,
+    programmedTasks:jobList.reduce(function(n,j){return n+((j&&j.tasks&&j.tasks.length)?j.tasks.length:0);},0)
+  };
+}
+function _captureMobileCloudSnapshot(data){
+  _lastMobileCloudSnapshot=_mobileCountsFrom(data||{});
+}
+function _isMobileDestructiveSave(){
+  if(!_lastMobileCloudSnapshot)return false;
+  var last=_lastMobileCloudSnapshot;
+  var curr=_mobileCountsFrom({});
+  var lastTotal=last.jobs+last.queue+last.archive+last.cabinets+last.documents+last.bdl;
+  var currTotal=curr.jobs+curr.queue+curr.archive+curr.cabinets+curr.documents+curr.bdl;
+  if(lastTotal>0&&currTotal===0)return true;
+  if(lastTotal>=5&&currTotal<lastTotal*0.2)return true;
+  if((last.techs||0)>0&&curr.techs===0)return true;
+  if((last.customTypes||0)>0&&curr.customTypes===0)return true;
+  if((last.programmedTasks||0)>0&&curr.programmedTasks===0&&((curr.jobs||0)+(curr.archive||0)>0))return true;
+  return false;
+}
+async function _fetchMobileCloudPayload(){
+  const r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+currentUser.id+'&select=data,updated_at',{
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_token}
+  });
+  if(!r.ok)return null;
+  const rows=await r.json();
+  return rows&&rows[0]?rows[0]:null;
+}
+function _mergeRemoteBeforeMobileSave(remote){
+  var p=remote&&remote.data?remote.data:null;
+  if(!p)return;
+  jobs=_mergeMobileRecords(jobs,p.jobs||[]);
+  queue=_mergeMobileRecords(queue,p.queue||[]);
+  archive=_mergeMobileRecords(archive,p.archive||[]);
+  cabinets=_mergeMobileRecords(cabinets,p.cabinets||[]);
+  bdl=_mergeMobileRecords(bdl,p.bdl||[]);
+  documents=_mergeMobileRecords(documents,p.documents||[]);
+  tarifs=_mergeMobileRecords(tarifs,p.tarifs||[]);
+  waiting=_mergeMobileRecords(waiting,p.waiting||[]);
+  bdc=_mergeMobileRecords(bdc,p.bdc||[]);
+  fourns=_mergeMobileRecords(fourns,p.fourns||[]);
+  if(!Object.keys(TECHS||{}).length&&p.techs)TECHS=p.techs;
+  if(!(customTypes||[]).length&&p.customTypes)customTypes=p.customTypes;
+  if(p.progActif!==undefined&&p.progActif!==null)localStorage.setItem('lb_prog_actif',p.progActif);
+}
 async function loadData(){
   if(!currentUser||!_token)return;
   const sync=document.getElementById('sync-status');
-  if(sync&&!_isBackgroundPoll)sync.textContent='⏳ Sync…';
+  if(!_isBackgroundPoll)setMobSyncUi('busy');
   try{
     const r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+currentUser.id+'&select=data,updated_at',{
       headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_token}
     });
+    if(!r.ok)throw new Error('HTTP '+r.status);
     const rows=await r.json();
-    if(!rows||!rows.length||!rows[0]||!rows[0].data){
-      if(sync)sync.textContent='Aucune donnée';
+    if(!rows||!rows.length||!rows[0]){
+      _mobileRestoreDone=true;
+      _captureMobileCloudSnapshot({});
+      setMobSyncUi('ok');
+      if(typeof updateMobTopbarBranding==='function')updateMobTopbarBranding();
+      renderAll();
       return;
     }
+    if(!rows[0].data)rows[0].data={version:2,jobs:[],cabinets:[],queue:[],documents:[]};
     const p=rows[0].data;
     _serverUpdatedAt=rows[0].updated_at;
     if(p.jobs)jobs=p.jobs;
@@ -1284,32 +1408,59 @@ async function loadData(){
     if(p.absences)absences=p.absences;
     if(p.bdc)bdc=p.bdc;
     if(p.fourns)fourns=p.fourns;
+    if(p.progActif!==undefined&&p.progActif!==null)localStorage.setItem('lb_prog_actif',p.progActif);
     if(p.laboName)localStorage.setItem('lb_name',p.laboName);
+    if(p.laboLogo)localStorage.setItem('lb_logo',p.laboLogo);
+    else if(p.laboLogo===null)localStorage.removeItem('lb_logo');
+    if(typeof updateMobTopbarBranding==='function')updateMobTopbarBranding();
     if(p.legalInfo){
       var li=p.legalInfo;
       ['raison','siret','adresse','tel','email','directeur','ce_num'].forEach(function(k){
         if(li[k])localStorage.setItem('lb_legal_'+k,li[k]);
       });
     }
+    _mobileRestoreDone=true;
+    _captureMobileCloudSnapshot(p);
     const hhmm=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-    if(sync)sync.textContent='✓ '+hhmm;
+    setMobSyncUi('ok');
     renderAll();
     if(typeof startMobChatRealtime==='function')startMobChatRealtime();
   }catch(e){
     console.error('loadData',e);
-    if(sync)sync.textContent='❌ Erreur sync';
+    setMobSyncUi('err');
+    if(Date.now()-_syncErrShownAt>60000){_syncErrShownAt=Date.now();toast('Connexion limitée — réessayez dans un instant','#d97706',4000);}
   }
 }
 
 async function saveData(){
   if(!currentUser||!_token)return;
+  if(_savingMobile)return;
+  if(!_mobileRestoreDone){
+    setMobSyncUi('err');
+    toast('Synchronisation initiale incomplète — rechargez avant de modifier.','var(--red)');
+    return;
+  }
   const sync=document.getElementById('sync-status');
-  if(sync)sync.textContent='💾 Sauvegarde…';
+  setMobSyncUi('busy');
+  _savingMobile=true;
   try{
+    if(_serverUpdatedAt){
+      var remote=await _fetchMobileCloudPayload();
+      if(remote&&remote.updated_at&&new Date(remote.updated_at).getTime()>new Date(_serverUpdatedAt).getTime()+1000){
+        _mergeRemoteBeforeMobileSave(remote);
+        _serverUpdatedAt=remote.updated_at;
+      }
+    }
+    if(_isMobileDestructiveSave()){
+      setMobSyncUi('err');
+      toast('Sauvegarde bloquée : risque de perte de données. Rechargez la page.','var(--red)');
+      return;
+    }
     const now=new Date().toISOString();
     const payload={
-      version:2,savedAt:now,
+      version:2,ownerUserId:currentUser.id,savedAt:now,
       laboName:localStorage.getItem('lb_name')||'',
+      laboLogo:localStorage.getItem('lb_logo')||'',
       jobs,archive,cabinets,
       queue,waiting,conges:conges||[],absences:absences||[],
       syns:syns||[],scanHist:scanHist||[],
@@ -1317,6 +1468,7 @@ async function saveData(){
       bdc,fourns,bdl,
       techs:TECHS,
       customTypes,
+      progActif:localStorage.getItem('lb_prog_actif')||'0',
       legalInfo:{
         raison:localStorage.getItem('lb_legal_raison')||'',
         siret:localStorage.getItem('lb_legal_siret')||'',
@@ -1339,14 +1491,18 @@ async function saveData(){
     });
     if(r.ok||r.status===201||r.status===204){
       _serverUpdatedAt=now;
+      _captureMobileCloudSnapshot(payload);
       const hhmm=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-      if(sync)sync.textContent='✓ '+hhmm;
+      setMobSyncUi('ok');
     }else{
       throw new Error('HTTP '+r.status);
     }
   }catch(e){
     console.error('saveData',e);
-    if(sync)sync.textContent='❌ Erreur';
+    setMobSyncUi('err');
+    toast('Sauvegarde impossible','var(--red)');
+  }finally{
+    _savingMobile=false;
   }
 }
 
@@ -1569,9 +1725,10 @@ async function _fetchWithTimeoutMobile(url,opts,timeoutMs){
 async function _fetchOrdersForCabMobile(portalId){
   if(!portalId||!_token)return [];
   try{
-    var r=await _fetchWithTimeoutMobile(SB_URL+'/rest/v1/labo_data?id=eq.orders_'+portalId+'&select=data',{
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_token}
+    var r=await _fetchWithTimeoutMobile('/.netlify/functions/portal?type=orders&portalId='+encodeURIComponent(portalId),{
+      headers:{'Authorization':'Bearer '+_token}
     },15000);
+    if(!r.ok)throw new Error('Lecture commandes '+r.status);
     var rows=await r.json();
     var list=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
     list.forEach(_migrateOrderToCase);
@@ -1585,11 +1742,16 @@ async function _fetchOrdersForCabMobile(portalId){
 async function _writeOrdersForCabMobile(portalId,list){
   if(!portalId||!_token)return;
   try{
-    await _fetchWithTimeoutMobile(SB_URL+'/rest/v1/labo_data',{
+    var cab=(cabinets||[]).find(function(c){return String(c.portalId||'').toLowerCase()===String(portalId||'').toLowerCase();});
+    var r=await _fetchWithTimeoutMobile('/.netlify/functions/portal',{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+_token,'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({id:'orders_'+portalId,data:{list:list,portalId:portalId,labUserId:currentUser?currentUser.id:null},updated_at:new Date().toISOString()})
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
+      body:JSON.stringify({action:'orders',portalId:portalId,list:list,cabId:cab&&cab.id?cab.id:null})
     },20000);
+    if(!r.ok){
+      var err=await r.json().catch(function(){return {};});
+      throw new Error(err.error||('Écriture commandes '+r.status));
+    }
   }catch(e){
     if(e.name==='AbortError')throw new Error('Connexion trop lente pour sauvegarder.');
     throw e;
@@ -1841,6 +2003,7 @@ function _renderFicheBlockMobileHTML(c,s,idx,isCurrent){
   var stepStatusBg={pending:'#fee2e2',accepted:'#dbeafe',in_progress:'#dbeafe',delivered:'#d1fae5',rejected:'#fce7e7'};
   var stepStatusFg={pending:'#dc2626',accepted:'#1d4ed8',in_progress:'#1d4ed8',delivered:'#047857',rejected:'#991b1b'};
   var dateStr=s.requestedAt?new Date(s.requestedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'—';
+  var shadeValue=(s.shadeValue||c.shadeValue||'').trim();
   var lbl=stepStatusLbl[s.status]||s.status;
   var bg=stepStatusBg[s.status]||'#f1f5f9';
   var fg=stepStatusFg[s.status]||'#475569';
@@ -1858,8 +2021,8 @@ function _renderFicheBlockMobileHTML(c,s,idx,isCurrent){
       '<span style="background:'+bg+';color:'+fg+';font-size:.6rem;font-weight:700;padding:2px 7px;border-radius:99px;margin-left:auto;">'+lbl+'</span>'+
     '</div>'+
     (s.description?'<div style="margin-bottom:8px;font-size:.84rem;line-height:1.5;background:#fff;border:1px solid '+(isCurrent?'#fecaca':'var(--border)')+';padding:8px 10px;border-radius:6px;white-space:pre-wrap;">'+esc(s.description)+'</div>':'')+
-    ((s.shadeValue||s.deliveryDate)?'<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px;font-size:.78rem;">'+
-      (s.shadeValue?'<div><strong>🎨</strong> <span style="font-family:monospace;background:#fff;padding:1px 6px;border-radius:4px;border:1px solid var(--border);">'+esc(s.shadeValue)+'</span></div>':'')+
+    ((shadeValue||s.deliveryDate)?'<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px;font-size:.78rem;">'+
+      (shadeValue?'<div><strong>🎨</strong> <span style="font-family:monospace;background:#fff;padding:1px 6px;border-radius:4px;border:1px solid var(--border);">'+esc(shadeValue)+'</span></div>':'')+
       (s.deliveryDate?'<div><strong>📅</strong> '+fmtDate(s.deliveryDate)+'</div>':'')+
     '</div>':'')+
     (s.notes?'<div style="margin-bottom:6px;font-size:.8rem;"><strong>📝 Notes :</strong><div style="background:#fff7ed;border:1px solid #fed7aa;padding:7px 9px;border-radius:5px;margin-top:3px;white-space:pre-wrap;">'+esc(s.notes)+'</div></div>':'')+
@@ -1869,7 +2032,37 @@ function _renderFicheBlockMobileHTML(c,s,idx,isCurrent){
       (s.rejectedAt?'<span style="color:var(--red);">✗ Refusée le '+new Date(s.rejectedAt).toLocaleDateString('fr-FR')+(s.rejectionReason?' — '+esc(s.rejectionReason):'')+'</span>':'')+
       (s.questionsAsked?'<span style="color:#c2410c;">❓ Précisions demandées'+(s.questionsAskedAt?' le '+new Date(s.questionsAskedAt).toLocaleDateString('fr-FR'):'')+'</span>':'')+
     '</div>':'')+
+    _renderStepFilesHtmlMobile(s.files)+
   '</div>';
+}
+
+function labR2HeadersMobile(){
+  return {'Content-Type':'application/json',Authorization:'Bearer '+(_token||'')};
+}
+function _renderStepFilesHtmlMobile(files){
+  if(!files||!files.length)return '';
+  return '<div style="margin-top:8px;">'+files.map(function(f){
+    var key=esc(f.storageKey||'');
+    var nm=esc(f.name||'fichier');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;margin-bottom:5px;">'+
+      '<span style="flex:1;font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🦷 '+nm+'</span>'+
+      '<button type="button" onclick="downloadLabR2FileMobile(\''+key+'\',\''+nm.replace(/'/g,"\\'")+'\')" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:.7rem;font-weight:600;">DL</button>'+
+    '</div>';
+  }).join('')+'</div>';
+}
+async function downloadLabR2FileMobile(storageKey,name){
+  if(!storageKey||typeof LabR2==='undefined'){toast('Fichier indisponible','var(--red)');return;}
+  try{
+    await LabR2.downloadFile({storageKey:storageKey,name:name||'fichier'},labR2HeadersMobile());
+  }catch(e){toast(e.message||'Erreur','var(--red)');}
+}
+function _copyStepFilesToJobMobile(job,step){
+  if(!step||!step.files||!step.files.length)return;
+  if(!job.attachments)job.attachments=[];
+  step.files.forEach(function(f){
+    if(!f||!f.storageKey)return;
+    job.attachments.push({id:f.id||('att_r2_'+Date.now()),type:'cabinet_scan',name:f.name||'fichier',mime:f.mime||'application/octet-stream',storageKey:f.storageKey,size:f.size||0,createdAt:f.uploadedAt||new Date().toISOString()});
+  });
 }
 
 function acceptOrderMobile(portalId,caseId,stepId){
@@ -2032,6 +2225,7 @@ async function confirmAcceptOrderMobile(){
     orderData:c,
     parentJobId:c.parentJobId||null
   };
+  _copyStepFilesToJobMobile(job,step);
   jobs.push(job);
 
   var cIdx=list.findIndex(function(x){return x.id===caseId;});
@@ -2123,6 +2317,32 @@ function getMissingItems(job){
 }
 function hasUnresolvedMissing(job){return getMissingItems(job).some(function(it){return !it.resolved;});}
 function unresolvedMissingCount(job){return getMissingItems(job).filter(function(it){return !it.resolved;}).length;}
+function _visibleMissingItems(){
+  var jobIds={};
+  var list=[];
+  (jobs||[]).forEach(function(j){
+    if(j&&j.id!=null)jobIds[String(j.id)]=true;
+    if(hasUnresolvedMissing(j))list.push(j);
+  });
+  (queue||[]).forEach(function(q){
+    if(!hasUnresolvedMissing(q))return;
+    if(q.jobId&&jobIds[String(q.jobId)])return;
+    list.push(q);
+  });
+  return list;
+}
+function _missingItemWorkKey(item){
+  return item&&item.jobId?String(item.jobId):String(item&&item.id||'');
+}
+function _syncLinkedMissingItem(item,itemId,apply){
+  var key=_missingItemWorkKey(item);
+  if(!key)return;
+  [].concat(jobs,queue||[]).forEach(function(other){
+    if(_missingItemWorkKey(other)!==key)return;
+    var linked=_ensureMissingItems(other).find(function(x){return x.id===itemId;});
+    if(linked)apply(linked);
+  });
+}
 function _ensureMissingItems(item){
   if(Array.isArray(item.missingInfoItems))return item.missingInfoItems;
   if(item.missingInfo&&!item.missingInfoResolvedAt){
@@ -2196,7 +2416,7 @@ function renderHomeMissing(){
   var el=document.getElementById('home-missing');
   var cnt=document.getElementById('home-missing-cnt');
   if(!el||!card)return;
-  var allItems=[].concat(jobs,queue||[]).filter(function(j){return hasUnresolvedMissing(j);});
+  var allItems=_visibleMissingItems();
   if(!allItems.length){card.style.display='none';return;}
   card.style.display='';
   var totalQ=0;allItems.forEach(function(j){totalQ+=unresolvedMissingCount(j);});
@@ -2253,8 +2473,11 @@ function resolveMissingItemMobile(jobId,itemId){
   if(!job)return;
   var its=_ensureMissingItems(job);
   var it=its.find(function(x){return x.id===itemId;});
-  if(it){it.resolved=true;it.resolvedAt=new Date().toISOString();}
-  saveData();toast('✅ Question résolue','var(--green)');renderAll();
+  if(it){
+    var now=new Date().toISOString();
+    _syncLinkedMissingItem(job,itemId,function(linked){linked.resolved=true;linked.resolvedAt=now;});
+  }
+  saveData();toast('✅ Question résolue','var(--green)');renderAll();renderMessagesMissingSectionMobile();
 }
 
 function resolveMissingInfo(jobId){
@@ -2268,17 +2491,17 @@ function resolveMissingInfo(jobId){
 
 function resolveAllMissingForCab(cabId){
   if(!cabId)return;
-  var all=[].concat(jobs,queue||[]).filter(function(j){return j.cabinet===cabId&&hasUnresolvedMissing(j);});
+  var all=_visibleMissingItems().filter(function(j){return j.cabinet===cabId&&hasUnresolvedMissing(j);});
   if(!all.length)return;
   var total=0;all.forEach(function(j){total+=unresolvedMissingCount(j);});
   if(!confirm('Marquer comme résolues les '+total+' question(s) ?'))return;
   var now=new Date().toISOString();
-  all.forEach(function(j){var its=_ensureMissingItems(j);its.forEach(function(it){if(!it.resolved){it.resolved=true;it.resolvedAt=now;}});});
+  [].concat(jobs,queue||[]).filter(function(j){return j.cabinet===cabId&&hasUnresolvedMissing(j);}).forEach(function(j){var its=_ensureMissingItems(j);its.forEach(function(it){if(!it.resolved){it.resolved=true;it.resolvedAt=now;}});});
   saveData();toast('✅ '+total+' questions résolues','var(--green)');renderAll();
 }
 
 function _missingJobsForCab(cabId){
-  return [].concat(jobs,queue||[]).filter(function(j){return j.cabinet===cabId&&hasUnresolvedMissing(j);});
+  return _visibleMissingItems().filter(function(j){return j.cabinet===cabId&&hasUnresolvedMissing(j);});
 }
 
 function _buildMissingMsgText(cabId){
@@ -2294,6 +2517,43 @@ function _buildMissingMsgText(cabId){
     return '👤 '+(j.patient||'?')+'  —  '+getJobTypeLabel(j)+'\n\n'+sub;
   });
   return 'Bonjour,\n\nJ\'ai quelques précisions à vous demander concernant vos derniers travaux :\n\n──────────────────\n\n'+blocks.join('\n\n──────────────────\n\n')+'\n\n──────────────────\n\nMerci d\'avance pour votre retour 🙏';
+}
+
+function renderMessagesMissingSectionMobile(){
+  var el=document.getElementById('msg-missing-section');if(!el)return;
+  var items=_visibleMissingItems();
+  if(!items.length){el.innerHTML='';return;}
+  var byCab={};
+  items.forEach(function(j){
+    var k=j.cabinet||'__none__';
+    if(!byCab[k])byCab[k]={cab:cabinets.find(function(c){return c.id===k;}),items:[]};
+    byCab[k].items.push(j);
+  });
+  var total=0;items.forEach(function(j){total+=unresolvedMissingCount(j);});
+  el.innerHTML='<div style="background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #c2410c;border-radius:12px;padding:12px;margin-bottom:16px;">'+
+    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;">'+
+      '<div><div style="font-weight:800;color:#7c2d12;font-size:.9rem;">📞 Questions à envoyer</div><div style="font-size:.72rem;color:#9a3412;margin-top:2px;">Relisez puis envoyez le message groupé au praticien.</div></div>'+
+      '<span style="background:#c2410c;color:#fff;border-radius:99px;padding:2px 8px;font-size:.66rem;font-weight:800;">'+total+'</span>'+
+    '</div>'+
+    Object.keys(byCab).map(function(k){
+      var g=byCab[k],cab=g.cab;
+      var rows=g.items.map(function(j){
+        var its=getMissingItems(j).filter(function(it){return !it.resolved;}).map(function(it){
+          return '<div style="display:flex;gap:6px;padding:4px 0 4px 12px;border-left:2px solid #fed7aa;margin-left:4px;">'+
+            '<div style="flex:1;min-width:0;font-size:.74rem;color:#c2410c;">'+_miCatIcon(it.category)+' <strong>'+esc(_miCatLabel(it.category).replace(/^[^ ]+\s/,''))+'</strong>'+(it.text?' : '+esc(it.text):'')+'</div>'+
+            '<button onclick="resolveMissingItemMobile(\''+esc(j.id)+'\',\''+esc(it.id)+'\')" style="background:#fff;border:1px solid #fed7aa;border-radius:5px;padding:2px 7px;color:var(--green);font-size:.66rem;">✓</button>'+
+          '</div>';
+        }).join('');
+        return '<div style="padding:6px 0;border-top:1px solid #fed7aa;"><div style="font-size:.78rem;font-weight:700;">'+esc(j.patient||'')+' · <span style="color:var(--ink-soft);font-weight:400;">'+esc(getJobTypeLabel(j))+'</span></div>'+its+'</div>';
+      }).join('');
+      return '<div style="background:#fff;border:1px solid #fed7aa;border-radius:10px;padding:10px;margin-top:8px;">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">'+
+          '<div style="font-weight:800;font-size:.82rem;">🦷 '+esc(cab?cab.name:'(Sans cabinet)')+'</div>'+
+          (cab?'<button onclick="sendMissingInfoMessage(\''+esc(cab.id)+'\')" style="background:#c2410c;color:#fff;border:none;border-radius:8px;padding:7px 9px;font-size:.7rem;font-weight:700;">Envoyer</button>':'')+
+        '</div>'+rows+
+      '</div>';
+    }).join('')+
+  '</div>';
 }
 
 async function aiPolishMessageMobile(rawText,cabName){
@@ -3248,11 +3508,12 @@ document.getElementById('btn-add-job').addEventListener('click',async function()
   var job={
     id:String(Date.now()),patient:lbl,type:items[0].type,tasks:tasks,nb:totalNb,items:items,
     urgent:urgent,note:note,deliveryDate:delivery,cabinet:cab,
-    createdAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId:''
+    createdAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId:'',
+    needsProg:localStorage.getItem('lb_prog_actif')==='1'
   };
   if(missingItems.length){job.missingInfoItems=missingItems;}
   jobs.push(job);
-  toast('✅ Travail ajouté : '+patient,'var(--green)');
+  toast(missingItems.length?'✅ Travail ajouté — question à envoyer dans Messages':'✅ Travail ajouté : '+patient,'var(--green)');
   document.getElementById('mj-patient').value='';
   document.getElementById('mj-note').value='';
   document.getElementById('mj-delivery').value='';
@@ -3367,6 +3628,7 @@ async function _postPortalChatMessage(portalId,payload){
 }
 
 async function renderMsgList(){
+  renderMessagesMissingSectionMobile();
   var el=document.getElementById('msg-cab-list');if(!el)return;
   if(!cabinets.length){
     el.innerHTML='<div class="empty"><div class="empty-icon">💬</div>Ajoutez des cabinets pour commencer à discuter</div>';
@@ -4029,6 +4291,7 @@ function openQuickJobSheet(){
       '<div class="form-check" style="margin:0 0 8px;"><input type="checkbox" id="qj-missing" onchange="toggleMissingPanel(\'qj\')"/><label for="qj-missing">❓ Infos manquantes (appel praticien)</label></div>'+
       '<div id="qj-missing-wrap" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:10px;">'+
         '<div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#c2410c;margin-bottom:8px;">Que manque-t-il ?</div>'+
+        '<div style="background:#fff;border:1px solid #fed7aa;border-radius:8px;padding:9px 10px;margin-bottom:10px;font-size:.76rem;color:#7c2d12;line-height:1.4;">La question ne part pas automatiquement. Après ajout, ouvrez <strong>Messages → Questions à envoyer</strong> pour relire et envoyer au praticien.</div>'+
         '<div id="qj-missing-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>'+
         '<div id="qj-missing-customs" style="margin-top:10px;display:none;"></div>'+
       '</div>'+
@@ -4075,7 +4338,7 @@ function openQuickJobSheet(){
     if(ws==='admin'&&typeof addMobileAdminJob==='function'){
       if(!addMobileAdminJob({patient:lbl,items:items,cabinet:cab,deliveryDate:delivery,note:note,urgent:urgent,missingItems:missingItems}))return;
       overlay.remove();
-      toast('✅ Travail enregistré','var(--green)');
+      toast(missingItems.length?'✅ Travail enregistré — question à envoyer dans Messages':'✅ Travail enregistré','var(--green)');
       await saveData();
       if(cab){var c2=cabinets.find(function(c){return c.id===cab;});if(c2)publishPortal(c2);}
       renderAll();
@@ -4094,7 +4357,7 @@ function openQuickJobSheet(){
     jobs.push(job);
     if(cab)localStorage.setItem('lb_last_cab',cab);
     overlay.remove();
-    toast('✅ Travail ajouté : '+patient,'var(--green)');
+    toast(missingItems.length?'✅ Travail ajouté — question à envoyer dans Messages':'✅ Travail ajouté : '+patient,'var(--green)');
     await saveData();
     if(cab){var cabObj=cabinets.find(function(c){return c.id===cab;});if(cabObj)publishPortal(cabObj);}
     renderAll();

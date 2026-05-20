@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Console admin — Labosync</title>
+<meta name="robots" content="noindex,nofollow"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  :root{--accent:#1e3a5f;--accent-light:#2563eb;--ink:#0f172a;--ink-soft:#64748b;--bg:#f1f5f9;--border:#e2e8f0;--surface:#fff;--danger:#b91c1c;--ok:#166534;--warn:#92400e;}
+  body{font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;}
+  code,.mono{font-family:ui-monospace,monospace;font-size:.78rem;background:#f1f5f9;padding:2px 6px;border-radius:4px;}
+  #login-screen{display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px;}
+  .login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px 32px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(15,23,42,.08);}
+  .login-card h1{font-size:1.35rem;font-weight:800;margin-bottom:6px;}
+  .login-card .sub{font-size:.86rem;color:var(--ink-soft);margin-bottom:24px;line-height:1.5;}
+  .fl{margin-bottom:14px;}
+  .fl label{display:block;font-size:.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
+  .fl input{width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.95rem;font-family:inherit;}
+  #login-error{display:none;font-size:.82rem;color:var(--danger);margin-bottom:12px;padding:10px;background:#fef2f2;border-radius:8px;}
+  .btn-login{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit;}
+  #app-screen{display:none;min-height:100vh;}
+  .topbar{background:var(--accent);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .topbar h1{font-size:1rem;font-weight:700;}
+  .topbar-meta{font-size:.8rem;opacity:.85;}
+  .topbar-actions{display:flex;gap:8px;}
+  .btn{padding:8px 14px;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;border:none;font-family:inherit;}
+  .btn-ghost{background:rgba(255,255,255,.15);color:#fff;}
+  .main{padding:20px;max-width:1500px;margin:0 auto;}
+  #global-msg{min-height:20px;font-size:.85rem;margin-bottom:12px;font-weight:500;}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px;margin-bottom:16px;}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 10px;text-align:center;cursor:pointer;transition:box-shadow .15s,border-color .15s;}
+  .stat:hover{border-color:var(--accent-light);box-shadow:0 4px 12px rgba(37,99,235,.1);}
+  .stat.on{border-color:var(--accent-light);background:#eff6ff;}
+  .stat-n{font-size:1.45rem;font-weight:800;color:var(--accent);}
+  .stat.stat-alert .stat-n{color:var(--danger);}
+  .stat-l{font-size:.68rem;color:var(--ink-soft);margin-top:4px;text-transform:uppercase;letter-spacing:.03em;}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+  .tab-btn{padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-weight:600;font-size:.84rem;cursor:pointer;font-family:inherit;}
+  .tab-btn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .tab-panel{display:none;}
+  .tab-panel.on{display:block;}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;align-items:center;}
+  .toolbar input,.toolbar select{padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.88rem;font-family:inherit;background:#fff;}
+  .toolbar input{flex:1;min-width:160px;}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:auto;}
+  table{width:100%;border-collapse:collapse;font-size:.84rem;}
+  th,td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top;}
+  th{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);background:#f8fafc;font-weight:600;position:sticky;top:0;}
+  tr.user-row{cursor:pointer;}
+  tr.user-row:hover{background:#f8fafc;}
+  tr.user-row.on{background:#eff6ff;}
+  .email-cell{font-weight:600;}
+  .id-cell{font-size:.7rem;color:var(--ink-soft);}
+  .tag{display:inline-block;background:#e0e7ff;color:#3730a3;font-size:.68rem;padding:2px 7px;border-radius:4px;margin:1px 2px 1px 0;}
+  .alert-dots{font-size:.9rem;letter-spacing:1px;}
+  .btn-sm{padding:5px 9px;font-size:.76rem;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-weight:600;}
+  .badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:.7rem;font-weight:600;}
+  .st-active{background:#dcfce7;color:#166534;}
+  .st-trial{background:#dbeafe;color:#1e40af;}
+  .st-warn{background:#fef3c7;color:var(--warn);}
+  .st-blocked{background:#fee2e2;color:#991b1b;}
+  .st-muted{background:#f1f5f9;color:#64748b;}
+  .st-none{background:#f1f5f9;color:#94a3b8;}
+  .audit-list{font-size:.84rem;}
+  .audit-item{padding:12px;border-bottom:1px solid var(--border);}
+  .audit-item:last-child{border-bottom:none;}
+  .audit-meta{font-size:.72rem;color:var(--ink-soft);margin-bottom:4px;}
+  #detail-panel{position:fixed;top:0;right:0;width:100%;max-width:520px;height:100%;background:var(--surface);box-shadow:-8px 0 32px rgba(15,23,42,.15);z-index:100;transform:translateX(100%);transition:transform .2s;display:flex;flex-direction:column;}
+  #detail-panel.open{transform:translateX(0);}
+  #detail-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:99;display:none;}
+  #detail-backdrop.open{display:block;}
+  .detail-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  #detail-close{background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--ink-soft);}
+  #detail-body{flex:1;overflow:auto;padding:14px 16px;}
+  .detail-section{margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+  .detail-section:last-child{border-bottom:none;}
+  .detail-section h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:10px;}
+  .detail-section p,.detail-section li{font-size:.84rem;margin-bottom:5px;line-height:1.45;}
+  .health-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .health-item{font-size:.78rem;padding:8px;border-radius:8px;background:#f8fafc;}
+  .health-item.ok{background:#dcfce7;color:#166534;}
+  .health-item.bad{background:#fee2e2;color:#991b1b;}
+  .action-grid{display:flex;flex-direction:column;gap:6px;}
+  .btn-a{background:#166534;color:#fff;width:100%;text-align:left;padding:10px 12px;}
+  .btn-b{background:#e2e8f0;color:var(--ink);width:100%;text-align:left;padding:10px 12px;}
+  .btn-danger{background:#fee2e2;color:var(--danger);width:100%;text-align:left;padding:10px 12px;}
+  .btn-link{background:transparent;color:var(--accent-light);text-decoration:underline;padding:6px 0;font-size:.82rem;}
+  .note-templates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+  .note-tpl{font-size:.72rem;padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:pointer;}
+  .note-item{background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;font-size:.82rem;}
+  .note-meta{font-size:.7rem;color:var(--ink-soft);margin-bottom:4px;}
+  .err-item{font-size:.78rem;padding:8px;background:#fef2f2;border-radius:6px;margin-bottom:6px;color:#7f1d1d;}
+  .copy-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;}
+  .tags-edit{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .tags-edit input{flex:1;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.82rem;}
+  @media(max-width:700px){#detail-panel{max-width:100%;}}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <h1>Console Labosync</h1>
+    <p class="sub">Administration plateforme &amp; support clients. Compte listé dans <code>ADMIN_EMAILS</code>.</p>
+    <p id="login-error" role="alert"></p>
+    <form id="login-form">
+      <div class="fl"><label for="login-email">Email</label><input type="email" id="login-email" autocomplete="username" required/></div>
+      <div class="fl"><label for="login-password">Mot de passe</label><input type="password" id="login-password" autocomplete="current-password" required/></div>
+      <div class="fl" id="secret-wrap" style="display:none;">
+        <label for="login-secret">Code console</label>
+        <input type="password" id="login-secret" autocomplete="off" placeholder="ADMIN_CONSOLE_SECRET"/>
+      </div>
+      <button type="submit" class="btn-login" id="btn-login">Se connecter</button>
+    </form>
+    <p style="margin-top:16px;font-size:.78rem;color:var(--ink-soft);text-align:center;"><a href="index.html">← Site</a></p>
+  </div>
+</div>
+
+<div id="app-screen">
+  <header class="topbar">
+    <div>
+      <h1>Labosync — Admin &amp; support</h1>
+      <p class="topbar-meta" id="admin-user-label"></p>
+    </div>
+    <div class="topbar-actions">
+      <button type="button" class="btn btn-ghost" id="btn-export">Export CSV</button>
+      <button type="button" class="btn btn-ghost" id="btn-refresh">Actualiser</button>
+      <button type="button" class="btn btn-ghost" id="btn-logout">Déconnexion</button>
+    </div>
+  </header>
+  <main class="main">
+    <p id="global-msg"></p>
+    <div class="stats" id="stats-row">
+      <div class="stat" data-preset=""><div class="stat-n" id="stat-users">—</div><div class="stat-l">Comptes</div></div>
+      <div class="stat stat-alert" data-preset="attention"><div class="stat-n" id="stat-attention">—</div><div class="stat-l">À traiter</div></div>
+      <div class="stat" data-preset="trial_expiring"><div class="stat-n" id="stat-trial-soon">—</div><div class="stat-l">Essai &lt;7j</div></div>
+      <div class="stat"><div class="stat-n" id="stat-active">—</div><div class="stat-l">Actifs</div></div>
+      <div class="stat"><div class="stat-n" id="stat-trial">—</div><div class="stat-l">En essai</div></div>
+      <div class="stat" data-preset="past_due"><div class="stat-n" id="stat-pastdue">—</div><div class="stat-l">Impayés</div></div>
+      <div class="stat" data-preset="inactive"><div class="stat-n" id="stat-inactive">—</div><div class="stat-l">Inactifs 30j</div></div>
+      <div class="stat" data-preset="blocked"><div class="stat-n" id="stat-blocked">—</div><div class="stat-l">Bloqués</div></div>
+    </div>
+    <div class="tabs">
+      <button type="button" class="tab-btn on" data-tab="accounts">Comptes</button>
+      <button type="button" class="tab-btn" data-tab="attention">À traiter</button>
+      <button type="button" class="tab-btn" data-tab="activity">Journal d’activité</button>
+    </div>
+    <div id="panel-accounts" class="tab-panel on">
+      <div class="toolbar">
+        <input type="search" id="search-input" placeholder="Email, ID, tag…"/>
+        <select id="filter-status">
+          <option value="">Tous statuts</option>
+          <option value="active">Actif</option>
+          <option value="trialing">Essai</option>
+          <option value="past_due">Impayé</option>
+          <option value="canceled">Annulé</option>
+          <option value="blocked">Bloqué</option>
+        </select>
+        <select id="filter-preset">
+          <option value="">Tous comptes</option>
+          <option value="attention">À traiter</option>
+          <option value="trial_expiring">Essai expire bientôt</option>
+          <option value="trial_expired">Essai expiré</option>
+          <option value="past_due">Impayés</option>
+          <option value="inactive">Inactifs 30j+</option>
+          <option value="email_unconfirmed">Email non confirmé</option>
+          <option value="checkout">Checkout en cours</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>Compte</th><th>Statut</th><th>Fin essai</th><th>Connexion</th><th></th></tr></thead>
+          <tbody id="users-tbody"><tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b;">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="panel-attention" class="tab-panel">
+      <p style="font-size:.86rem;color:var(--ink-soft);margin-bottom:12px;">Comptes nécessitant une action (essai, impayé, inactivité, email non confirmé…).</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>Compte</th><th>Alertes</th><th>Statut</th><th></th></tr></thead>
+          <tbody id="attention-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="panel-activity" class="tab-panel">
+      <div class="table-wrap audit-list" id="audit-list"><p style="padding:20px;color:#64748b;">Chargement du journal…</p></div>
+    </div>
+  </main>
+</div>
+
+<div id="detail-backdrop"></div>
+<aside id="detail-panel" role="dialog">
+  <div class="detail-head">
+    <h2 id="detail-title">Fiche support</h2>
+    <button type="button" id="detail-close" aria-label="Fermer">×</button>
+  </div>
+  <div id="detail-body"></div>
+</aside>
+
+<script src="/vendor/supabase.min.js"></script>
+<script src="/scripts/admin-console-ui.js"></script>
+</body>
+</html>

@@ -7,6 +7,12 @@
     "test": "node tests/smoke-functions.cjs",
     "test:smoke": "node tests/smoke-functions.cjs",
     "verify:functions": "node scripts/verify-netlify-functions.cjs",
-    "predeploy": "npm run verify:functions && npm test"
+    "backup:deploy": "node scripts/create-deploy-backup.cjs --reason manual",
+    "backup:list": "node scripts/create-deploy-backup.cjs --list",
+    "predeploy": "npm run backup:deploy && npm run verify:functions && npm test"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1050.0",
+    "@aws-sdk/s3-request-presigner": "^3.1050.0"
   }
 }

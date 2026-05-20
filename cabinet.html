@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="/vendor/supabase.min.js"></script>
+<script src="/scripts/lab-r2-files.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 html{font-size:17px;} /* +6% pour lisibilité utilisateurs 60+ */
@@ -828,6 +829,73 @@ let _orderForm={
 let _orderStep=1; // étape courante du wizard (1-4)
 let _orderValMsgs=[]; // erreurs de validation (affichage inline, pas d'alert)
 var _cabDraftBannerPending=false; // true une fois à l'ouverture de l'onglet si brouillon restauré
+var _orderPendingFiles=[]; // {file: File} en attente d'upload R2 à l'envoi
+var _addStepPendingFiles=[]; // fichiers pour « nouvelle étape » sur cas existant
+
+function _orderFilesHtml(list, removeFn){
+  if(!list.length)return '<p style="font-size:.78rem;color:var(--ink-soft);margin:0;">Aucun fichier pour l\'instant.</p>';
+  return list.map(function(item,i){
+    var f=item.file||item;
+    var name=f.name||item.name||'fichier';
+    var size=typeof LabR2!=='undefined'?LabR2.humanSize(f.size||item.size||0):(f.size||'')+' o';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'+
+      '<span style="font-size:1.1rem;">🦷</span>'+
+      '<span style="flex:1;font-size:.82rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(name)+'</span>'+
+      '<span style="font-size:.72rem;color:var(--ink-soft);">'+esc(size)+'</span>'+
+      '<button type="button" onclick="'+removeFn+'('+i+')" style="background:none;border:none;color:#b91c1c;cursor:pointer;font-size:1rem;">×</button>'+
+    '</div>';
+  }).join('');
+}
+
+function _onOrderFilesSelected(input){
+  if(!input||!input.files)return;
+  Array.prototype.forEach.call(input.files,function(file){
+    try{
+      if(typeof LabR2!=='undefined'){
+        var ext=LabR2.extOf(file.name);
+        if(LabR2.ALLOWED_EXT.indexOf(ext)<0){showToast('Format .'+ext+' non autorisé','#c2410c');return;}
+        if(file.size>LabR2.MAX_BYTES){showToast('Fichier trop volumineux (max 150 Mo)','#c2410c');return;}
+      }
+      _orderPendingFiles.push({file:file});
+    }catch(e){showToast(e.message,'#c2410c');}
+  });
+  input.value='';
+  var el=document.getElementById('of-files-list');
+  if(el)el.innerHTML=_orderFilesHtml(_orderPendingFiles,'_removeOrderPendingFile');
+}
+
+function _removeOrderPendingFile(i){
+  _orderPendingFiles.splice(i,1);
+  var el=document.getElementById('of-files-list');
+  if(el)el.innerHTML=_orderFilesHtml(_orderPendingFiles,'_removeOrderPendingFile');
+}
+
+async function _uploadPendingFilesToR2(portalId,caseId,stepId){
+  if(!_orderPendingFiles.length)return [];
+  if(typeof LabR2==='undefined')throw new Error('Module fichiers non chargé');
+  var uploaded=[];
+  for(var i=0;i<_orderPendingFiles.length;i++){
+    var item=_orderPendingFiles[i];
+    if(!item||!item.file)continue;
+    showToast('Envoi '+item.file.name+'… ('+(i+1)+'/'+_orderPendingFiles.length+')','#2563eb');
+    var meta=await LabR2.uploadFile(item.file,{portalId:portalId,caseId:caseId,stepId:stepId},_portalCabHeaders());
+    uploaded.push(meta);
+  }
+  return uploaded;
+}
+
+async function _uploadAddStepFilesToR2(portalId,caseId,stepId){
+  if(!_addStepPendingFiles.length)return [];
+  var uploaded=[];
+  for(var i=0;i<_addStepPendingFiles.length;i++){
+    var item=_addStepPendingFiles[i];
+    if(!item||!item.file)continue;
+    showToast('Envoi '+item.file.name+'…','#2563eb');
+    var meta=await LabR2.uploadFile(item.file,{portalId:portalId,caseId:caseId,stepId:stepId},_portalCabHeaders());
+    uploaded.push(meta);
+  }
+  return uploaded;
+}
 
 // Migration : convertit une ancienne commande (single-fiche) en "cas" avec 1 étape
 function _migrateOrderToCase(o){
@@ -1040,6 +1108,14 @@ function _stepContent(){
       '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">📝 Notes &amp; instructions particulières</label>'+
       '<textarea id="of-firststep-notes" placeholder="Ex: Allergie au métal · Prévoir un essai esthétique · Précisions sur la prép…" oninput="_orderForm.firstStep.notes=this.value;_saveDraft();" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:90px;resize:vertical;">'+esc(_orderForm.firstStep.notes)+'</textarea>'+
     '</div>'+
+    '<div style="margin-bottom:14px;padding:14px;border:1.5px dashed #93c5fd;border-radius:10px;background:#f8fafc;">'+
+      '<div style="font-size:.78rem;font-weight:700;color:#1e40af;margin-bottom:8px;">🦷 Empreintes numériques (STL, OBJ, PLY…)</div>'+
+      '<p style="font-size:.76rem;color:#64748b;margin:0 0 10px;line-height:1.45;">Joignez les fichiers à cette demande. Le laboratoire les retrouvera sur la fiche (max 150 Mo / fichier).</p>'+
+      '<div id="of-files-list">'+_orderFilesHtml(_orderPendingFiles,'_removeOrderPendingFile')+'</div>'+
+      '<label style="display:inline-block;margin-top:8px;background:#2563eb;color:#fff;padding:9px 14px;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;">'+
+        '+ Ajouter des fichiers<input type="file" id="of-files-input" multiple accept=".stl,.obj,.ply,.zip,.pdf,.3mf,.7z,.rar" style="display:none;" onchange="_onOrderFilesSelected(this)"/>'+
+      '</label>'+
+    '</div>'+
     '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-top:16px;font-size:.82rem;color:#1e40af;">💡 Cliquez sur <strong>« Voir l\'aperçu »</strong> pour vérifier votre fiche avant l\'envoi définitif au laboratoire.</div>'+
   '</div>';
 }
@@ -1159,9 +1235,33 @@ function resetOrderForm(){
   if(!confirm('Effacer la fiche en cours et repartir vierge ?'))return;
   _orderValMsgs=[];
   _orderForm={patient:{name:'',sexe:'',age:''},finalGoal:'',teeth:{},links:{},shadeType:'vita',shadeValue:'',firstStep:{description:'',deliveryDate:'',notes:''}};
+  _orderPendingFiles=[];
   _orderStep=1;
   _clearDraft();
   renderOrderForm();
+}
+
+function _onAddStepFilesSelected(input){
+  if(!input||!input.files)return;
+  Array.prototype.forEach.call(input.files,function(file){
+    try{
+      if(typeof LabR2!=='undefined'){
+        var ext=LabR2.extOf(file.name);
+        if(LabR2.ALLOWED_EXT.indexOf(ext)<0){showToast('Format .'+ext+' non autorisé','#c2410c');return;}
+        if(file.size>LabR2.MAX_BYTES){showToast('Fichier trop volumineux (max 150 Mo)','#c2410c');return;}
+      }
+      _addStepPendingFiles.push({file:file});
+    }catch(e){showToast(e.message,'#c2410c');}
+  });
+  input.value='';
+  var el=document.getElementById('as-files-list');
+  if(el)el.innerHTML=_orderFilesHtml(_addStepPendingFiles,'_removeAddStepPendingFile');
+}
+
+function _removeAddStepPendingFile(i){
+  _addStepPendingFiles.splice(i,1);
+  var el=document.getElementById('as-files-list');
+  if(el)el.innerHTML=_orderFilesHtml(_addStepPendingFiles,'_removeAddStepPendingFile');
 }
 
 function _renderToothChartReadonlyCabinet(teeth,links){
@@ -1400,6 +1500,7 @@ function showOrderPreview(){
           '<div style="font-size:.92rem;font-weight:600;background:#fff;border:1px solid #fed7aa;padding:10px 12px;border-radius:7px;white-space:pre-wrap;">'+esc(o.firstStep.description)+'</div>'+
           (o.firstStep.deliveryDate?'<div style="font-size:.84rem;margin-top:8px;"><strong>📅 Livraison souhaitée :</strong> '+new Date(o.firstStep.deliveryDate+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})+'</div>':'')+
           (o.firstStep.notes?'<div style="font-size:.84rem;margin-top:8px;"><strong>📝 Notes :</strong><div style="background:#fff;border:1px solid #fed7aa;padding:8px 10px;border-radius:6px;margin-top:4px;white-space:pre-wrap;">'+esc(o.firstStep.notes)+'</div></div>':'')+
+          (_orderPendingFiles.length?'<div style="margin-top:12px;"><div style="font-size:.74rem;font-weight:700;color:#64748b;margin-bottom:6px;">🦷 FICHIERS JOINTS ('+_orderPendingFiles.length+')</div>'+_orderFilesHtml(_orderPendingFiles,'_removeOrderPendingFile')+'</div>':'')+
         '</div>'+
       '</div>'+
       '<div style="padding:14px 22px;border-top:1px solid #e2e8f0;display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;flex-shrink:0;background:#f8fafc;">'+
@@ -1449,6 +1550,11 @@ async function submitOrder(){
     updatedAt:now
   };
   try{
+    if(_orderPendingFiles.length){
+      showToast('Envoi des fichiers…','#2563eb');
+      newCase.steps[0].files=await _uploadPendingFilesToR2(sessionPortalId,caseId,stepId);
+      _orderPendingFiles=[];
+    }
     const existing=await _fetchPortalOrders();
     existing.unshift(newCase);
     await _savePortalOrders(existing);
@@ -1456,6 +1562,7 @@ async function submitOrder(){
     _portalOrdersCache=null;
     _orderValMsgs=[];
     _orderForm={patient:{name:'',sexe:'',age:''},finalGoal:'',teeth:{},links:{},shadeType:'vita',shadeValue:'',firstStep:{description:'',deliveryDate:'',notes:''}};
+    _orderPendingFiles=[];
     _orderStep=1;
     var pv=document.getElementById('order-preview-overlay');if(pv)pv.remove();
     renderOrderForm();
@@ -1468,6 +1575,7 @@ async function submitOrder(){
 
 // Ajouter une étape à un cas existant
 async function addStepToCase(caseId){
+  _addStepPendingFiles=[];
   const list=await _loadCabinetOrders();
   const c=list.find(function(x){return x.id===caseId;});
   if(!c){showToast('Cas introuvable','#c2410c');return;}
@@ -1512,6 +1620,11 @@ async function addStepToCase(caseId){
         '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">📝 Notes &amp; instructions</label>'+
         '<textarea id="as-notes" placeholder="Précisions éventuelles…" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:70px;resize:vertical;"></textarea>'+
       '</div>'+
+      '<div style="margin-bottom:14px;padding:14px;border:1.5px dashed #93c5fd;border-radius:10px;background:#f8fafc;">'+
+        '<div style="font-size:.78rem;font-weight:700;color:#1e40af;margin-bottom:8px;">🦷 Empreintes numériques</div>'+
+        '<div id="as-files-list">'+_orderFilesHtml(_addStepPendingFiles,'_removeAddStepPendingFile')+'</div>'+
+        '<label style="display:inline-block;margin-top:8px;background:#2563eb;color:#fff;padding:9px 14px;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;">+ Ajouter des fichiers<input type="file" id="as-files-input" multiple accept=".stl,.obj,.ply,.zip,.pdf,.3mf,.7z,.rar" style="display:none;" onchange="_onAddStepFilesSelected(this)"/></label>'+
+      '</div>'+
     '</div>'+
     '<div style="padding:14px 22px;border-top:1px solid #e2e8f0;display:flex;gap:10px;justify-content:flex-end;flex-shrink:0;background:#f8fafc;">'+
       '<button onclick="document.getElementById(\'add-step-overlay\').remove()" style="background:none;border:1px solid #e2e8f0;color:#64748b;border-radius:8px;padding:10px 16px;font-size:.85rem;cursor:pointer;">Annuler</button>'+
@@ -1535,7 +1648,7 @@ async function confirmAddStep(caseId){
     _migrateOrderToCase(list[idx]);
     const stepId='step_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
     const now=new Date().toISOString();
-    list[idx].steps.push({
+    var newStep={
       id:stepId,
       description:desc,
       deliveryDate:date,
@@ -1546,7 +1659,13 @@ async function confirmAddStep(caseId){
       jobId:null,blId:null,
       requestedAt:now,
       acceptedAt:null,deliveredAt:null,rejectedAt:null
-    });
+    };
+    if(_addStepPendingFiles.length){
+      showToast('Envoi des fichiers…','#2563eb');
+      newStep.files=await _uploadAddStepFilesToR2(sessionPortalId,caseId,stepId);
+      _addStepPendingFiles=[];
+    }
+    list[idx].steps.push(newStep);
     list[idx].updatedAt=now;
     await _savePortalOrders(list);
     _portalOrdersCache=null;

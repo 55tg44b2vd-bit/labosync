@@ -119,6 +119,7 @@ exports.handler = async (event) => {
 
     await upsert(`sub_${userId}`, Object.assign({}, existing, {
       userId,
+      labUserId: userId,
       email: email || existing.email || '',
       stripeCustomerId: sub.customer,
       stripeSubscriptionId: sub.id,

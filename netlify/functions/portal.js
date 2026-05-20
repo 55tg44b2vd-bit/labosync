@@ -313,8 +313,8 @@ exports.handler = async (event) => {
       if (!auth) {
         return { statusCode: 401, headers, body: JSON.stringify({ error: 'Accès portail refusé' }) };
       }
-      if (auth.role !== 'cabinet') {
-        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Seul le cabinet peut soumettre des commandes ici' }) };
+      if (auth.role !== 'cabinet' && auth.role !== 'lab') {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Accès commandes non autorisé' }) };
       }
 
       const normalizedId = auth.portalId;
@@ -323,6 +323,9 @@ exports.handler = async (event) => {
       const portalRow = await readRow(`portal_${normalizedId}`);
       if (portalRow.ok && portalRow.rows[0]?.data?.labUserId) {
         labUserId = portalRow.rows[0].data.labUserId;
+      }
+      if (!labUserId && auth.role === 'lab') {
+        labUserId = auth.userId;
       }
 
       const writeResp = await fetch(`${SB_URL}/rest/v1/labo_data`, {
