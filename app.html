@@ -1214,7 +1214,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
         </button>
         <button type="button" class="settings-row" onclick="openSettingsSection('equipe')">
           <span class="settings-row-icon">👨‍🔬</span>
-          <span class="settings-row-body"><span class="settings-row-title">Équipe et planning</span><span class="settings-row-desc">Planning atelier (optionnel), absences et fermetures</span></span>
+          <span class="settings-row-body"><span class="settings-row-title">Équipe et absences</span><span class="settings-row-desc">Techniciens, absences et fermetures</span></span>
           <span class="settings-row-chevron">›</span>
         </button>
         <button type="button" class="settings-row" onclick="openSettingsSection('coursiers')">
@@ -1395,10 +1395,24 @@ body.has-sidebar #drawer{transform:translateX(0);}
         <h2>Programmation</h2>
         <span class="settings-topbar-spacer"></span>
       </div>
+      <div class="card">
+        <h2 data-i18n="h2.settings.options">⚙️ Options</h2>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+          <div>
+            <div data-i18n="opt.prog.title" style="font-size:.88rem;font-weight:500;">🔬 Activer le planning atelier<button class="help-tip" data-help-title="Planning atelier" data-help="Activez ce mode si vous travaillez en équipe et que vous voulez répartir les travaux par technicien et par étape (modélage, finition, etc.). Si vous travaillez seul, laissez-le désactivé : c'est plus simple.">?</button></div>
+            <div data-i18n="opt.prog.desc" style="font-size:.74rem;color:var(--ink-soft);margin-top:2px;">Onglets Équipe, Impression et En attente. À activer seulement si vous répartissez les travaux entre techniciens.</div>
+          </div>
+          <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;margin-left:16px;">
+            <input type="checkbox" id="toggle-prog" style="opacity:0;width:0;height:0;" onchange="saveProgToggle()"/>
+            <span id="toggle-prog-track" style="position:absolute;inset:0;background:var(--border);border-radius:99px;cursor:pointer;transition:background .2s;"></span>
+            <span id="toggle-prog-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
+          </label>
+        </div>
+      </div>
       <div class="card" id="card-custom-types">
         <h2>🔬 Programmation par type de travail</h2>
         <p style="font-size:.76rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;">Définissez les <strong>étapes</strong> (modélage, finition…) et les techniciens pour chaque type. Ces réglages alimentent la programmation automatique et manuelle de l’atelier.</p>
-        <p style="font-size:.7rem;color:var(--ink-muted);margin-bottom:14px;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);">💡 Les prix se configurent dans <button type="button" class="btn btn-b" style="display:inline;padding:2px 8px;font-size:.68rem;vertical-align:baseline;margin:0 2px;" onclick="openSettingsSection('tarifs')">Tarifs</button>. Activez le planning atelier dans <strong>Équipe et planning</strong> si besoin.</p>
+        <p style="font-size:.7rem;color:var(--ink-muted);margin-bottom:14px;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);">💡 Les prix se configurent dans <button type="button" class="btn btn-b" style="display:inline;padding:2px 8px;font-size:.68rem;vertical-align:baseline;margin:0 2px;" onclick="openSettingsSection('tarifs')">Tarifs</button>. Activez le planning atelier ci-dessus si besoin.</p>
         <div id="prog-list" style="margin-bottom:16px;"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-b" id="btn-ct-show-form" data-i18n="btn.ct.add" onclick="showCustomTypeForm()">+ Ajouter un type</button>
@@ -1437,22 +1451,8 @@ body.has-sidebar #drawer{transform:translateX(0);}
     <div id="settings-sec-equipe" class="settings-section">
       <div class="settings-topbar">
         <button type="button" class="settings-back" onclick="closeSettingsSection()" aria-label="Retour">←</button>
-        <h2>Équipe et planning</h2>
+        <h2>Équipe et absences</h2>
         <span class="settings-topbar-spacer"></span>
-      </div>
-      <div class="card">
-        <h2 data-i18n="h2.settings.options">⚙️ Options</h2>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
-          <div>
-            <div data-i18n="opt.prog.title" style="font-size:.88rem;font-weight:500;">🔬 Activer le planning atelier<button class="help-tip" data-help-title="Planning atelier" data-help="Activez ce mode si vous travaillez en équipe et que vous voulez répartir les travaux par technicien et par étape (modélage, finition, etc.). Si vous travaillez seul, laissez-le désactivé : c'est plus simple.">?</button></div>
-            <div data-i18n="opt.prog.desc" style="font-size:.74rem;color:var(--ink-soft);margin-top:2px;">Onglets Équipe, Impression et En attente. À activer seulement si vous répartissez les travaux entre techniciens.</div>
-          </div>
-          <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;margin-left:16px;">
-            <input type="checkbox" id="toggle-prog" style="opacity:0;width:0;height:0;" onchange="saveProgToggle()"/>
-            <span id="toggle-prog-track" style="position:absolute;inset:0;background:var(--border);border-radius:99px;cursor:pointer;transition:background .2s;"></span>
-            <span id="toggle-prog-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
-          </label>
-        </div>
       </div>
       <div class="card">
         <h2 data-i18n="h2.settings.absences">🏖️ Absences & Fermetures</h2>
