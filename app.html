@@ -8496,6 +8496,7 @@ function _captureCloudSnapshot(){
     _lastCloudSnapshot={
       ts:Date.now(),
       jobs:(jobs||[]).length,
+      queue:(queue||[]).length,
       cabinets:(cabinets||[]).length,
       archive:(archive||[]).length,
       tarifs:(JSON.parse(localStorage.getItem('lb_tarifs')||'[]')||[]).length,
@@ -8514,6 +8515,7 @@ function _currentDataCounts(){
   const jobList=(jobs||[]).concat(queue||[],archive||[]);
   return {
     jobs:(jobs||[]).length,
+    queue:(queue||[]).length,
     cabinets:(cabinets||[]).length,
     archive:(archive||[]).length,
     tarifs:(JSON.parse(localStorage.getItem('lb_tarifs')||'[]')||[]).length,
@@ -8527,6 +8529,32 @@ function _currentDataCounts(){
     programmedTasks:jobList.reduce(function(n,j){return n+((j&&j.tasks&&j.tasks.length)?j.tasks.length:0);},0)
   };
 }
+function _remoteDataCounts(p){
+  p=p||{};
+  const jobList=(p.jobs||[]).concat(p.queue||[],p.archive||[]);
+  return {
+    jobs:(p.jobs||[]).length,
+    queue:(p.queue||[]).length,
+    archive:(p.archive||[]).length,
+    cabinets:(p.cabinets||[]).length,
+    documents:(p.documents||[]).length,
+    bdl:(p.bdl||[]).length,
+    programmedTasks:jobList.reduce(function(n,j){return n+((j&&j.tasks&&j.tasks.length)?j.tasks.length:0);},0),
+    progActif:String(p.progActif||'0')==='1'
+  };
+}
+function _shouldMergeLocalOnInitialRestore(userId,p,silent){
+  if(!silent||_initialRestoreDone)return false;
+  const owner=localStorage.getItem('lb_cloud_owner')||'';
+  if(owner&&String(owner)!==String(userId))return false;
+  const local=_currentDataCounts();
+  const remote=_remoteDataCounts(p);
+  const localTotal=local.jobs+(local.queue||0)+local.archive+local.cabinets+local.documents+local.bdl;
+  if(!localTotal&&!local.programmedTasks&&!local.progActif)return false;
+  if(local.programmedTasks>remote.programmedTasks)return true;
+  if(local.jobs>remote.jobs||local.queue>remote.queue)return true;
+  return localTotal>0&&remote.jobs===0&&remote.queue===0&&remote.archive===0;
+}
 // Détecte les sauvegardes "suspectes" : mémoire vide alors qu'on savait qu'il y
 // avait des données côté cloud. Empêche le bug du 5 mai 2026 où le cloud d'un
 // utilisateur a été écrasé avec un état initial vide.
@@ -8538,10 +8566,10 @@ function _isDestructiveSave(){
   if(_bypassNextDestructiveCheck){_bypassNextDestructiveCheck=false;return false;}
   if(!_lastCloudSnapshot)return false; // Pas de référence, impossible à détecter
   const last=_lastCloudSnapshot;
-  const lastTotal=last.jobs+last.cabinets+last.archive+last.tarifs+last.bdc+last.bdl+last.documents;
+  const lastTotal=last.jobs+(last.queue||0)+last.cabinets+last.archive+last.tarifs+last.bdc+last.bdl+last.documents;
   if(lastTotal===0&&!last.laboName)return false; // Compte déjà vide, impossible d'être destructif
   const curr=_currentDataCounts();
-  const currTotal=curr.jobs+curr.cabinets+curr.archive+curr.tarifs+curr.bdc+curr.bdl+curr.documents;
+  const currTotal=curr.jobs+(curr.queue||0)+curr.cabinets+curr.archive+curr.tarifs+curr.bdc+curr.bdl+curr.documents;
   // Cas 1 : tout est passé à zéro alors qu'on avait des données → suspect
   if(currTotal===0&&!curr.laboName&&lastTotal>0)return true;
   // Cas 2 : perte massive (>80% de chute) avec au moins 5 items au départ → suspect
@@ -8743,6 +8771,7 @@ async function cloudSave(){
     }
     if(r.ok||r.status===200||r.status===201||r.status===204){
       _serverUpdatedAt=now;
+      localStorage.setItem('lb_cloud_owner',userId);
       const hhmm=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
       msg.style.color='#2a6049';
       msg.textContent=ti('toast.saved_at',{time:hhmm});
@@ -8831,22 +8860,23 @@ async function cloudRestore(silent=false){
     const savedAt=rows[0].data.savedAt;
     // Mémoriser le timestamp serveur pour la détection de conflits
     if(rows[0].updated_at)_serverUpdatedAt=rows[0].updated_at;
+    const mergeLocalInitial=_shouldMergeLocalOnInitialRestore(userId,p,silent);
     const deletedJobIds=_mergeDeletedJobIds(p.deletedJobIds||{});
     if(p.jobs){
-      jobs=_initialRestoreDone&&silent?_mergeCloudJobs(jobs,p.jobs):_filterDeletedJobs(p.jobs,deletedJobIds);
+      jobs=(_initialRestoreDone&&silent)||mergeLocalInitial?_mergeCloudJobs(jobs,p.jobs):_filterDeletedJobs(p.jobs,deletedJobIds);
     }
-    if(p.archive)archive=p.archive;
-    if(p.cabinets&&(p.cabinets.length>0||!cabinets.length))cabinets=p.cabinets;
+    if(p.archive)archive=mergeLocalInitial?_mergeCloudRecords(archive,p.archive):p.archive;
+    if(p.cabinets&&(p.cabinets.length>0||!cabinets.length))cabinets=mergeLocalInitial?_mergeCloudRecords(cabinets,p.cabinets):p.cabinets;
     if(p.syns)syns=p.syns;
     if(p.waiting)waiting=p.waiting;
     if(p.conges)conges=p.conges;
     if(p.absences)absences=p.absences;
     if(p.queue){
-      queue=_initialRestoreDone&&silent?_mergeCloudQueue(queue,p.queue):_filterDeletedQueue(p.queue,deletedJobIds);
+      queue=(_initialRestoreDone&&silent)||mergeLocalInitial?_mergeCloudQueue(queue,p.queue):_filterDeletedQueue(p.queue,deletedJobIds);
       localStorage.setItem('lb_queue',JSON.stringify(queue));
       if(typeof syncWindowQueue==='function')syncWindowQueue();
     }
-    if(p.documents){localStorage.setItem('lb_docs',JSON.stringify(p.documents));documents=p.documents;}
+    if(p.documents){documents=mergeLocalInitial?_mergeCloudRecords(documents,p.documents):p.documents;localStorage.setItem('lb_docs',JSON.stringify(documents));}
     if(p.tarifs){localStorage.setItem('lb_tarifs',JSON.stringify(p.tarifs));tarifs=p.tarifs;}
     if(p.bdc){localStorage.setItem('lb_bdc',JSON.stringify(p.bdc));bdc=p.bdc;}
     if(p.fourns){localStorage.setItem('lb_fourns',JSON.stringify(p.fourns));fourns=p.fourns;}
@@ -8863,7 +8893,7 @@ async function cloudRestore(silent=false){
     if(p.progActif!==undefined&&p.progActif!==null){
       // Restaurer le mode atelier au premier restore cloud, même si l'auth init
       // s'est déjà terminée pendant que le restore tournait en arrière-plan.
-      if(!_initialRestoreDone||!silent){localStorage.setItem('lb_prog_actif',p.progActif);}
+      if((!_initialRestoreDone||!silent)&&!(mergeLocalInitial&&(localStorage.getItem('lb_prog_actif')==='1'||_currentDataCounts().programmedTasks>0))){localStorage.setItem('lb_prog_actif',p.progActif);}
     }
     if(p.customTypes&&Array.isArray(p.customTypes)){
       customTypes=p.customTypes;
@@ -8882,13 +8912,14 @@ async function cloudRestore(silent=false){
     // Restauration vraiment réussie : autoriser les saves et capturer un snapshot
     // de référence pour détecter les sauvegardes destructives futures.
     _initialRestoreDone=true;
+    localStorage.setItem('lb_cloud_owner',userId);
     _captureCloudSnapshot();
     const savedDate=savedAt?new Date(savedAt).toLocaleDateString(t('locale'),{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):'?';
     msg.style.color='#2a6049';
     msg.textContent=ti('toast.restored',{date:savedDate});
     refreshTechSelects();applyProgMode();updateProgToggleUI();
     render();refreshCabSelects();renderWaiting();renderQueueMain();
-    if(recoveredTechs&&typeof scheduleSave==='function')scheduleSave();
+    if((recoveredTechs||mergeLocalInitial)&&typeof scheduleSave==='function')scheduleSave();
     // Rafraîchir la facturation si l'onglet est actif
     if(typeof renderBillDocs==='function'){renderToInvoice();renderToInvoice();renderBillDocs();updateBillStats();renderTarifs();}
   }catch(e){
