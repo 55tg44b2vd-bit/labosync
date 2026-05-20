@@ -13061,8 +13061,24 @@ function isJobComplete(job){
 
 function renderLivraisons(){
   const search=(document.getElementById('livr-search')?.value||'').toLowerCase().trim();
-  const hasBLForJob=function(jobId){
-    return bdl.find(function(b){return String(b.jobId||'')===String(jobId);});
+  const deliveryItemIds=function(item){
+    const ids=[item&&item.id,item&&item.jobId].filter(Boolean).map(function(v){return String(v);});
+    ids.slice().forEach(function(id){
+      const base=id.replace(/_q$/,'');
+      if(base&&ids.indexOf(base)===-1)ids.push(base);
+      if(base&&ids.indexOf(base+'_q')===-1)ids.push(base+'_q');
+    });
+    return ids;
+  };
+  const hasBLForItem=function(item){
+    const ids=deliveryItemIds(item);
+    return bdl.find(function(b){
+      const bid=String(b.jobId||'');
+      if(ids.indexOf(bid)!==-1)return true;
+      return item&&item.orderId&&item.orderStepId&&
+        String(b.orderId||'')===String(item.orderId)&&
+        String(b.orderStepId||'')===String(item.orderStepId);
+    });
   };
   const matchJob=function(j){
     if(!search)return true;
@@ -13075,11 +13091,11 @@ function renderLivraisons(){
 
   // Jobs sans BL (programmés ou non)
   const jobsNoBL=jobs.filter(function(j){
-    return !hasBLForJob(j.id)&&matchJob(j);
+    return !hasBLForItem(j)&&matchJob(j);
   });
   // Items en file d'attente non programmés (pas encore dans jobs)
   const queueNoBL=queue.filter(function(q){
-    return !hasBLForJob(q.id)&&matchJob(q);
+    return !hasBLForItem(q)&&matchJob(q);
   }).map(function(q){return Object.assign({},q,{tasks:[],_fromQueue:true});});
   const noBL=[...jobsNoBL,...queueNoBL].sort(function(a,b){
     var da=_jobLabDeliveryDate(a)||(a.createdAt?String(a.createdAt).slice(0,10):'');
@@ -13089,7 +13105,8 @@ function renderLivraisons(){
   });
   // Jobs with BL already
   const withBL=bdl.map(function(b){
-    const job=jobs.find(function(j){return String(j.id)===String(b.jobId);});
+    const blIds=deliveryItemIds({id:b.jobId});
+    const job=jobs.find(function(j){return deliveryItemIds(j).some(function(id){return blIds.indexOf(id)!==-1;});});
     return {bl:b,job:job||{id:b.jobId,patient:b.patient||'',type:b.type,nb:b.nb||1,prothesisId:b.prothesisId||'',note:b.note||'',cabinet:b.cabinet,tasks:[]}};
   }).filter(function(x){return matchBL(x.bl);});
 
