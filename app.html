@@ -13061,6 +13061,9 @@ function isJobComplete(job){
 
 function renderLivraisons(){
   const search=(document.getElementById('livr-search')?.value||'').toLowerCase().trim();
+  const hasBLForJob=function(jobId){
+    return bdl.find(function(b){return String(b.jobId||'')===String(jobId);});
+  };
   const matchJob=function(j){
     if(!search)return true;
     return (j.patient||'').toLowerCase().includes(search)||getJobTypeLabel(j).toLowerCase().includes(search)||(j.prothesisId||'').toLowerCase().includes(search)||(j.note||'').toLowerCase().includes(search);
@@ -13072,11 +13075,11 @@ function renderLivraisons(){
 
   // Jobs sans BL (programmés ou non)
   const jobsNoBL=jobs.filter(function(j){
-    return !bdl.find(function(b){return b.jobId===j.id;})&&matchJob(j);
+    return !hasBLForJob(j.id)&&matchJob(j);
   });
   // Items en file d'attente non programmés (pas encore dans jobs)
   const queueNoBL=queue.filter(function(q){
-    return !bdl.find(function(b){return b.jobId===q.id;})&&matchJob(q);
+    return !hasBLForJob(q.id)&&matchJob(q);
   }).map(function(q){return Object.assign({},q,{tasks:[],_fromQueue:true});});
   const noBL=[...jobsNoBL,...queueNoBL].sort(function(a,b){
     var da=_jobLabDeliveryDate(a)||(a.createdAt?String(a.createdAt).slice(0,10):'');
@@ -13086,8 +13089,9 @@ function renderLivraisons(){
   });
   // Jobs with BL already
   const withBL=bdl.map(function(b){
-    return {bl:b,job:jobs.find(function(j){return j.id===b.jobId;})};
-  }).filter(function(x){return !!x.job&&matchBL(x.bl);});
+    const job=jobs.find(function(j){return String(j.id)===String(b.jobId);});
+    return {bl:b,job:job||{id:b.jobId,patient:b.patient||'',type:b.type,nb:b.nb||1,prothesisId:b.prothesisId||'',note:b.note||'',cabinet:b.cabinet,tasks:[]}};
+  }).filter(function(x){return matchBL(x.bl);});
 
   const todoCnt=document.getElementById('livr-todo-cnt');
   const doneCnt=document.getElementById('livr-done-cnt');
@@ -13134,6 +13138,8 @@ function renderLivraisons(){
       doneEl.innerHTML='';
       filtered.forEach(function(x){
         const bl=x.bl;const job=x.job;
+        const patient=job.patient||bl.patient||'Sans code patient';
+        const typeLabel=bl.typeLabel||getJobTypeLabel(job);
         const div=document.createElement('div');
         div.className='livr-item done-item';
         div.innerHTML=
@@ -13143,8 +13149,8 @@ function renderLivraisons(){
               '<span class="livr-bl">'+bl.num+'</span>'+
               (bl.invoiced?'<span style="font-size:.65rem;background:#e0ede8;color:#2a6049;padding:1px 7px;border-radius:99px;font-weight:600;">Facturé — '+bl.invoiceNum+'</span>':'<span style="font-size:.65rem;background:#dde8f2;color:#1a4a7a;padding:1px 7px;border-radius:99px;">En attente de facturation</span>')+
             '</div>'+
-            '<div class="livr-patient">'+job.patient+'</div>'+
-            '<div class="livr-type">'+bl.typeLabel+(bl.nb>1?' × '+bl.nb:'')+'</div>'+
+            '<div class="livr-patient">'+patient+'</div>'+
+            '<div class="livr-type">'+typeLabel+(bl.nb>1?' × '+bl.nb:'')+'</div>'+
             '<div style="font-size:.7rem;color:var(--ink-soft);">🏥 '+bl.cabName+' · '+new Date(bl.date+'T12:00:00').toLocaleDateString('fr-FR')+'</div>'+
           '</div>'+
           '<div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">'+
