@@ -8556,6 +8556,8 @@ function _remoteDataCounts(p){
     cabinets:(p.cabinets||[]).length,
     documents:(p.documents||[]).length,
     bdl:(p.bdl||[]).length,
+    techs:Object.keys(p.techs||{}).length,
+    customTypes:(p.customTypes||[]).length,
     programmedTasks:jobList.reduce(function(n,j){return n+((j&&j.tasks&&j.tasks.length)?j.tasks.length:0);},0),
     progActif:String(p.progActif||'0')==='1'
   };
@@ -8566,8 +8568,9 @@ function _shouldMergeLocalOnInitialRestore(userId,p,silent){
   if(owner&&String(owner)!==String(userId))return false;
   const local=_currentDataCounts();
   const remote=_remoteDataCounts(p);
-  const localTotal=local.jobs+(local.queue||0)+local.archive+local.cabinets+local.documents+local.bdl;
+  const localTotal=local.jobs+(local.queue||0)+local.archive+local.cabinets+local.documents+local.bdl+local.techs+local.customTypes;
   if(!localTotal&&!local.programmedTasks&&!local.progActif)return false;
+  if(local.techs>remote.techs||local.customTypes>remote.customTypes)return true;
   if(local.programmedTasks>remote.programmedTasks)return true;
   if(local.jobs>remote.jobs||local.queue>remote.queue)return true;
   return localTotal>0&&remote.jobs===0&&remote.queue===0&&remote.archive===0;
@@ -8642,6 +8645,15 @@ function _mergeCloudJobs(localArr,remoteArr){
 function _mergeCloudQueue(localArr,remoteArr){
   const deleted=_readDeletedJobIds();
   return _filterDeletedQueue(_mergeCloudRecords(_filterDeletedQueue(localArr,deleted),_filterDeletedQueue(remoteArr,deleted)),deleted);
+}
+function _mergeCloudTechs(localTechs,remoteTechs){
+  return Object.assign({}, remoteTechs||{}, localTechs||{});
+}
+function _mergeCloudCustomTypes(localTypes,remoteTypes){
+  const byId={};
+  (remoteTypes||[]).forEach(function(t){if(t&&t.id)byId[t.id]=t;});
+  (localTypes||[]).forEach(function(t){if(t&&t.id)byId[t.id]=t;});
+  return Object.keys(byId).map(function(id){return byId[id];});
 }
 function _ensureTechsFromScheduledJobs(){
   let changed=false;
@@ -8723,10 +8735,14 @@ async function cloudSave(){
               _mergeDeletedJobIds(remote.data.deletedJobIds||{});
               jobs=_mergeCloudJobs(jobs,remote.data.jobs||[]);
               queue=_mergeCloudQueue(queue,remote.data.queue||[]);
+              TECHS=_mergeCloudTechs(TECHS,remote.data.techs||{});
+              customTypes=_mergeCloudCustomTypes(customTypes,remote.data.customTypes||[]);
               syncWindowLabData();
               syncWindowQueue();
               localStorage.setItem('lb_jobs',JSON.stringify(jobs));
               localStorage.setItem('lb_queue',JSON.stringify(queue));
+              localStorage.setItem('lb_techs',JSON.stringify(TECHS));
+              localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));
             }
             _serverUpdatedAt=remote&&remote.updated_at?remote.updated_at:rows[0].updated_at;
           }
@@ -8903,7 +8919,7 @@ async function cloudRestore(silent=false){
     else if(p.laboLogo===null)localStorage.removeItem('lb_logo');
     if(typeof refreshHeaderLabBranding==='function')refreshHeaderLabBranding();
     if(p.techs&&typeof p.techs==='object'){
-      TECHS=p.techs;
+      TECHS=(_initialRestoreDone&&silent)||mergeLocalInitial?_mergeCloudTechs(TECHS,p.techs):p.techs;
       localStorage.setItem('lb_techs',JSON.stringify(TECHS));
     }
     const recoveredTechs=_ensureTechsFromScheduledJobs();
@@ -8913,7 +8929,7 @@ async function cloudRestore(silent=false){
       if((!_initialRestoreDone||!silent)&&!(mergeLocalInitial&&(localStorage.getItem('lb_prog_actif')==='1'||_currentDataCounts().programmedTasks>0))){localStorage.setItem('lb_prog_actif',p.progActif);}
     }
     if(p.customTypes&&Array.isArray(p.customTypes)){
-      customTypes=p.customTypes;
+      customTypes=(_initialRestoreDone&&silent)||mergeLocalInitial?_mergeCloudCustomTypes(customTypes,p.customTypes):p.customTypes;
       localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));
       syncCustomTypesToTL();
     }
