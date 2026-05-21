@@ -1183,7 +1183,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
         <div class="settings-group-label">Compte</div>
         <button type="button" class="settings-row" onclick="openSettingsSection('compte')">
           <span class="settings-row-icon">👤</span>
-          <span class="settings-row-body"><span class="settings-row-title">Compte et abonnement</span><span class="settings-row-desc">Nom du labo, formule Labosync, rôle</span></span>
+          <span class="settings-row-body"><span class="settings-row-title">Compte et abonnement</span><span class="settings-row-desc">Nom du labo, mot de passe, formule Labosync, rôle</span></span>
           <span class="settings-row-chevron">›</span>
         </button>
         <button type="button" class="settings-row" onclick="startOnboardingTour()">
@@ -1266,6 +1266,17 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <div class="fl" style="flex:1;"><label data-i18n="form.display_name">Nom affiché</label><input type="text" id="labo-name-input" placeholder="ex: Laboratoire Dupont"/></div>
           <button class="btn btn-a" id="btn-labo-name-save" data-i18n="btn.save">Enregistrer</button>
         </div>
+      </div>
+      <div class="card">
+        <h2>🔑 Mot de passe du compte</h2>
+        <p style="font-size:.74rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.45;">Modifiez le mot de passe utilisé pour vous connecter à votre compte Labosync.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:620px;margin-bottom:12px;">
+          <div class="fl" style="grid-column:1/-1;"><label>Mot de passe actuel</label><input type="password" id="account-current-password" autocomplete="current-password"/></div>
+          <div class="fl"><label>Nouveau mot de passe</label><input type="password" id="account-new-password" autocomplete="new-password" placeholder="Minimum 6 caractères"/></div>
+          <div class="fl"><label>Confirmer</label><input type="password" id="account-new-password-confirm" autocomplete="new-password"/></div>
+        </div>
+        <button type="button" class="btn btn-a" id="btn-account-password-save">Changer le mot de passe</button>
+        <p id="account-password-msg" style="font-size:.74rem;color:var(--ink-soft);margin-top:8px;min-height:16px;"></p>
       </div>
       <div class="card">
         <h2>💳 Mon abonnement Labosync</h2>
@@ -14066,6 +14077,68 @@ document.getElementById('btn-signup').addEventListener('click', async function()
     this.textContent = 'Créer mon compte';
   }
 });
+
+async function changeAccountPassword(){
+  const currentInput=document.getElementById('account-current-password');
+  const nextInput=document.getElementById('account-new-password');
+  const confirmInput=document.getElementById('account-new-password-confirm');
+  const btn=document.getElementById('btn-account-password-save');
+  const msg=document.getElementById('account-password-msg');
+  if(!currentInput||!nextInput||!confirmInput||!btn)return;
+  const currentPass=currentInput.value;
+  const nextPass=nextInput.value;
+  const confirmPass=confirmInput.value;
+  function setMsg(text,color){
+    if(msg){
+      msg.textContent=text||'';
+      msg.style.color=color||'var(--ink-soft)';
+    }
+  }
+  if(!currentPass||!nextPass||!confirmPass){
+    setMsg('Renseignez le mot de passe actuel, le nouveau mot de passe et la confirmation.','#c0392b');
+    return;
+  }
+  if(nextPass.length<6){
+    setMsg('Le nouveau mot de passe doit contenir au moins 6 caractères.','#c0392b');
+    return;
+  }
+  if(nextPass!==confirmPass){
+    setMsg('La confirmation ne correspond pas au nouveau mot de passe.','#c0392b');
+    return;
+  }
+  if(currentPass===nextPass){
+    setMsg('Choisissez un nouveau mot de passe différent de l’actuel.','#c0392b');
+    return;
+  }
+  btn.disabled=true;
+  const oldText=btn.textContent;
+  btn.textContent='Modification...';
+  setMsg('Vérification du mot de passe actuel...');
+  try{
+    const sess=await sbClient.auth.getSession();
+    const session=sess&&sess.data&&sess.data.session?sess.data.session:null;
+    const email=(session&&session.user&&session.user.email)||(currentUser&&currentUser.email)||'';
+    if(!email)throw new Error('Session introuvable. Reconnectez-vous puis réessayez.');
+    const check=await sbClient.auth.signInWithPassword({email:email,password:currentPass});
+    if(check.error)throw new Error('Mot de passe actuel incorrect.');
+    const updated=await sbClient.auth.updateUser({password:nextPass});
+    if(updated.error)throw updated.error;
+    currentInput.value='';
+    nextInput.value='';
+    confirmInput.value='';
+    setMsg('Mot de passe modifié avec succès.','#2a6049');
+    showToast('✅ Mot de passe modifié.','#2a6049',2600);
+  }catch(e){
+    setMsg((e&&e.message)?e.message:'Impossible de modifier le mot de passe.','#c0392b');
+  }finally{
+    btn.disabled=false;
+    btn.textContent=oldText;
+  }
+}
+var btnAccountPasswordSave=document.getElementById('btn-account-password-save');
+if(btnAccountPasswordSave){
+  btnAccountPasswordSave.addEventListener('click',changeAccountPassword);
+}
 
 // Déconnexion — instantanée : les données sont déjà sauvées par le debounce 2s
 window.authLogout = function() {
