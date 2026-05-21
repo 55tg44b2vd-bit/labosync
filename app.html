@@ -4106,7 +4106,7 @@ function addJob(){
   if(!tasks.length){alert(t('alert.unknown_type'));return;}
   const lbl=nb>1?name+' ('+nb+' éléments)':name;
   const items=getProgItems(type,nb);
-  var toothD=_readSaisieTeethFields();jobs.push({id:String(Date.now()),patient:lbl,type,tasks,nb,items,urgent:urg,note,deliveryDate,cabinet:cab,createdAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId,teeth:toothD.teeth,links:toothD.links});
+  var toothD=_readSaisieTeethFields();jobs.push({id:String(Date.now()),patient:lbl,type,tasks,nb,items,urgent:urg,note,deliveryDate,cabinet:cab,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId,teeth:toothD.teeth,links:toothD.links});
   saveJobs();autoPublishCab(cab);
   document.getElementById('ip').value='';
   document.getElementById('inb').value='1';
@@ -8649,9 +8649,45 @@ function _mergeCloudRecords(localArr,remoteArr){
   if(typeof LabMultiPoste!=='undefined'&&LabMultiPoste.mergeRecords)return LabMultiPoste.mergeRecords(localArr,remoteArr);
   return remoteArr||localArr||[];
 }
+function _jobRecordTime(job){
+  if(!job)return 0;
+  const raw=job.updatedAt||job.modifiedAt||job.createdAt||job.savedAt||0;
+  const t=new Date(raw).getTime();
+  return isNaN(t)?0:t;
+}
+function _jobTaskCount(job){
+  return (job&&job.tasks&&job.tasks.length)||0;
+}
+/** Fusionne deux versions du même travail en conservant la programmation (tasks). */
+function _mergeCloudJobPair(remoteJob,localJob){
+  if(!localJob)return remoteJob;
+  if(!remoteJob)return localJob;
+  const lt=_jobTaskCount(localJob),rt=_jobTaskCount(remoteJob);
+  const newer=_jobRecordTime(localJob)>=_jobRecordTime(remoteJob)?localJob:remoteJob;
+  const older=newer===localJob?remoteJob:localJob;
+  const merged=Object.assign({},older,newer);
+  if(lt>rt)merged.tasks=localJob.tasks;
+  else if(rt>lt)merged.tasks=remoteJob.tasks;
+  else merged.tasks=(newer.tasks&&newer.tasks.length)?newer.tasks:(older.tasks||[]);
+  if(lt>0||rt>0)merged.needsProg=false;
+  return merged;
+}
 function _mergeCloudJobs(localArr,remoteArr){
   const deleted=_readDeletedJobIds();
-  return _filterDeletedJobs(_mergeCloudRecords(_filterDeletedJobs(localArr,deleted),_filterDeletedJobs(remoteArr,deleted)),deleted);
+  localArr=_filterDeletedJobs(localArr||[],deleted);
+  remoteArr=_filterDeletedJobs(remoteArr||[],deleted);
+  const map=Object.create(null);
+  (remoteArr||[]).forEach(function(j){
+    const k=j&&j.id!=null?String(j.id):'';
+    if(k)map[k]=j;
+  });
+  (localArr||[]).forEach(function(j){
+    const k=j&&j.id!=null?String(j.id):'';
+    if(!k)return;
+    if(!map[k])map[k]=j;
+    else map[k]=_mergeCloudJobPair(map[k],j);
+  });
+  return Object.keys(map).map(function(k){return map[k];});
 }
 function _mergeCloudQueue(localArr,remoteArr){
   const deleted=_readDeletedJobIds();
@@ -8907,7 +8943,10 @@ async function cloudRestore(silent=false){
     const mergeLocalInitial=_shouldMergeLocalOnInitialRestore(userId,p,silent);
     const deletedJobIds=_mergeDeletedJobIds(p.deletedJobIds||{});
     if(p.jobs){
-      jobs=(_initialRestoreDone&&silent)||mergeLocalInitial?_mergeCloudJobs(jobs,p.jobs):_filterDeletedJobs(p.jobs,deletedJobIds);
+      const remoteProg=_remoteDataCounts(p).programmedTasks;
+      const localProg=_currentDataCounts().programmedTasks;
+      const useJobMerge=(_initialRestoreDone&&silent)||mergeLocalInitial||(silent&&localProg>remoteProg);
+      jobs=useJobMerge?_mergeCloudJobs(jobs,p.jobs):_filterDeletedJobs(p.jobs,deletedJobIds);
     }
     if(p.archive)archive=mergeLocalInitial?_mergeCloudRecords(archive,p.archive):p.archive;
     if(p.cabinets&&(p.cabinets.length>0||!cabinets.length))cabinets=mergeLocalInitial?_mergeCloudRecords(cabinets,p.cabinets):p.cabinets;
@@ -10458,11 +10497,13 @@ function _promoteQueueItemToJob(q,tasks){
   const items=q.items&&q.items.length?q.items:[{type:q.type,nb:q.nb||1}];
   const jobId=q.jobId||String(Date.now());
   const track=q.trackCode||(typeof genTrackCode==='function'?genTrackCode():'');
-  const payload=applyDeliveryFieldsToObject({id:jobId,patient:q.patient,type:items[0].type,tasks:tasks,nb:items[0].nb||1,items:items,urgent:q.urgent||false,note:q.note||'',cabinet:q.cabinet||'',createdAt:q.createdAt||new Date().toISOString(),trackCode:track,prothesisId:q.prothesisId||'',teeth:q.teeth||[],links:q.links||[],patientSex:q.patientSex||'',attachments:q.attachments||[],orderData:q.orderData||null,needsProg:false,missingInfoItems:q.missingInfoItems},_deliveryFieldsFromSource(q));
+  const nowIso=new Date().toISOString();
+  const payload=applyDeliveryFieldsToObject({id:jobId,patient:q.patient,type:items[0].type,tasks:tasks,nb:items[0].nb||1,items:items,urgent:q.urgent||false,note:q.note||'',cabinet:q.cabinet||'',createdAt:q.createdAt||nowIso,updatedAt:nowIso,trackCode:track,prothesisId:q.prothesisId||'',teeth:q.teeth||[],links:q.links||[],patientSex:q.patientSex||'',attachments:q.attachments||[],orderData:q.orderData||null,needsProg:false,missingInfoItems:q.missingInfoItems},_deliveryFieldsFromSource(q));
   const existing=jobs.find(function(j){return String(j.id)===String(jobId);});
   if(existing){
     Object.assign(existing,payload);
     existing.tasks=tasks;
+    existing.updatedAt=nowIso;
     existing.needsProg=false;
     delete existing.queueRemovedAt;
   }else{
@@ -13558,7 +13599,6 @@ async function completeLabBoot(session){
       localStorage.setItem('lb_types_seeded','1');
     }
     showApp();
-    if(typeof render==='function')render();
     refreshTechSelects();refreshTypeSelects();applyProgMode();
 
     const access=await checkLabAccessSoft();
@@ -13575,15 +13615,21 @@ async function completeLabBoot(session){
     }
 
     try{handleStripeConnectReturnDesktop();}catch(eSc){}
-    _withTimeout(cloudRestore(true),18000,'cloudRestore').then(function(){
-      if(typeof render==='function')render();
-      refreshTechSelects();refreshTypeSelects();applyProgMode();
-      if(typeof applyWorkspaceUi==='function')applyWorkspaceUi();
-      if(typeof renderMessagesPane==='function')renderMessagesPane();
-      try{startChatBgPoll();startChatRealtimeAll();}catch(eChat){}
-      try{lbHandleOpenDeepLink();}catch(eDl){}
-      republishAllPortals().catch(function(e){console.warn('republishAllPortals',e);});
-    }).catch(function(e2){console.warn('cloudRestore',e2);});
+    try{
+      await _withTimeout(cloudRestore(true),18000,'cloudRestore');
+    }catch(e2){
+      console.warn('cloudRestore',e2);
+      if(access.degraded||!_initialRestoreDone){
+        showToast('Synchro cloud lente — rechargement conseillé si les travaux semblent incorrects.','#d97706',5000);
+      }
+    }
+    if(typeof render==='function')render();
+    refreshTechSelects();refreshTypeSelects();applyProgMode();
+    if(typeof applyWorkspaceUi==='function')applyWorkspaceUi();
+    if(typeof renderMessagesPane==='function')renderMessagesPane();
+    try{startChatBgPoll();startChatRealtimeAll();}catch(eChat){}
+    try{lbHandleOpenDeepLink();}catch(eDl){}
+    republishAllPortals().catch(function(e){console.warn('republishAllPortals',e);});
 
     try{startRealtime(session.user.id);}catch(e){}
     try{startCourierLabRealtime();}catch(e3){console.warn('courier rt',e3);}
