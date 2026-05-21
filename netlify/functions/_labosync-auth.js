@@ -313,6 +313,13 @@ async function labOwnsPortal(labUserId, portalId) {
   const pid = raw.toLowerCase();
   if (!uid || !pid) return false;
 
+  const labRow = await laboDataGet(uid);
+  const cabinets = labRow?.data?.cabinets;
+  if (Array.isArray(cabinets)) {
+    if (cabinets.some((c) => String(c.portalId || '').trim().toLowerCase() === pid)) return true;
+    if (cabinets.some((c) => String(c.portalId || '').trim() === raw)) return true;
+  }
+
   const portalRowIds = [];
   if (raw) portalRowIds.push('portal_' + raw);
   const lowerId = 'portal_' + pid;
@@ -322,13 +329,6 @@ async function labOwnsPortal(labUserId, portalId) {
     const row = await laboDataGet(rowId);
     if (!row?.data) continue;
     if (row.data.labUserId && String(row.data.labUserId) === uid) return true;
-  }
-
-  const labRow = await laboDataGet(uid);
-  const cabinets = labRow?.data?.cabinets;
-  if (Array.isArray(cabinets)) {
-    if (cabinets.some((c) => String(c.portalId || '').trim().toLowerCase() === pid)) return true;
-    if (cabinets.some((c) => String(c.portalId || '').trim() === raw)) return true;
   }
 
   return false;

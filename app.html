@@ -4505,6 +4505,14 @@ const VITA_SHADES_LIST=['A1','A2','A3','A3.5','A4','B1','B2','B3','B4','C1','C2'
 
 // Cache mémoire des commandes pour éviter de re-fetch en boucle
 let _pendingOrdersCache={};
+let _pendingOrdersCacheAt={};
+const PENDING_ORDERS_CACHE_MS=45000;
+let _slowConnToastAt=0;
+function _showSlowConnToastOnce(msg,color,dur){
+  if(Date.now()-_slowConnToastAt<90000)return;
+  _slowConnToastAt=Date.now();
+  showToast(msg,color||'#c2410c',dur||4500);
+}
 
 // Migration : convertit ancien format (single-fiche) en nouveau format (cas + étapes)
 function _migrateOrderToCase(o){
@@ -4551,7 +4559,7 @@ async function _fetchOrdersForCab(portalId){
   try{
     const r=await _fetchWithTimeout('/.netlify/functions/portal?type=orders&portalId='+encodeURIComponent(portalId),{
       headers:_supabaseAuthHeaders()
-    },15000);
+    },25000);
     if(!r.ok)throw new Error('Lecture commandes '+r.status);
     const rows=await r.json();
     let list=(rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
@@ -4559,7 +4567,7 @@ async function _fetchOrdersForCab(portalId){
     return list;
   }catch(e){
     console.warn('_fetchOrdersForCab',e);
-    if(e.name==='AbortError')showToast('⚠️ Connexion lente — réessayez dans quelques secondes','#c2410c');
+    if(e.name==='AbortError')_showSlowConnToastOnce('⚠️ Connexion lente — réessayez dans quelques secondes','#c2410c');
     return [];
   }
 }
@@ -4646,12 +4654,21 @@ function _renderPendingStepsHTML(allPendingSteps){
   '</div>';
 }
 
-async function loadAndRenderPendingOrders(){
+async function loadAndRenderPendingOrders(force){
   const cabsWithPortal=cabinets.filter(function(c){return c.portalId;});
   const allPendingSteps=[];
-  for(const cab of cabsWithPortal){
-    const cases=await _fetchOrdersForCab(cab.portalId);
-    _pendingOrdersCache[cab.portalId]=cases;
+  const now=Date.now();
+  await Promise.all(cabsWithPortal.map(async function(cab){
+    const pid=cab.portalId;
+    let cases;
+    const cachedAt=_pendingOrdersCacheAt[pid]||0;
+    if(!force&&_pendingOrdersCache[pid]&&now-cachedAt<PENDING_ORDERS_CACHE_MS){
+      cases=_pendingOrdersCache[pid];
+    }else{
+      cases=await _fetchOrdersForCab(pid);
+      _pendingOrdersCache[pid]=cases;
+      _pendingOrdersCacheAt[pid]=Date.now();
+    }
     cases.forEach(function(c){
       (c.steps||[]).forEach(function(s,idx){
         if(s.status==='pending'){
@@ -4659,7 +4676,7 @@ async function loadAndRenderPendingOrders(){
         }
       });
     });
-  }
+  }));
   allPendingSteps.sort(function(a,b){return (b._step.requestedAt||'').localeCompare(a._step.requestedAt||'');});
   const html=_renderPendingStepsHTML(allPendingSteps);
   const dashEl=document.getElementById('dash-pending-orders');
