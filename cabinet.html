@@ -2251,21 +2251,91 @@ function fmtCur(v){return (parseFloat(v)||0).toLocaleString('fr-FR',{minimumFrac
 
 /* ══ CHAT CABINET ══ */
 var _portalChatInterval = null;
+var _portalChatLoading = false;
+var _portalLastChatKey = '';
+var _portalLastChatMsgs = null;
 
-async function loadPortalChat(scrollToBottom){
-  if(!sessionPortalId) return;
+function _portalChatCacheKey(){
+  return 'cab_chat_cache_'+(sessionPortalId||'_');
+}
+function _portalReadCachedChat(){
   try{
-    const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId),{headers:_portalCabHeaders()});
-    if(!r.ok) return;
-    const rows = await r.json();
+    var raw=sessionStorage.getItem(_portalChatCacheKey())||localStorage.getItem(_portalChatCacheKey());
+    if(!raw)return null;
+    var parsed=JSON.parse(raw);
+    return Array.isArray(parsed&&parsed.messages)?parsed.messages:null;
+  }catch(e){return null;}
+}
+function _portalWriteCachedChat(msgs){
+  try{
+    var payload=JSON.stringify({messages:Array.isArray(msgs)?msgs:[],savedAt:new Date().toISOString()});
+    sessionStorage.setItem(_portalChatCacheKey(),payload);
+    localStorage.setItem(_portalChatCacheKey(),payload);
+  }catch(e){}
+}
+function _portalRenderChatStatus(message, retry){
+  const el = document.getElementById('chat-portal-msgs');
+  if(!el)return;
+  el.innerHTML =
+    '<div style="text-align:center;color:var(--ink-soft);font-size:.78rem;padding:30px 12px;line-height:1.5;">'+
+      esc(message||'Chargement des messages…')+
+      (retry?'<br/><button type="button" onclick="loadPortalChat(true,{force:true})" style="margin-top:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 13px;font-size:.78rem;font-weight:700;cursor:pointer;">Réessayer</button>':'')+
+    '</div>';
+}
+async function _portalFetchChatRows(){
+  const controller = new AbortController();
+  const timeoutId = setTimeout(function(){controller.abort();}, 7000);
+  try{
+    const r = await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId),{
+      headers:_portalCabHeaders(),
+      signal:controller.signal
+    });
+    if(!r.ok){
+      const err = await r.json().catch(function(){return {};});
+      throw new Error(err.error||'Chargement messages impossible');
+    }
+    return await r.json();
+  }finally{
+    clearTimeout(timeoutId);
+  }
+}
+
+async function loadPortalChat(scrollToBottom, opts){
+  if(!sessionPortalId) return;
+  opts=opts||{};
+  if(_portalChatLoading && !opts.force) return;
+  const cached = _portalReadCachedChat();
+  if(cached && (!Array.isArray(_portalLastChatMsgs) || opts.force)){
+    renderPortalChat(cached, scrollToBottom);
+  }else if(!cached && !_portalLastChatMsgs){
+    _portalRenderChatStatus('Chargement des messages…');
+  }
+  _portalChatLoading = true;
+  try{
+    const rows = await _portalFetchChatRows();
     const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
-    renderPortalChat(msgs, scrollToBottom);
+    const key = JSON.stringify(msgs.map(function(m){return [m.id,m.createdAt,m.sender,m.content,m.image?1:0,m.attachment&&m.attachment.url].join('|');}));
+    if(key!==_portalLastChatKey || opts.force){
+      _portalLastChatKey = key;
+      _portalLastChatMsgs = msgs;
+      _portalWriteCachedChat(msgs);
+      renderPortalChat(msgs, scrollToBottom);
+    }
     // Update last seen
     if(msgs.length){
       const lastLaboMsg = [...msgs].reverse().find(function(m){return m.sender==='labo';});
       if(lastLaboMsg) localStorage.setItem('chat_seen_cab_'+sessionPortalId, lastLaboMsg.createdAt);
     }
-  }catch(e){ console.warn('Portal chat error',e); }
+  }catch(e){
+    console.warn('Portal chat error',e);
+    if(!_portalReadCachedChat()){
+      _portalRenderChatStatus(e&&e.name==='AbortError'?'Le chargement des messages prend trop de temps.':'Messages indisponibles pour le moment.', true);
+    }else{
+      showToast('Messages actualisés dès que la connexion répondra.','#d97706',5000);
+    }
+  }finally{
+    _portalChatLoading = false;
+  }
 }
 
 function renderPortalChat(msgs, scrollToBottom){
