@@ -2165,6 +2165,8 @@ const TRANSLATIONS = {
     'toast.stripe_no_link':'❌ Stripe n\'a pas retourné de lien (réponse inattendue)',
     'toast.stripe_link_copied':'✅ Lien Stripe copié ! Envoyez-le au cabinet ou il est visible dans le portail dentiste.',
     'toast.payment_confirmed':'💳 Paiement en ligne confirmé — {doc} marqué payé',
+    'toast.payment_received_online':'💳 Paiement en ligne reçu pour {doc} — le cabinet le voit comme payé. Validez « Payé » après vérification.',
+    'toast.invoice_paid_stripe_confirmed':'✅ Facture validée — paiement en ligne déjà reçu du praticien',
     'toast.bdc_created':'✅ Bon {num} créé !',
     'toast.reception_confirmed':'✅ Réception confirmée — N° de lots enregistrés',
     'toast.bdc_ordered':'📤 Bon marqué commandé',
@@ -2536,6 +2538,8 @@ const TRANSLATIONS = {
     'toast.stripe_no_link':'❌ Stripe did not return a link (unexpected response)',
     'toast.stripe_link_copied':'✅ Stripe link copied! Send it to the clinic or share it via the dental portal.',
     'toast.payment_confirmed':'💳 Online payment confirmed — {doc} marked paid',
+    'toast.payment_received_online':'💳 Online payment received for {doc} — visible to the clinic. Mark Paid after verification.',
+    'toast.invoice_paid_stripe_confirmed':'✅ Invoice validated — online payment already received',
     'toast.bdc_created':'✅ Order {num} created!',
     'toast.reception_confirmed':'✅ Reception confirmed — lot numbers saved',
     'toast.bdc_ordered':'📤 Order marked as sent',
@@ -10880,6 +10884,7 @@ function renderBillDocs(){
         '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">'+
           '<span class="doc-num">'+doc.num+'</span>'+
           '<span class="doc-status st-'+doc.status+'">'+(statusLabels[doc.status]||doc.status)+'</span>'+
+          (doc.stripePaymentStatus==='paid'&&doc.status==='envoye'?'<span style="font-size:.62rem;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:99px;font-weight:700;">💳 Payé en ligne</span>':'')+
           '<span style="font-size:.7rem;color:var(--ink-soft);">'+typeIcon+'</span>'+
           (locked?'<span style="font-size:.62rem;background:#fff3cd;color:#856404;padding:1px 6px;border-radius:99px;font-weight:600;">🔒</span>':'')+
           (isOverdue?'<span style="font-size:.62rem;background:#fdecea;color:#c0392b;padding:1px 7px;border-radius:99px;font-weight:700;">⏰ EN RETARD</span>':'')+
@@ -11312,7 +11317,7 @@ document.getElementById('bill-filter-status').addEventListener('change',renderBi
 document.getElementById('bill-filter-type').addEventListener('change',renderBillDocs);
 
 // Doc actions (click delegation)
-document.getElementById('bill-docs-list').addEventListener('click',function(e){
+document.getElementById('bill-docs-list').addEventListener('click',async function(e){
   const btn=e.target.closest('[data-docid]');if(!btn)return;
   const id=btn.dataset.docid;const action=btn.dataset.action;
   const doc=documents.find(function(d){return d.id===id;});if(!doc)return;
@@ -11323,10 +11328,27 @@ document.getElementById('bill-docs-list').addEventListener('click',function(e){
   else if(action==='relance'){sendInvoiceEmail(id);}
   else if(action==='paye'){
     if(doc.status!=='envoye'){showToast(t('toast.mark_sent_first'),'#c0392b');return;}
-    doc.status='paye';saveDocs();renderToInvoice();renderBillDocs();updateBillStats();
+    var stripePaid=false;var stripePaidAt=null;
+    try{
+      var payR=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.stripe_sess_'+encodeURIComponent(doc.id)+'&select=data',{headers:_supabaseAuthHeaders()});
+      var payRows=await payR.json();
+      if(payRows[0]&&payRows[0].data&&payRows[0].data.status==='paid'){
+        stripePaid=true;
+        stripePaidAt=payRows[0].data.paidAt||null;
+        doc.stripePaymentStatus='paid';
+        doc.stripePaidAt=stripePaidAt;
+      }
+    }catch(_pe){}
+    var confirmMsg=stripePaid
+      ?('Le praticien a déjà payé cette facture en ligne'+(stripePaidAt?(' le '+new Date(stripePaidAt).toLocaleString('fr-FR')):'')+'.\n\nConfirmez-vous marquer la facture comme payée côté laboratoire (validation de votre encaissement) ?')
+      :'Marquer cette facture comme payée ?';
+    if(!confirm(confirmMsg))return;
+    doc.status='paye';
+    if(stripePaid&&stripePaidAt)doc.paidAt=stripePaidAt;
+    saveDocs();renderToInvoice();renderBillDocs();updateBillStats();
     const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
     if(cab)publishPortal(cab);
-    showToast(t('toast.invoice_paid'),'#2a6049');
+    showToast(stripePaid?t('toast.invoice_paid_stripe_confirmed'):t('toast.invoice_paid'),'#2a6049');
   }
   else if(action==='envoye'){
     if(doc.status!=='brouillon'){showToast(t('toast.invoice_locked'),'#c0392b');return;}
@@ -11370,6 +11392,17 @@ document.getElementById('bill-docs-list').addEventListener('click',function(e){
 async function genPaymentLink(docId){
   if(!guardPerm('action:billing_generate','⛔ Votre rôle ne permet pas de générer des liens de paiement.'))return;
   const doc=documents.find(function(d){return d.id===docId;});if(!doc)return;
+  try{
+    var paidChk=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.stripe_sess_'+encodeURIComponent(doc.id)+'&select=data',{headers:_supabaseAuthHeaders()});
+    var paidRows=await paidChk.json();
+    if(paidRows[0]&&paidRows[0].data&&paidRows[0].data.status==='paid'){
+      doc.stripePaymentStatus='paid';
+      doc.stripePaidAt=paidRows[0].data.paidAt||doc.stripePaidAt||null;
+      saveDocs();renderBillDocs();
+      showToast('Cette facture a déjà été payée en ligne — aucun nouveau lien possible.','#c0392b',8000);
+      return;
+    }
+  }catch(_chk){}
   // Si lien déjà généré, juste copier
   if(doc.stripeUrl){
     try{await navigator.clipboard.writeText(doc.stripeUrl);}catch(e){}
@@ -11423,6 +11456,10 @@ async function genPaymentLink(docId){
 
     if(!resp.ok){
       const err=await resp.json().catch(function(){return {};});
+      if(err.code==='already_paid'){
+        doc.stripePaymentStatus='paid';
+        saveDocs();renderBillDocs();
+      }
       showToast('❌ '+(err.error||'Erreur Stripe (HTTP '+resp.status+')'),'#c0392b',8000);
       if(btn){btn.textContent=origLabel;btn.disabled=false;}
       return;
@@ -11448,26 +11485,33 @@ async function genPaymentLink(docId){
 }
 
 async function checkStripePayments(){
-  const pending=documents.filter(function(d){return d.stripeSessionId&&d.status==='envoye';});
+  const pending=documents.filter(function(d){
+    return d.type==='facture'&&d.status==='envoye'&&(d.stripeUrl||d.stripeSessionId||d.id);
+  });
   if(!pending.length)return;
   let updated=false;
   for(const doc of pending){
     try{
-      const r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.stripe_sess_'+doc.stripeSessionId+'&select=data',{
+      const r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.stripe_sess_'+encodeURIComponent(doc.id)+'&select=data',{
         headers:_supabaseAuthHeaders(),
       });
       const rows=await r.json();
-      if(rows[0]&&rows[0].data&&rows[0].data.status==='paid'){
-        doc.status='paye';
-        doc.paidAt=rows[0].data.paidAt||new Date().toISOString();
+      const pay=rows[0]&&rows[0].data?rows[0].data:null;
+      if(!pay)continue;
+      if(pay.status==='paid'&&doc.stripePaymentStatus!=='paid'){
+        doc.stripePaymentStatus='paid';
+        doc.stripePaidAt=pay.paidAt||new Date().toISOString();
         updated=true;
         const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
         if(cab)autoPublishCab(cab.id);
-        showToast(ti('toast.payment_confirmed',{doc:doc.num}),'#2a6049');
+        showToast(ti('toast.payment_received_online',{doc:doc.num}),'#1a4a7a',8000);
+      }else if((pay.status==='failed'||pay.status==='expired')&&doc.stripePaymentStatus!=='failed'){
+        doc.stripePaymentStatus=pay.status;
+        updated=true;
       }
     }catch(e){}
   }
-  if(updated){saveDocs();renderBillDocs();updateBillStats();renderToInvoice();}
+  if(updated){saveDocs();renderBillDocs();updateBillStats();}
 }
 
 /* ══════════════════════════════════════════
@@ -12601,7 +12645,7 @@ async function publishPortal(cab,opts){
     bdl:cabBdl,
     travaux:[],
     patients:[...new Set(jobs.filter(function(j){return j.cabinet===cab.id;}).map(function(j){return j.patient||'';}).filter(Boolean))],
-    factures:cabDocs.filter(function(d){return d.status!=='brouillon';}).map(function(d){return {id:d.id,num:d.num,type:d.type||'facture',avoirOf:d.avoirOf||null,date:d.date,total:d.total,status:d.status,note:d.note||'',lines:(d.lines||[]).map(function(l){return Object.assign({},l);}),bdlRefs:d.bdlRefs||[],stripeUrl:d.stripeUrl||null};}),
+    factures:cabDocs.filter(function(d){return d.status!=='brouillon';}).map(function(d){return {id:d.id,num:d.num,type:d.type||'facture',avoirOf:d.avoirOf||null,date:d.date,total:d.total,status:d.status,note:d.note||'',lines:(d.lines||[]).map(function(l){return Object.assign({},l);}),bdlRefs:d.bdlRefs||[],stripeUrl:d.stripeUrl||null,stripePayment:d.stripePaymentStatus?{status:d.stripePaymentStatus,paidAt:d.stripePaidAt||null}:null};}),
     updatedAt:new Date().toISOString()
   };
 
@@ -13353,8 +13397,9 @@ initSaisieTeethSection();
 render();
 renderDashboard();
 
-// Vérifier les paiements Stripe en attente au démarrage
+// Vérifier les paiements Stripe en attente au démarrage et périodiquement
 setTimeout(checkStripePayments, 3000);
+setInterval(checkStripePayments, 30000);
 
 // Vérifier aussi si on revient d'un paiement Stripe
 (function(){

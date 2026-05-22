@@ -78,6 +78,36 @@ exports.handler = async (event) => {
     return rows[0] && rows[0].data ? rows[0].data : null;
   }
 
+  async function readStripeSessRow(rowId) {
+    if (!SB_KEY || !rowId) return null;
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/labo_data?id=eq.${encodeURIComponent(rowId)}&select=data`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+      });
+      if (!r.ok) return null;
+      const rows = await r.json();
+      return rows[0] && rows[0].data ? rows[0].data : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function upsertStripeSessUnlessPaid(factureId, sessionId, patch) {
+    if (!factureId) return;
+    const existing = await readStripeSessRow(`stripe_sess_${factureId}`);
+    if (existing && existing.status === 'paid') return;
+    const rowBody = Object.assign(
+      {
+        factureId,
+        factureNum: patch.factureNum || existing?.factureNum || '',
+        portalId: patch.portalId || existing?.portalId || '',
+      },
+      patch
+    );
+    await upsert(`stripe_sess_${factureId}`, rowBody);
+    if (sessionId) await upsert(`stripe_sess_${sessionId}`, rowBody);
+  }
+
   // ── FACTURES (paiements one-shot via Payment Links / Checkout Sessions) ──────
   if (stripeEvent.type === 'checkout.session.completed') {
     const session   = stripeEvent.data.object;
@@ -100,6 +130,32 @@ exports.handler = async (event) => {
     }
 
     // Checkout en mode subscription — traité via customer.subscription.*
+  }
+
+  if (stripeEvent.type === 'checkout.session.expired') {
+    const session = stripeEvent.data.object;
+    const meta = session.metadata || {};
+    const factureId = meta.factureId || '';
+    if (session.mode === 'payment' && factureId) {
+      await upsertStripeSessUnlessPaid(factureId, session.id, {
+        status: 'expired',
+        expiredAt: new Date().toISOString(),
+        checkoutSessionId: session.id,
+      });
+    }
+  }
+
+  if (stripeEvent.type === 'checkout.session.async_payment_failed') {
+    const session = stripeEvent.data.object;
+    const meta = session.metadata || {};
+    const factureId = meta.factureId || '';
+    if (session.mode === 'payment' && factureId) {
+      await upsertStripeSessUnlessPaid(factureId, session.id, {
+        status: 'failed',
+        failedAt: new Date().toISOString(),
+        checkoutSessionId: session.id,
+      });
+    }
   }
 
   // ── ABONNEMENTS (subscriptions) ─────────────────────────────────────────────

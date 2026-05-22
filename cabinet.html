@@ -679,6 +679,7 @@ async function refreshPortalDataOnce(force){
     const rows = await r.json();
     if(!rows||!rows.length) return;
     const newUpdatedAt = rows[0].updated_at;
+    const newPaymentsAt = rows[0].data && rows[0].data._paymentsAt ? rows[0].data._paymentsAt : null;
     const toMs = function(v){
       const t = Date.parse(v||'');
       return Number.isFinite(t) ? t : 0;
@@ -687,9 +688,10 @@ async function refreshPortalDataOnce(force){
     const incomingMs = toMs(newUpdatedAt);
     // Empêche un refresh de réinjecter un snapshot plus ancien (BL qui "disparaît puis revient").
     if(currentMs && incomingMs && incomingMs < currentMs) return;
-    if(!force && newUpdatedAt === portalData._updatedAt) return;
+    if(!force && newUpdatedAt === portalData._updatedAt && newPaymentsAt === (portalData._paymentsAt || null)) return;
     portalData = rows[0].data || portalData;
     portalData._updatedAt = newUpdatedAt || portalData._updatedAt;
+    portalData._paymentsAt = newPaymentsAt || portalData._paymentsAt || null;
     // Met à jour la session cache pour que les prochains reloads repartent avec des données fraîches.
     try{
       var saved=JSON.parse(sessionStorage.getItem('ls_portal_session')||'{}');
@@ -717,6 +719,25 @@ function startPortalDataPoll(){
   window._portalDataPollHandle = setInterval(function(){ refreshPortalDataOnce(false); }, 10000);
 }
 
+function facStripePayment(fac){ return fac && fac.stripePayment ? fac.stripePayment : null; }
+function facIsStripePaid(fac){ var sp=facStripePayment(fac); return !!(sp && sp.status==='paid'); }
+function facIsLabPaid(fac){ return fac.status==='paye'||fac.status==='paid'||fac.status==='payee'||fac.status==='payé'; }
+function facIsSettled(fac){ return facIsStripePaid(fac)||facIsLabPaid(fac); }
+function facCanPayOnline(fac){
+  if(!fac||fac.type==='avoir') return false;
+  if(facIsSettled(fac)) return false;
+  return !!fac.stripeUrl;
+}
+function facPaymentBadge(fac){
+  if(!fac||fac.type==='avoir') return null;
+  if(facIsStripePaid(fac)) return {text:'✅ Payé en ligne',bg:'var(--green-soft)',color:'var(--green)'};
+  if(facIsLabPaid(fac)) return {text:'✅ Réglée',bg:'var(--green-soft)',color:'var(--green)'};
+  var sp=facStripePayment(fac);
+  if(sp&&(sp.status==='failed'||sp.status==='expired')) return {text:'❌ Paiement non abouti',bg:'#fdecea',color:'#dc2626'};
+  if(sp&&sp.status==='pending') return {text:'⏳ Paiement en cours…',bg:'#eef2ff',color:'#3730a3'};
+  return {text:'⏳ À régler',bg:'#fdecea',color:'#dc2626'};
+}
+
 function renderStats(){
   const bls = portalData.bdl||[];
   const facs = portalData.factures||[];
@@ -724,8 +745,8 @@ function renderStats(){
   document.getElementById('stat-fac-total').textContent = facs.length;
 
   // Les montants ne viennent que des factures (prix internes au labo)
-  const due = facs.filter(f=>f.status!=='paye'&&f.status!=='paid'&&f.status!=='payee'&&f.status!=='payé').reduce((s,f)=>s+(f.total||0),0);
-  const paid = facs.filter(f=>f.status==='paye'||f.status==='paid'||f.status==='payee'||f.status==='payé').reduce((s,f)=>s+(f.total||0),0);
+  const due = facs.filter(function(f){ return f.type!=='avoir'&&!facIsSettled(f); }).reduce(function(s,f){ return s+(f.total||0); },0);
+  const paid = facs.filter(function(f){ return f.type!=='avoir'&&facIsSettled(f); }).reduce(function(s,f){ return s+(f.total||0); },0);
 
   document.getElementById('stat-due').textContent = facs.length ? fmtEur(due) : '—';
   document.getElementById('stat-paid').textContent = facs.length ? fmtEur(paid) : '—';
@@ -785,7 +806,9 @@ function renderFactures(){
   container.innerHTML='';
   facs.forEach(function(fac){
     const isAvoir = fac.type==='avoir';
-    const isPaid = fac.status==='paye'||fac.status==='paid'||fac.status==='payé';
+    const isSettled = facIsSettled(fac);
+    const badge = facPaymentBadge(fac);
+    const sp = facStripePayment(fac);
     const div = document.createElement('div');
     div.className='fac-item';
     // Encadré jaune pour les avoirs, sinon bordure neutre
@@ -793,7 +816,7 @@ function renderFactures(){
     const dateStr = fac.date ? new Date(fac.date+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}) : '';
     const docLabel = isAvoir ? '↩️ Avoir' : '🧾 Facture';
     const totalLabel = isAvoir ? fmtEur(Math.abs(fac.total||0)) : fmtEur(fac.total);
-    const totalColor = isAvoir ? '#b45309' : (isPaid?'var(--green)':'var(--accent)');
+    const totalColor = isAvoir ? '#b45309' : (isSettled?'var(--green)':'var(--accent)');
     const linesHtml = (fac.lines||[]).map(function(l){
       return '<tr style="border-bottom:1px solid var(--border);">'+
         '<td style="padding:5px 8px;font-size:.78rem;color:var(--ink);">'+esc(l.label||'')+(l.ref?' <span style="color:var(--ink-soft);font-size:.72rem;">(réf. '+esc(l.ref)+')</span>':'')+'</td>'+
@@ -811,16 +834,18 @@ function renderFactures(){
           '<div style="font-size:1.15rem;font-weight:800;color:'+totalColor+';">'+(isAvoir?'-':'')+totalLabel+'</div>'+
           (isAvoir
             ? '<span style="font-size:.65rem;padding:2px 9px;border-radius:99px;font-weight:700;display:inline-block;margin-top:3px;background:#fef3c7;color:#92400e;">↩️ Crédit</span>'
-            : '<span style="font-size:.65rem;padding:2px 9px;border-radius:99px;font-weight:700;display:inline-block;margin-top:3px;background:'+(isPaid?'var(--green-soft)':'#fdecea')+';color:'+(isPaid?'var(--green)':'#dc2626')+'">'+(isPaid?'✅ Réglée':'⏳ À régler')+'</span>'
+            : (badge?'<span style="font-size:.65rem;padding:2px 9px;border-radius:99px;font-weight:700;display:inline-block;margin-top:3px;background:'+badge.bg+';color:'+badge.color+';">'+badge.text+'</span>':'')
           )+
         '</div>'+
       '</div>'+
       (isAvoir?'<div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:8px 12px;border-radius:0 6px 6px 0;font-size:.82rem;color:#92400e;margin-bottom:10px;">Cet avoir vient en déduction de la facture'+(fac.avoirOf?' '+esc(fac.avoirOf):'')+'. Conservez-le pour votre comptabilité.</div>':'')+
+      (!isAvoir&&facIsStripePaid(fac)?'<div style="background:#ecfdf5;border-left:3px solid #059669;padding:8px 12px;border-radius:0 6px 6px 0;font-size:.82rem;color:#065f46;margin-bottom:10px;"><strong>Paiement enregistré.</strong> Votre règlement en ligne a bien été reçu. Aucun second paiement n’est nécessaire.</div>':'')+
+      (!isAvoir&&sp&&(sp.status==='failed'||sp.status==='expired')?'<div style="background:#fef2f2;border-left:3px solid #dc2626;padding:8px 12px;border-radius:0 6px 6px 0;font-size:.82rem;color:#991b1b;margin-bottom:10px;">Le dernier paiement en ligne n’a pas abouti. Vous pouvez réessayer en toute sécurité — aucun débit n’a été enregistré.</div>':'')+
       (linesHtml?'<table style="width:100%;border-collapse:collapse;background:var(--bg);border-radius:7px;overflow:hidden;margin-bottom:10px;">'+
         '<thead><tr style="background:var(--bg);"><th style="padding:5px 8px;font-size:.65rem;text-align:left;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">Prestation</th><th style="padding:5px 8px;font-size:.65rem;text-align:left;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">Code patient</th></tr></thead>'+
         '<tbody>'+linesHtml+'</tbody>'+
       '</table>':'')+
-      (!isAvoir&&!isPaid&&fac.stripeUrl?'<a href="'+esc(fac.stripeUrl)+'" target="_blank" rel="noopener" style="display:block;width:100%;text-align:center;background:#635bff;color:#fff;border-radius:9px;padding:11px;font-family:monospace;font-size:.86rem;font-weight:700;text-decoration:none;box-sizing:border-box;margin-top:8px;">💳 Payer en ligne — '+fmtEur(fac.total)+'</a>'+
+      (facCanPayOnline(fac)?'<a href="'+esc(fac.stripeUrl)+'" target="_blank" rel="noopener" style="display:block;width:100%;text-align:center;background:#635bff;color:#fff;border-radius:9px;padding:11px;font-family:monospace;font-size:.86rem;font-weight:700;text-decoration:none;box-sizing:border-box;margin-top:8px;">💳 Payer en ligne — '+fmtEur(fac.total)+'</a>'+
       '<button onclick="copyPaymentLink(\''+esc(fac.id)+'\')" style="margin-top:8px;width:100%;background:#eef2ff;color:#3730a3;border:1.5px solid #c7d2fe;border-radius:8px;padding:9px 10px;font-size:.8rem;font-weight:600;cursor:pointer;">📋 Copier le lien de paiement</button>':'')+
       '<div style="margin-top:8px;"><button class="btn-print" onclick="printFacturePortal(\''+esc(fac.id)+'\')">📄 '+(isAvoir?'Avoir PDF':'Facture PDF')+'</button></div>';
     container.appendChild(div);
@@ -2098,7 +2123,7 @@ function printFacturePortal(facId){
   if(!fac){alert('Facture introuvable.');return;}
   const labo=portalData.laboLegal||{raisonSociale:portalData.laboName||'',siret:'',adresse:'',tel:'',email:''};
   const cab={name:portalData.cabName||'',phone:portalData.cabPhone||'',email:portalData.cabEmail||''};
-  const isPaid=fac.status==='paye'||fac.status==='paid'||fac.status==='payé';
+  const isPaid=facIsSettled(fac);
   const dateDoc=new Date(fac.date+'T12:00:00');
   const dateFormatted=dateDoc.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
   const ech=new Date(dateDoc);ech.setDate(ech.getDate()+30);

@@ -89,6 +89,36 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Montant invalide' }) };
     }
 
+    if (SERVICE_KEY) {
+      try {
+        const existingResp = await fetch(
+          `${SB_URL}/rest/v1/labo_data?id=eq.stripe_sess_${encodeURIComponent(factureId)}&select=data`,
+          {
+            headers: {
+              apikey: SERVICE_KEY,
+              Authorization: `Bearer ${SERVICE_KEY}`,
+            },
+          }
+        );
+        if (existingResp.ok) {
+          const existingRows = await existingResp.json();
+          const existing = existingRows[0] && existingRows[0].data ? existingRows[0].data : null;
+          if (existing && existing.status === 'paid') {
+            return {
+              statusCode: 409,
+              headers,
+              body: JSON.stringify({
+                error: 'Cette facture a déjà été payée en ligne. Aucun nouveau paiement n’est possible.',
+                code: 'already_paid',
+              }),
+            };
+          }
+        }
+      } catch (_) {
+        /* continue — ne pas bloquer si lecture indisponible */
+      }
+    }
+
     function stripeHeaders() {
       const h = {
         Authorization: `Bearer ${stripeSecret}`,

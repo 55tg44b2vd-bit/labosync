@@ -66,6 +66,56 @@ exports.handler = async (event) => {
     return { ok: true, rows };
   };
 
+  async function readStripePaymentsForFactures(factureIds) {
+    const map = {};
+    if (!SERVICE_KEY || !factureIds.length) return map;
+    const rowIds = factureIds.map((id) => `stripe_sess_${id}`);
+    const inList = rowIds.map((id) => encodeURIComponent(id)).join(',');
+    try {
+      const resp = await fetch(`${SB_URL}/rest/v1/labo_data?id=in.(${inList})&select=id,data`, {
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+      });
+      if (!resp.ok) return map;
+      const rows = await resp.json();
+      for (const row of rows || []) {
+        const data = row.data || {};
+        const fid = data.factureId || String(row.id || '').replace(/^stripe_sess_/, '');
+        if (!fid) continue;
+        map[fid] = {
+          status: data.status || 'pending',
+          paidAt: data.paidAt || null,
+          failedAt: data.failedAt || null,
+          expiredAt: data.expiredAt || null,
+        };
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return map;
+  }
+
+  async function enrichPortalWithStripePayments(rows) {
+    if (!rows || !rows.length || !rows[0] || !rows[0].data) return rows;
+    const factures = Array.isArray(rows[0].data.factures) ? rows[0].data.factures : [];
+    const facIds = factures
+      .filter((f) => f && f.id && (f.type || 'facture') !== 'avoir')
+      .map((f) => String(f.id));
+    const payMap = await readStripePaymentsForFactures(facIds);
+    const enriched = factures.map((f) => {
+      const sp = payMap[f.id];
+      if (!sp) return f;
+      return Object.assign({}, f, { stripePayment: sp });
+    });
+    rows[0].data = Object.assign({}, rows[0].data, {
+      factures: enriched,
+      _paymentsAt: new Date().toISOString(),
+    });
+    return rows;
+  }
+
   async function authorizePortalAccess(portalId) {
     if (!isValidPortalId(portalId)) return null;
     const normalized = normPortalId(portalId);
@@ -134,7 +184,11 @@ exports.handler = async (event) => {
       }
       rows = legacyRead.rows;
     }
-    const sanitizedRows = (rows || []).map((row) => {
+    let portalRows = rows || [];
+    if (type !== 'chat' && type !== 'orders') {
+      portalRows = await enrichPortalWithStripePayments(portalRows);
+    }
+    const sanitizedRows = portalRows.map((row) => {
       if (!row || !row.data) return row;
       const rowId = String(row.id || '');
       if (!/^portal_/i.test(rowId)) return row;
