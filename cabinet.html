@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="Mon labo"/>
 <meta name="theme-color" content="#ffffff"/>
 <link rel="manifest" href="/manifest-cabinet.json"/>
 <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
@@ -94,12 +95,23 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
 .portal-stats-fold[open] summary{margin-bottom:10px;color:var(--accent);}
 .portal-draft-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:.86rem;color:#1e40af;}
 .portal-draft-resume{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:.86rem;font-weight:700;cursor:pointer;white-space:nowrap;}
+.portal-access-card{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;align-items:stretch;background:linear-gradient(135deg,#ffffff 0%,#eff6ff 100%);border:1px solid #bfdbfe;border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:var(--shadow);}
+.portal-access-title{font-size:1rem;font-weight:800;color:var(--ink);margin-bottom:4px;}
+.portal-access-copy{font-size:.82rem;color:var(--ink-soft);line-height:1.5;margin-bottom:12px;}
+.portal-access-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.portal-access-action{border:none;border-radius:10px;padding:10px 13px;font-family:'Inter',sans-serif;font-size:.8rem;font-weight:700;cursor:pointer;min-height:42px;}
+.portal-access-action.primary{background:var(--accent);color:#fff;}
+.portal-access-action.secondary{background:#fff;color:var(--accent);border:1px solid #bfdbfe;}
+.portal-access-steps{background:rgba(255,255,255,.72);border:1px solid #dbeafe;border-radius:12px;padding:12px 14px;font-size:.76rem;color:#475569;line-height:1.55;}
+.portal-access-steps strong{color:#1e40af;}
+.portal-access-status{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:3px 8px;background:#dcfce7;color:#166534;font-size:.68rem;font-weight:800;margin-bottom:8px;}
+.portal-access-status.todo{background:#fef3c7;color:#92400e;}
 .empty-state-hero{padding:48px 20px;}
 .empty-state-hero .portal-btn-new-order{max-width:340px;margin:0 auto;display:block;}
 #order-form-container input[type=text],#order-form-container input[type=number],#order-form-container input[type=date],#order-form-container input[type=search],#order-form-container select,#order-form-container textarea{min-height:48px;font-size:16px;}
 #order-form-container button{min-height:48px;}
 #order-form-container .tab,#ptab-orders input,#ptab-bls input{min-height:48px;font-size:16px;}
-@media(max-width:640px){.portal-tabs-simple{flex-wrap:wrap;width:100%;}.portal-tabs-simple .tab{flex:1;min-width:0;text-align:center;font-size:.76rem;padding:8px 6px;}.portal-stats-fold .stats-bar{grid-template-columns:1fr 1fr;}}
+@media(max-width:640px){.portal-tabs-simple{flex-wrap:wrap;width:100%;}.portal-tabs-simple .tab{flex:1;min-width:0;text-align:center;font-size:.76rem;padding:8px 6px;}.portal-stats-fold .stats-bar{grid-template-columns:1fr 1fr;}.portal-access-card{grid-template-columns:1fr;padding:14px;}.portal-access-actions{flex-direction:column;}.portal-access-action{width:100%;}}
 .tab{border:none;background:none;border-radius:8px;padding:8px 20px;font-family:'Inter',sans-serif;font-size:.82rem;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all .15s;}
 .tab.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}
 .mention-item:hover,.mention-item.active{background:var(--accent-soft);}
@@ -267,6 +279,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
       <p class="portal-hero-hint">Le labo reçoit votre fiche en quelques minutes</p>
     </div>
     <div id="portal-draft-banner" style="display:none;"></div>
+    <div id="portal-access-card" class="portal-access-card" style="display:none;"></div>
     <!-- Tabs -->
     <div class="tabs portal-tabs-simple">
       <button class="tab on" data-ptab="orders">Commandes</button>
@@ -344,6 +357,7 @@ const _clientTraceId='tr_'+Date.now().toString(36)+'_'+Math.random().toString(36
 let portalData = null;
 let sessionPortalId = null;
 let sessionPortalToken = null;
+let _cabInstallPrompt = null;
 
 function reportClientError(payload){
   const body=JSON.stringify(Object.assign({
@@ -427,6 +441,17 @@ window.addEventListener('error',function(ev){
 window.addEventListener('unhandledrejection',function(ev){
   const r=ev&&ev.reason;
   reportClientError({level:'error',message:r&&r.message?r.message:String(r||'unhandledrejection'),stack:r&&r.stack?r.stack:''});
+});
+window.addEventListener('beforeinstallprompt',function(ev){
+  ev.preventDefault();
+  _cabInstallPrompt = ev;
+  renderCabinetAccessCard();
+});
+window.addEventListener('appinstalled',function(){
+  _cabInstallPrompt = null;
+  try{localStorage.setItem('cab_pwa_installed','1');}catch(e){}
+  renderCabinetAccessCard();
+  showToast('Mon labo est ajouté à l\'écran d\'accueil.','#059669');
 });
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -599,6 +624,7 @@ function showPortal(){
   // Check for unread chat messages
   setTimeout(checkPortalChatNotif, 1000);
   renderPortalDraftBanner();
+  renderCabinetAccessCard();
   showPortalWelcomeHint();
   // Sync immédiat pour éviter d'afficher un snapshot session trop ancien.
   refreshPortalDataOnce(true);
@@ -666,6 +692,104 @@ function showPortalWelcomeHint(){
     localStorage.setItem(key,'1');
     showToast('👋 Bienvenue ! Ajoutez Labosync à l\'écran d\'accueil pour un accès rapide au portail.');
   }catch(e){}
+}
+
+function isCabinetStandalone(){
+  try{
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }catch(e){return false;}
+}
+
+function _cabNotificationLabel(){
+  if(!('Notification' in window)) return 'Alertes non supportées';
+  if(Notification.permission === 'granted') return 'Alertes activées';
+  if(Notification.permission === 'denied') return 'Alertes bloquées';
+  return 'Activer les alertes';
+}
+
+function renderCabinetAccessCard(){
+  const card=document.getElementById('portal-access-card');
+  if(!card || !portalData) return;
+  const installed=isCabinetStandalone() || localStorage.getItem('cab_pwa_installed')==='1';
+  const notifGranted=('Notification' in window && Notification.permission==='granted');
+  const installStatus=installed
+    ? '<span class="portal-access-status">Installé sur cet appareil</span>'
+    : '<span class="portal-access-status todo">Accès rapide recommandé</span>';
+  const installAction=installed
+    ? '<button type="button" class="portal-access-action secondary" onclick="showCabinetInstallHelp()">Voir le guide</button>'
+    : '<button type="button" class="portal-access-action primary" onclick="triggerCabinetInstall()">Ajouter à l\'écran d\'accueil</button>';
+  const notifAction=notifGranted
+    ? '<button type="button" class="portal-access-action secondary" onclick="openPortalTab(\'messages\')">Ouvrir les messages</button>'
+    : '<button type="button" class="portal-access-action secondary" onclick="triggerCabinetNotifications()">'+esc(_cabNotificationLabel())+'</button>';
+  card.style.display='grid';
+  card.innerHTML =
+    '<div>'+
+      installStatus+
+      '<div class="portal-access-title">Gardez le labo à portée de main</div>'+
+      '<div class="portal-access-copy">Ajoutez <strong>Mon labo</strong> à l\'écran d\'accueil : le cabinet ouvre LaboSync comme une application, puis répond aux messages et aux demandes sans chercher un email.</div>'+
+      '<div class="portal-access-actions">'+
+        installAction+
+        notifAction+
+        '<button type="button" class="portal-access-action secondary" onclick="openPortalTab(\'messages\')">Écrire au labo</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="portal-access-steps">'+
+      '<strong>iPhone</strong> : Safari → Partager → Sur l\'écran d\'accueil.<br/>'+
+      '<strong>Android</strong> : Chrome → menu ⋮ → Ajouter à l\'écran d\'accueil.<br/>'+
+      '<span style="display:block;margin-top:8px;color:#64748b;">Les échanges restent liés au dossier dans LaboSync, avec photos, PDF et fichiers prothèse.</span>'+
+    '</div>';
+}
+
+async function triggerCabinetInstall(){
+  if(_cabInstallPrompt){
+    try{
+      _cabInstallPrompt.prompt();
+      await _cabInstallPrompt.userChoice;
+      _cabInstallPrompt = null;
+      renderCabinetAccessCard();
+      return;
+    }catch(e){}
+  }
+  showCabinetInstallHelp();
+}
+
+function showCabinetInstallHelp(){
+  alert('Pour ajouter LaboSync à l\'écran d\'accueil :\n\n' +
+    'iPhone : ouvrez cette page dans Safari, touchez Partager, puis "Sur l\'écran d\'accueil".\n\n' +
+    'Android : ouvrez cette page dans Chrome, touchez le menu ⋮, puis "Ajouter à l\'écran d\'accueil" ou "Installer l\'application".');
+}
+
+function triggerCabinetNotifications(){
+  if(!('Notification' in window)){
+    showToast('Alertes non supportées sur cet appareil.','#c2410c');
+    return;
+  }
+  if(Notification.permission==='granted'){
+    showToast('Alertes déjà activées.','#059669');
+    renderCabinetAccessCard();
+    return;
+  }
+  if(Notification.permission==='denied'){
+    showToast('Alertes bloquées dans les réglages du navigateur.','#c2410c',5000);
+    renderCabinetAccessCard();
+    return;
+  }
+  const req = Notification.requestPermission();
+  if(!req || typeof req.then!=='function'){
+    renderCabinetAccessCard();
+    showToast('Vérifiez la demande affichée par le navigateur.','#2563eb');
+    return;
+  }
+  req.then(function(permission){
+    renderCabinetAccessCard();
+    if(permission==='granted'){
+      showToast('Alertes de messages activées.','#059669');
+    }else{
+      showToast('Vous pourrez les activer plus tard.','#d97706');
+    }
+  }).catch(function(){
+    showToast('Activation des alertes impossible.','#c2410c');
+  });
 }
 
 async function refreshPortalDataOnce(force){

@@ -1,6 +1,7 @@
 {
   "name": "Labosync — Espace cabinet",
   "short_name": "Mon labo",
+  "id": "/cabinet.html",
   "start_url": "/cabinet.html",
   "scope": "/",
   "display": "standalone",

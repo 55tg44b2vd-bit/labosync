@@ -5791,6 +5791,7 @@ async function sendOrderQuestions(portalId,caseId,stepId){
     _pendingOrdersCache[portalId]=list;
     document.getElementById('oq-overlay').remove();
     showToast('✅ Message envoyé au praticien','#2a6049');
+    if(typeof notifyCabinetAboutChat==='function')notifyCabinetAboutChat(cab,text,{silent:true});
     loadAndRenderPendingOrders();
   }catch(e){console.warn(e);showToast('❌ Erreur d\'envoi','#c0392b');}
 }
@@ -6083,6 +6084,7 @@ async function sendMissingInfoMessage(cabId){
       const sentAt=new Date().toISOString();
       const r=await _postPortalChatWithRepair(cab,{action:'chat',portalId:cab.portalId,sender:'labo',senderName:laboName,content:text});
       if(!r.ok){throw new Error('portal chat');}
+      if(typeof notifyCabinetAboutChat==='function')notifyCabinetAboutChat(cab,text,{silent:true});
       // Mémoriser timestamp d'envoi pour détecter les réponses ultérieures
       _missingJobsForCab(cabId).forEach(function(j){j._missingSentAt=sentAt;});
       saveJobs();saveQueue();
@@ -14678,6 +14680,7 @@ Réponds toujours en français, de façon concise et professionnelle.`;
         <div style="font-weight:600;font-size:.92rem;" id="chat-cab-name">Cabinet</div>
         <div style="font-size:.68rem;color:var(--ink-soft);">Messagerie laboratoire ↔ cabinet</div>
       </div>
+      <button onclick="notifyCurrentChatCabinet()" title="Ouvrir WhatsApp avec un rappel vers le portail cabinet" style="border:1px solid var(--border);background:var(--bg);color:var(--accent);border-radius:8px;padding:7px 10px;font-size:.72rem;font-weight:700;cursor:pointer;">WhatsApp</button>
       <button onclick="closeChatModal()" style="border:none;background:none;font-size:1.1rem;cursor:pointer;color:var(--ink-soft);padding:2px 6px;">✕</button>
     </div>
     <div id="chat-messages" style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:8px;"></div>
@@ -14811,6 +14814,180 @@ async function _postPortalChatWithRepair(cab,body){
     }
   }
   return r;
+}
+
+function _chatPortalLink(){
+  try{
+    return window.location.origin + '/cabinet.html?open=messages';
+  }catch(e){
+    return 'https://labosync.app/cabinet.html?open=messages';
+  }
+}
+
+function _chatPhoneDigits(phone){
+  var raw=String(phone||'').trim();
+  if(!raw)return '';
+  return raw.replace(/[^\d+]/g,'').replace(/^00/,'').replace(/^\+/,'');
+}
+
+function _chatNotificationPreview(preview){
+  var p=String(preview||'').trim();
+  if(!p)return 'Votre laboratoire vous a envoyé un nouveau message.';
+  if(p.length>180)p=p.slice(0,177)+'...';
+  return p;
+}
+
+function _chatNotificationText(cab,preview){
+  var laboName=localStorage.getItem('lb_name')||'Votre laboratoire';
+  var link=_chatPortalLink();
+  var lines=[
+    'Bonjour,',
+    '',
+    laboName+' vous a envoyé un message sur LaboSync.',
+    '',
+    _chatNotificationPreview(preview),
+    '',
+    'Répondez ici : '+link
+  ];
+  if(cab&&cab.code)lines.push('', 'Code d\'accès : '+cab.code);
+  return lines.join('\n');
+}
+
+function _chatNotificationHtml(cab,preview){
+  var laboName=localStorage.getItem('lb_name')||'Votre laboratoire';
+  var link=_chatPortalLink();
+  var safePreview=chatEscH(_chatNotificationPreview(preview)).replace(/\n/g,'<br/>');
+  return '<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a;">'+
+    '<div style="background:#2563eb;color:#fff;padding:18px 22px;border-radius:12px 12px 0 0;">'+
+      '<div style="font-size:18px;font-weight:800;">Nouveau message de votre laboratoire</div>'+
+      '<div style="font-size:13px;opacity:.9;margin-top:4px;">LaboSync · Espace cabinet</div>'+
+    '</div>'+
+    '<div style="background:#fff;border:1px solid #dbeafe;border-top:none;padding:22px;border-radius:0 0 12px 12px;">'+
+      '<p>Bonjour,</p>'+
+      '<p><strong>'+chatEscH(laboName)+'</strong> vous a envoyé un message sur LaboSync.</p>'+
+      '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin:16px 0;color:#334155;">'+safePreview+'</div>'+
+      '<div style="text-align:center;margin:22px 0;"><a href="'+chatEscH(link)+'" style="background:#2563eb;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:800;display:inline-block;">Ouvrir les messages</a></div>'+
+      (cab&&cab.code?'<p style="font-size:13px;color:#64748b;">Code d\'accès cabinet : <strong>'+chatEscH(cab.code)+'</strong></p>':'')+
+      '<p style="font-size:12px;color:#94a3b8;margin-top:20px;">Astuce : ajoutez LaboSync à l\'écran d\'accueil de votre téléphone pour l\'ouvrir comme une application.</p>'+
+    '</div>'+
+  '</div>';
+}
+
+function _chatWhatsappUrl(cab,preview){
+  var digits=_chatPhoneDigits(cab&&cab.phone);
+  if(!digits)return '';
+  return 'https://wa.me/'+digits+'?text='+encodeURIComponent(_chatNotificationText(cab,preview));
+}
+
+function _chatMailtoUrl(cab,preview){
+  var email=String(cab&&cab.email||'').trim();
+  if(!email)return '';
+  var laboName=localStorage.getItem('lb_name')||'Votre laboratoire';
+  return 'mailto:'+encodeURIComponent(email)+'?subject='+encodeURIComponent('Nouveau message de '+laboName+' sur LaboSync')+'&body='+encodeURIComponent(_chatNotificationText(cab,preview));
+}
+
+function _showChatNotifyFallback(cab,preview,reason){
+  var overlay=document.createElement('div');
+  overlay.id='chat-notify-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10020;display:flex;align-items:center;justify-content:center;padding:18px;';
+  var wa=_chatWhatsappUrl(cab,preview);
+  var mailto=_chatMailtoUrl(cab,preview);
+  overlay.innerHTML='<div style="background:#fff;border-radius:16px;padding:22px;max-width:460px;width:100%;box-shadow:0 14px 50px rgba(15,23,42,.25);">'+
+    '<div style="display:flex;justify-content:space-between;align-items:start;gap:12px;margin-bottom:10px;">'+
+      '<div><div style="font-size:1.05rem;font-weight:800;color:#0f172a;">Prévenir le cabinet</div>'+
+      '<div style="font-size:.78rem;color:#64748b;margin-top:2px;">'+chatEscH(cab&&cab.name?cab.name:'Cabinet')+'</div></div>'+
+      '<button onclick="document.getElementById(\'chat-notify-overlay\').remove()" style="border:none;background:none;font-size:1.4rem;line-height:1;cursor:pointer;color:#64748b;">×</button>'+
+    '</div>'+
+    (reason?'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:9px 11px;font-size:.78rem;color:#9a3412;margin-bottom:12px;">'+chatEscH(reason)+'</div>':'')+
+    '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:.8rem;color:#334155;white-space:pre-wrap;max-height:180px;overflow:auto;">'+chatEscH(_chatNotificationText(cab,preview))+'</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;justify-content:flex-end;">'+
+      (wa?'<a href="'+chatEscH(wa)+'" target="_blank" rel="noopener" style="background:#25d366;color:#fff;text-decoration:none;border-radius:9px;padding:9px 13px;font-size:.82rem;font-weight:800;">WhatsApp</a>':'')+
+      (mailto?'<a href="'+chatEscH(mailto)+'" style="background:#2563eb;color:#fff;text-decoration:none;border-radius:9px;padding:9px 13px;font-size:.82rem;font-weight:800;">Email</a>':'')+
+      '<button onclick="copyChatNotifyText()" style="background:#f1f5f9;color:#2563eb;border:1px solid #bfdbfe;border-radius:9px;padding:9px 13px;font-size:.82rem;font-weight:800;cursor:pointer;">Copier</button>'+
+    '</div>'+
+  '</div>';
+  overlay._notifyText=_chatNotificationText(cab,preview);
+  document.body.appendChild(overlay);
+}
+
+function copyChatNotifyText(){
+  var overlay=document.getElementById('chat-notify-overlay');
+  var text=overlay&&overlay._notifyText?overlay._notifyText:'';
+  if(!text)return;
+  navigator.clipboard.writeText(text).then(function(){
+    showToast('Message de rappel copié.','#2a6049');
+  }).catch(function(){alert(text);});
+}
+
+function _openChatWhatsappNotice(cab,preview){
+  var url=_chatWhatsappUrl(cab,preview);
+  if(!url)return false;
+  var opened=null;
+  try{opened=window.open(url,'_blank','noopener');}catch(e){opened=null;}
+  if(opened){
+    showToast('WhatsApp ouvert : validez l\'envoi du rappel.','#25d366',6500);
+    return true;
+  }
+  return false;
+}
+
+async function notifyCabinetAboutChat(cab,preview,opts){
+  opts=opts||{};
+  if(!cab)return false;
+  if(_chatWhatsappUrl(cab,preview)){
+    if(_openChatWhatsappNotice(cab,preview))return true;
+    if(!opts.silent){
+      _showChatNotifyFallback(cab,preview,'WhatsApp n\'a pas pu s\'ouvrir automatiquement. Cliquez sur WhatsApp ci-dessous.');
+    }else{
+      showToast('Message envoyé. Cliquez sur Prévenir pour ouvrir WhatsApp.','#d97706',6500);
+    }
+    return false;
+  }
+  var email=String(cab.email||'').trim();
+  var laboName=localStorage.getItem('lb_name')||'Votre laboratoire';
+  if(!email){
+    if(!opts.silent)_showChatNotifyFallback(cab,preview,'Aucun téléphone WhatsApp ni email n\'est renseigné pour ce cabinet. Copiez le rappel.');
+    else showToast('Message envoyé. Ajoutez un téléphone au cabinet pour prévenir via WhatsApp.','#d97706',6500);
+    return false;
+  }
+  try{
+    await ensureFreshAccessToken(false);
+    var r=await fetch('/.netlify/functions/send-email',{
+      method:'POST',
+      headers:_portalApiHeaders(),
+      body:JSON.stringify({
+        to:email,
+        subject:'Nouveau message de '+laboName+' sur LaboSync',
+        html:_chatNotificationHtml(cab,preview),
+        fromName:laboName
+      })
+    });
+    var res=await r.json().catch(function(){return {};});
+    if(r.ok&&res.ok){
+      showToast('Email de rappel envoyé à '+email,'#2a6049',5000);
+      return true;
+    }
+    var missing=res.code==='RESEND_NOT_CONFIGURED'||r.status===503;
+    var reason=missing?'Envoi automatique non configuré sur Netlify.':'Email automatique impossible : '+(res.error||r.status);
+    if(opts.silent){
+      showToast(reason+' Utilisez Prévenir.','#d97706',6500);
+    }else{
+      _showChatNotifyFallback(cab,preview,reason);
+    }
+    return false;
+  }catch(e){
+    if(opts.silent)showToast('Message envoyé. Rappel email indisponible, utilisez Prévenir.','#d97706',6500);
+    else _showChatNotifyFallback(cab,preview,'Erreur réseau pendant l\'envoi email.');
+    return false;
+  }
+}
+
+function notifyCurrentChatCabinet(){
+  var cab=_chatCabId?cabinets.find(function(c){return String(c.id)===String(_chatCabId);}):null;
+  if(!cab){showToast('Ouvrez d\'abord une conversation cabinet.','#c0392b');return;}
+  var input=document.getElementById('chat-input');
+  var preview=input&&input.value.trim()?input.value.trim():'Vous avez un nouveau message dans votre espace cabinet.';
+  notifyCabinetAboutChat(cab,preview,{silent:false});
 }
 
 function openChatModal(cabId){
@@ -14955,6 +15132,7 @@ async function sendChatMsg(){
     const r = await _postPortalChatWithRepair(cab,body);
     if(r.ok){
       await loadChatMessages(true);
+      notifyCabinetAboutChat(cab,content||'Vous avez un nouveau message dans votre espace cabinet.',{silent:true});
     }
     else { showToast(ti('toast.error',{msg:'Échec envoi message'}),'#c0392b'); }
   }catch(e){ showToast(ti('toast.network_error',{msg:String(e).slice(0,50)}),'#c0392b'); }
