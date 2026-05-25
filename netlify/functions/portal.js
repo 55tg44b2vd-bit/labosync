@@ -1,6 +1,7 @@
 const {
   SB_URL,
   buildCors,
+  signPortalToken,
   verifySupabaseUser,
   verifyPortalToken,
   getPortalTokenFromEvent,
@@ -214,6 +215,18 @@ exports.handler = async (event) => {
     }
 
     const { action, portalId, payload } = body;
+
+    if (action === 'cabinet_link_token') {
+      const auth = await authorizePortalAccess(portalId);
+      if (!auth || auth.role !== 'lab') {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Seul le laboratoire peut créer un lien cabinet' }) };
+      }
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ ok: true, portalId: auth.portalId, portalToken: signPortalToken(auth.portalId) }),
+      };
+    }
 
     if (action === 'chat') {
       const { sender, senderName, content, image, attachment } = body;
