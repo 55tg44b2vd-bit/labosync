@@ -213,11 +213,12 @@ function portalSessionSecret() {
   ).trim();
 }
 
-/** Token session cabinet (4 h) — accès portail + chat pour un portalId. */
-function signPortalToken(portalId) {
+/** Token session cabinet — accès portail + chat pour un portalId. */
+function signPortalToken(portalId, ttlMs) {
   const pid = String(portalId || '').trim().toLowerCase();
   if (!pid) return '';
-  const payload = { portalId: pid, role: 'cabinet', exp: Date.now() + 4 * 3600 * 1000 };
+  const ttl = Number(ttlMs) > 0 ? Number(ttlMs) : 4 * 3600 * 1000;
+  const payload = { portalId: pid, role: 'cabinet', exp: Date.now() + ttl };
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = crypto.createHmac('sha256', portalSessionSecret()).update(body).digest('base64url');
   return `${body}.${sig}`;

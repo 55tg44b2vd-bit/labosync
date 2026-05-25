@@ -221,10 +221,12 @@ exports.handler = async (event) => {
       if (!auth || auth.role !== 'lab') {
         return { statusCode: 403, headers, body: JSON.stringify({ error: 'Seul le laboratoire peut créer un lien cabinet' }) };
       }
+      const ttlMs = 2 * 3600 * 1000;
+      const expiresAt = new Date(Date.now() + ttlMs).toISOString();
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ ok: true, portalId: auth.portalId, portalToken: signPortalToken(auth.portalId) }),
+        body: JSON.stringify({ ok: true, portalId: auth.portalId, portalToken: signPortalToken(auth.portalId, ttlMs), expiresAt }),
       };
     }
 

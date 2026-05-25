@@ -555,7 +555,7 @@ async function loadPortalWithToken(portalId, token){
     });
     const rows = await r.json().catch(function(){return [];});
     if(!r.ok)throw new Error((rows&&rows.error)||('Erreur serveur ('+r.status+')'));
-    if(!rows||!rows.length||!rows[0].data)throw new Error('Lien expiré ou portail indisponible.');
+    if(!rows||!rows.length||!rows[0].data)throw new Error('Portail indisponible pour le moment. Réessayez ou connectez-vous avec vos identifiants cabinet.');
     portalData = rows[0].data;
     portalData._updatedAt = rows[0].updated_at || null;
     sessionStorage.setItem('ls_portal_session', JSON.stringify({
@@ -569,7 +569,7 @@ async function loadPortalWithToken(portalId, token){
   }catch(e){
     sessionPortalId=null;
     sessionPortalToken=null;
-    if(err)err.textContent=(e&&e.message?e.message:'Lien direct indisponible. Connectez-vous avec le code et le mot de passe.');
+    if(err)err.textContent=(e&&e.message?e.message:'Lien direct indisponible ou expiré. Connectez-vous avec le code et le mot de passe.');
     if(btn){btn.textContent='Se connecter →';btn.disabled=false;}
   }
 }
