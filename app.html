@@ -1015,6 +1015,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
       <div class="fl" style="flex:2;min-width:200px;"><label data-i18n="form.cab.name">Nom du cabinet</label><input type="text" id="cab-name" placeholder="Dr Dupont — Cabinet Santé"/></div>
       <div class="fl" style="flex:1;min-width:120px;"><label data-i18n="form.cab.phone">Téléphone</label><input type="text" id="cab-phone" placeholder="06 12 34 56 78"/></div>
       <div class="fl" style="flex:1;min-width:160px;"><label data-i18n="form.cab.email">Email</label><input type="email" id="cab-email" placeholder="dr@cabinet.fr"/></div>
+      <div class="fl" style="flex:1.5;min-width:220px;"><label data-i18n="form.cab.address">Adresse postale</label><input type="text" id="cab-address" placeholder="12 rue de la Santé, 75014 Paris"/></div>
       <div class="fl"><label data-i18n="form.cab.color">Couleur</label><input type="color" id="cab-color" value="#1a4a7a" style="height:38px;width:60px;border:1.5px solid var(--border);border-radius:7px;cursor:pointer;padding:2px;background:var(--bg);"/></div>
       <button class="btn btn-a" id="btn-cab-save">+ Ajouter</button>
     </div>
@@ -1094,6 +1095,25 @@ body.has-sidebar #drawer{transform:translateX(0);}
     <div id="cab-list-modal" style="max-height:240px;overflow-y:auto;"></div>
     <div style="margin-top:18px;text-align:right;">
       <button class="btn-b" id="btn-cab-close" data-i18n="btn.close">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDIT CABINET -->
+<div id="cab-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--surface);border-radius:14px;padding:26px;width:520px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.22);">
+    <h2 style="font-family:serif;font-size:1.12rem;margin-bottom:18px;">Modifier le cabinet</h2>
+    <input type="hidden" id="cab-edit-id"/>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="fl" style="grid-column:1/-1;"><label data-i18n="form.cab.name">Nom du cabinet</label><input type="text" id="cab-edit-name" placeholder="Dr Dupont — Cabinet Santé"/></div>
+      <div class="fl"><label data-i18n="form.cab.phone">Téléphone</label><input type="text" id="cab-edit-phone" placeholder="06 12 34 56 78"/></div>
+      <div class="fl"><label data-i18n="form.cab.email">Email</label><input type="email" id="cab-edit-email" placeholder="dr@cabinet.fr"/></div>
+      <div class="fl" style="grid-column:1/-1;"><label data-i18n="form.cab.address">Adresse postale</label><input type="text" id="cab-edit-address" placeholder="12 rue de la Santé, 75014 Paris"/></div>
+      <div class="fl"><label data-i18n="form.cab.color">Couleur</label><input type="color" id="cab-edit-color" value="#1a4a7a" style="height:38px;width:70px;border:1.5px solid var(--border);border-radius:7px;cursor:pointer;padding:2px;background:var(--bg);"/></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+      <button type="button" class="btn-b" id="btn-cab-edit-cancel">Annuler</button>
+      <button type="button" class="btn btn-a" id="btn-cab-edit-save">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -2271,7 +2291,7 @@ const TRANSLATIONS = {
     'opt.by_person':'Par personne','opt.by_day':'Par jour',
     // Form labels – cabinets
     'form.cab.name':'Nom du cabinet','form.cab.phone':'Téléphone',
-    'form.cab.email':'Email','form.cab.color':'Couleur',
+    'form.cab.email':'Email','form.cab.address':'Adresse postale','form.cab.color':'Couleur',
     // Form labels – historique
     'form.hist.search':'Recherche patient','form.hist.cabinet':'Cabinet','form.hist.status':'Statut',
     'opt.in_progress':'En cours','opt.delivered':'Livré','opt.completed':'Terminés',
@@ -2642,7 +2662,7 @@ const TRANSLATIONS = {
     'opt.by_person':'By person','opt.by_day':'By day',
     // Form labels – cabinets
     'form.cab.name':'Clinic name','form.cab.phone':'Phone',
-    'form.cab.email':'Email','form.cab.color':'Color',
+    'form.cab.email':'Email','form.cab.address':'Postal address','form.cab.color':'Color',
     // Form labels – historique
     'form.hist.search':'Patient code search','form.hist.cabinet':'Clinic','form.hist.status':'Status',
     'opt.in_progress':'In progress','opt.delivered':'Delivered','opt.completed':'Completed',
@@ -3176,6 +3196,11 @@ function scheduleSave(){
   _saveTimer=setTimeout(function(){
     if(typeof cloudSave==='function')cloudSave();
   },2000); // 2s debounce — sauvegarde rapide après chaque changement
+}
+/** Sauvegarde cloud immédiate (cabinets, suppressions critiques). */
+function flushCloudSave(){
+  clearTimeout(_saveTimer);
+  if(typeof cloudSave==='function')cloudSave();
 }
 function saveArchive(){localStorage.setItem('lb_archive',JSON.stringify(archive));scheduleSave();}
 function saveCabinets(){localStorage.setItem('lb_cabinets',JSON.stringify(cabinets));scheduleSave();}
@@ -7354,7 +7379,7 @@ function renderHistorique(){
    §14 — CABINETS
    ══════════════════════════════════════════ */
 // Crée un nouveau cabinet (génère identifiants portail automatiquement)
-function addCabinet(name, color, phone, email){
+function addCabinet(name, color, phone, email, address){
   name=name.trim();
   if(!name){alert(t('alert.enter_name'));return;}
   if(cabinets.find(c=>c.name.toLowerCase()===name.toLowerCase())){alert(t('alert.cab_exists'));return;}
@@ -7362,8 +7387,54 @@ function addCabinet(name, color, phone, email){
   // Generate a simple 6-char code + random password
   const code=Math.random().toString(36).substr(2,6).toUpperCase();
   const pwd=Math.random().toString(36).substr(2,8);
-  cabinets.push({id:String(Date.now()),name,color,phone:phone||'',email:email||'',portalId,code,pwd});
+  const now=new Date().toISOString();
+  cabinets.push({id:String(Date.now()),name,color,phone:phone||'',email:email||'',address:address||'',portalId,code,pwd,updatedAt:now});
   saveCabinets();refreshCabSelects();renderCabList();renderCabJobs();
+  flushCloudSave();
+}
+
+function openCabinetEdit(id){
+  const cab=cabinets.find(function(c){return String(c.id)===String(id);});
+  if(!cab)return;
+  document.getElementById('cab-edit-id').value=cab.id;
+  document.getElementById('cab-edit-name').value=cab.name||'';
+  document.getElementById('cab-edit-phone').value=cab.phone||'';
+  document.getElementById('cab-edit-email').value=cab.email||'';
+  document.getElementById('cab-edit-address').value=cab.address||cab.adresse||'';
+  document.getElementById('cab-edit-color').value=cab.color||'#1a4a7a';
+  document.getElementById('cab-edit-modal').style.display='flex';
+}
+
+function closeCabinetEdit(){
+  const modal=document.getElementById('cab-edit-modal');
+  if(modal)modal.style.display='none';
+}
+
+function saveCabinetEdit(){
+  const id=document.getElementById('cab-edit-id').value;
+  const cab=cabinets.find(function(c){return String(c.id)===String(id);});
+  if(!cab)return;
+  const name=document.getElementById('cab-edit-name').value.trim();
+  const phone=document.getElementById('cab-edit-phone').value.trim();
+  const email=document.getElementById('cab-edit-email').value.trim();
+  const address=document.getElementById('cab-edit-address').value.trim();
+  const color=document.getElementById('cab-edit-color').value||'#1a4a7a';
+  if(!name){alert(t('alert.enter_name'));return;}
+  const duplicate=cabinets.find(function(c){return String(c.id)!==String(id)&&String(c.name||'').toLowerCase()===name.toLowerCase();});
+  if(duplicate){alert(t('alert.cab_exists'));return;}
+  cab.name=name;
+  cab.phone=phone;
+  cab.email=email;
+  cab.address=address;
+  delete cab.adresse;
+  cab.color=color;
+  cab.updatedAt=new Date().toISOString();
+  reportAudit({action:'cabinet_updated',target:id});
+  saveCabinets();refreshCabSelects();renderCabList();renderCabJobs();
+  if(typeof publishPortal==='function')publishPortal(cab,{silent:true});
+  flushCloudSave();
+  closeCabinetEdit();
+  if(typeof showToast==='function')showToast('✅ Cabinet modifié','#2a6049');
 }
 
 function delCabinet(id){
@@ -7389,14 +7460,19 @@ function refreshCabSelects(){if(typeof syncSaisieCab==='function')syncSaisieCab(
 function renderCabList(){
   const els=[document.getElementById('cab-list-main'),document.getElementById('cab-list-modal')];
   const html=cabinets.length
-    ?cabinets.map(c=>`<div style="border:1px solid var(--border);border-radius:9px;margin-bottom:8px;overflow:hidden;">
+    ?cabinets.map(c=>{
+      const address=c.address||c.adresse||'';
+      const contact=[c.phone,c.email,address].filter(Boolean).map(escHtml).join(' · ');
+      return `<div style="border:1px solid var(--border);border-radius:9px;margin-bottom:8px;overflow:hidden;">
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg);">
           <div style="width:14px;height:14px;border-radius:50%;background:${c.color};flex-shrink:0;"></div>
           <div style="flex:1;">
-            <div style="font-size:.85rem;font-weight:500;">${c.name}</div>
+            <div style="font-size:.85rem;font-weight:500;">${escHtml(c.name)}</div>
             <div style="font-size:.68rem;color:var(--ink-soft);">${ti('cab.jobs_count',{n:jobs.filter(j=>j.cabinet===c.id).length})} · ${t('cab.code')} : <b style="font-family:monospace;">${c.code||'—'}</b></div>
+            ${contact?'<div style="font-size:.68rem;color:var(--ink-soft);margin-top:2px;">'+contact+'</div>':''}
             ${(()=>{const cabBdl=bdl.filter(b=>b.cabinet===c.id&&!b.invoiced);const total=cabBdl.reduce((s,b)=>s+(b.total||0),0);return cabBdl.length?'<div style="font-size:.68rem;margin-top:2px;"><span style="color:#5a3472;font-weight:600;">'+ti('cab.bl_uninvoiced',{n:cabBdl.length})+'</span> · <span style="color:#c8410a;font-weight:700;">'+total.toFixed(2).replace('.',',')+'\u00a0€</span> '+t('cab.pending')+'</div>':''})()}
           </div>
+          <button class="cab-edit-btn" data-cid="${c.id}" style="background:#475569;color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;">${t('common.edit')}</button>
           <button onclick="showCabPortalInfo('${c.id}')" style="background:#5a3472;color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;">${t('btn.credentials')}</button>
           <button onclick="resetCabPassword('${c.id}')" style="background:#8b4513;color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;">${t('btn.new_pwd')}</button>
           <button onclick="genFactureMensuelle('${c.id}')" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;">${t('btn.invoice_month')}</button>
@@ -7405,7 +7481,8 @@ function renderCabList(){
           <button onclick="openCourierDispatch('${c.id}','delivery')" style="background:#d97706;color:#fff;border:none;border-radius:5px;padding:4px 9px;font-family:monospace;font-size:.65rem;cursor:pointer;" title="Demander une livraison">📦</button>
           <button class="btn-del cab-del-btn" data-cid="${c.id}">✕</button>
         </div>
-      </div>`).join('')
+      </div>`;
+    }).join('')
     :'<div class="empty">'+t('empty.cabinets')+'</div>';
   els.forEach(el=>{if(el)el.innerHTML=html;});
 }
@@ -7640,15 +7717,20 @@ document.addEventListener('click',function(e){
       document.getElementById('cab-name').value,
       document.getElementById('cab-color').value,
       document.getElementById('cab-phone')?.value||'',
-      document.getElementById('cab-email')?.value||''
+      document.getElementById('cab-email')?.value||'',
+      document.getElementById('cab-address')?.value||''
     );
     document.getElementById('cab-name').value='';
     if(document.getElementById('cab-phone'))document.getElementById('cab-phone').value='';
     if(document.getElementById('cab-email'))document.getElementById('cab-email').value='';
+    if(document.getElementById('cab-address'))document.getElementById('cab-address').value='';
   }
   if(bid==='btn-cab-add-new'){addCabinet(document.getElementById('cab-new-name').value,document.getElementById('cab-new-color').value);document.getElementById('cab-new-name').value='';}
   if(bid==='btn-cab-mgr'){document.getElementById('cab-modal').style.display='flex';renderCabList();}
   if(bid==='btn-cab-close'){document.getElementById('cab-modal').style.display='none';}
+  if(bcl.contains('cab-edit-btn'))openCabinetEdit(btn.dataset.cid);
+  if(bid==='btn-cab-edit-cancel')closeCabinetEdit();
+  if(bid==='btn-cab-edit-save')saveCabinetEdit();
   if(bcl.contains('cab-del-btn'))delCabinet(btn.dataset.cid);
   if(bid==='btn-hist-clear-arch'){if(confirm(t('confirm.clear_history'))){archive=[];saveArchive();renderHistorique();}}
   // Impression
@@ -8590,6 +8672,7 @@ function _shouldMergeLocalOnInitialRestore(userId,p,silent){
   if(local.techs>remote.techs||local.customTypes>remote.customTypes)return true;
   if(local.programmedTasks>remote.programmedTasks)return true;
   if(local.jobs>remote.jobs||local.queue>remote.queue)return true;
+  if(local.cabinets>remote.cabinets)return true;
   return localTotal>0&&remote.jobs===0&&remote.queue===0&&remote.archive===0;
 }
 // Détecte les sauvegardes "suspectes" : mémoire vide alors qu'on savait qu'il y
@@ -8618,6 +8701,9 @@ function _isDestructiveSave(){
   // Désactiver le planning atelier est un état d'affichage contrôlé : les tâches
   // programmées restent stockées en arrière-plan et ne doivent pas bloquer la sauvegarde.
   if((last.programmedTasks||0)>0&&curr.programmedTasks===0&&((curr.jobs||0)+(curr.archive||0)>0))return true;
+  // Cas 4 : perte de cabinets seule (ex. autre onglet / restore partiel après déploiement)
+  if((last.cabinets||0)>=2&&curr.cabinets<(last.cabinets-1))return true;
+  if((last.cabinets||0)>=3&&curr.cabinets<last.cabinets*0.5)return true;
   return false;
 }
 // Affiche un avertissement plein écran (non-fermable accidentellement) quand une
@@ -8790,12 +8876,14 @@ async function cloudSave(){
               queue=_mergeCloudQueue(queue,remote.data.queue||[]);
               TECHS=_mergeCloudTechs(TECHS,remote.data.techs||{});
               customTypes=_mergeCloudCustomTypes(customTypes,remote.data.customTypes||[]);
+              if(remote.data.cabinets)cabinets=_mergeCloudRecords(cabinets,remote.data.cabinets);
               syncWindowLabData();
               syncWindowQueue();
               localStorage.setItem('lb_jobs',JSON.stringify(jobs));
               localStorage.setItem('lb_queue',JSON.stringify(queue));
               localStorage.setItem('lb_techs',JSON.stringify(TECHS));
               localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));
+              localStorage.setItem('lb_cabinets',JSON.stringify(cabinets));
             }
             _serverUpdatedAt=remote&&remote.updated_at?remote.updated_at:rows[0].updated_at;
           }
@@ -8955,7 +9043,10 @@ async function cloudRestore(silent=false){
       jobs=useJobMerge?_mergeCloudJobs(jobs,p.jobs):_filterDeletedJobs(p.jobs,deletedJobIds);
     }
     if(p.archive)archive=mergeLocalInitial?_mergeCloudRecords(archive,p.archive):p.archive;
-    if(p.cabinets&&(p.cabinets.length>0||!cabinets.length))cabinets=mergeLocalInitial?_mergeCloudRecords(cabinets,p.cabinets):p.cabinets;
+    if(p.cabinets){
+      const useCabMerge=mergeLocalInitial||(_initialRestoreDone&&silent)||cabinets.length>0;
+      cabinets=useCabMerge?_mergeCloudRecords(cabinets,p.cabinets):p.cabinets;
+    }
     if(p.syns)syns=p.syns;
     if(p.waiting)waiting=p.waiting;
     if(p.conges)conges=p.conges;
@@ -10088,7 +10179,7 @@ async function applyAiImportPlan(){
         if(cabinets.find(function(c){return String(c.name||'').toLowerCase()===nm.toLowerCase();})){cabByName[nm.toLowerCase()]=cabinets.find(function(c){return String(c.name||'').toLowerCase()===nm.toLowerCase();});continue;}
         var colors=['#1a4a7a','#2a6049','#5a3472','#c8410a','#7b3f00'];
         var col=colors[cabinets.length%colors.length];
-        addCabinet(nm,col,String(act.draft.phone||'').trim(),String(act.draft.email||'').trim());
+        addCabinet(nm,col,String(act.draft.phone||'').trim(),String(act.draft.email||'').trim(),String(act.draft.address||act.draft.adresse||'').trim());
         var createdCab=cabinets.find(function(c){return String(c.name||'').toLowerCase()===nm.toLowerCase();});
         if(createdCab)cabByName[nm.toLowerCase()]=createdCab;
         created++;
@@ -12029,7 +12120,7 @@ const TOUR_STEPS=[
    nextLabel:"Allons-y →",
    onNext:function(){var t=document.querySelector('.tab[data-pane="cabinets"]');if(t)t.click();}},
   {target:'#cab-add-card',placement:'bottom',title:"Remplissez les infos du cabinet",
-   body:"Voici le formulaire pour ajouter un dentiste. Tous les champs sont accessibles : tapez directement dans les cases.\n\n• Nom du cabinet (obligatoire) — par exemple « Dr Dupont — Cabinet Santé »\n• Téléphone (facultatif) — par exemple 06 12 34 56 78\n• Email (facultatif) — pour leur envoyer le lien d'accès au portail\n• Couleur — pour les distinguer visuellement\n\nQuand c'est rempli, cliquez sur Suivant. Vous pouvez aussi cliquer directement sur « + Ajouter » si vous préférez.",
+   body:"Voici le formulaire pour ajouter un dentiste. Tous les champs sont accessibles : tapez directement dans les cases.\n\n• Nom du cabinet (obligatoire) — par exemple « Dr Dupont — Cabinet Santé »\n• Téléphone (facultatif) — par exemple 06 12 34 56 78\n• Email (facultatif) — pour leur envoyer le lien d'accès au portail\n• Adresse postale (facultative) — utile pour les tournées coursier\n• Couleur — pour les distinguer visuellement\n\nQuand c'est rempli, cliquez sur Suivant. Vous pouvez aussi cliquer directement sur « + Ajouter » si vous préférez.",
    nextLabel:"Suivant : valider →",
    skipNextIfClicked:'#btn-cab-save'},
   {target:'#btn-cab-save',placement:'left',title:"Validez la création",
@@ -12448,7 +12539,7 @@ function showCabPicker(jobId){
     const pwd=Math.random().toString(36).substr(2,8);
     const colors=['#1a4a7a','#2a6049','#5a3472','#c8410a','#7b3f00'];
     const color=colors[cabinets.length%colors.length];
-    const newCab={id:String(Date.now()),name,color,phone,email,portalId,code,pwd};
+    const newCab={id:String(Date.now()),name,color,phone,email,address:'',portalId,code,pwd,updatedAt:new Date().toISOString()};
     cabinets.push(newCab);
     saveCabinets();refreshCabSelects();renderCabList();
     // Add to select and pre-select
@@ -12638,6 +12729,7 @@ async function publishPortal(cab,opts){
     cabName:cab.name,
     cabPhone:cab.phone||'',
     cabEmail:cab.email||'',
+    cabAddress:cab.address||cab.adresse||'',
     cabCode:cab.code||'',
     cabPwd:cab.pwd||'',
     portalId:cab.portalId,
@@ -14870,7 +14962,7 @@ function _chatNotificationText(cab,preview,linkOverride){
     '',
     'Ouvrir directement la conversation : '+link
   ];
-  lines.push('', 'Si le lien direct expire, reconnectez-vous avec vos identifiants cabinet habituels.');
+  lines.push('', 'Ce lien direct reste actif pendant 2 heures. Ensuite, reconnectez-vous avec vos identifiants cabinet habituels.');
   return lines.join('\n');
 }
 
@@ -14888,7 +14980,7 @@ function _chatNotificationHtml(cab,preview,linkOverride){
       '<p><strong>'+chatEscH(laboName)+'</strong> vous a envoyé un message sur LaboSync.</p>'+
       '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin:16px 0;color:#334155;">'+safePreview+'</div>'+
       '<div style="text-align:center;margin:22px 0;"><a href="'+chatEscH(link)+'" style="background:#2563eb;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:800;display:inline-block;">Ouvrir la conversation</a></div>'+
-      '<p style="font-size:13px;color:#64748b;">Si le lien direct expire, reconnectez-vous avec vos identifiants cabinet habituels.</p>'+
+      '<p style="font-size:13px;color:#64748b;">Ce lien direct reste actif pendant 2 heures. Ensuite, reconnectez-vous avec vos identifiants cabinet habituels.</p>'+
       '<p style="font-size:12px;color:#94a3b8;margin-top:20px;">Astuce : ajoutez LaboSync à l\'écran d\'accueil de votre téléphone pour l\'ouvrir comme une application.</p>'+
     '</div>'+
   '</div>';
@@ -16049,7 +16141,7 @@ function collectCpStopsPayload(){
       cabId:cab.id,
       cabName:cab.name,
       cabPhone:(stop.phone||cab.phone||'').trim(),
-      cabAddress:(stop.address||cab.address||'').trim(),
+      cabAddress:(stop.address||cab.address||cab.adresse||'').trim(),
     };
   }).filter(Boolean);
 }
@@ -16309,7 +16401,7 @@ async function openCourierDispatch(cabId,type){
   }).join('');
   document.getElementById('cd-title').textContent=(type==='delivery'?'📦 Livraison':'📥 Récupération')+' — '+cab.name;
   document.getElementById('cd-cab-name').value=cab.name;
-  document.getElementById('cd-cab-address').value=cab.address||'';
+  document.getElementById('cd-cab-address').value=cab.address||cab.adresse||'';
   document.getElementById('cd-cab-phone').value=cab.phone||'';
   document.getElementById('cd-notes').value='';
   document.getElementById('cd-msg').textContent='';

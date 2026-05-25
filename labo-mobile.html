@@ -1396,7 +1396,7 @@ async function loadData(){
     _serverUpdatedAt=rows[0].updated_at;
     if(p.jobs)jobs=p.jobs;
     if(p.archive)archive=p.archive;
-    if(p.cabinets)cabinets=p.cabinets;
+    if(p.cabinets)cabinets=_mergeMobileRecords(cabinets,p.cabinets);
     if(p.bdl)bdl=p.bdl;
     if(p.documents)documents=p.documents;
     if(p.tarifs)tarifs=p.tarifs;
