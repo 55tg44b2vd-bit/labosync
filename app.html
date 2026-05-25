@@ -14816,9 +14816,11 @@ async function _postPortalChatWithRepair(cab,body){
   return r;
 }
 
-function _chatPortalLink(){
+function _chatPortalLink(cab){
   try{
-    return window.location.origin + '/cabinet.html?open=messages';
+    var qs='open=messages';
+    if(cab&&cab.portalId)qs='id='+encodeURIComponent(cab.portalId)+'&'+qs;
+    return window.location.origin + '/cabinet.html?'+qs;
   }catch(e){
     return 'https://labosync.app/cabinet.html?open=messages';
   }
@@ -14839,7 +14841,7 @@ function _chatNotificationPreview(preview){
 
 function _chatNotificationText(cab,preview){
   var laboName=localStorage.getItem('lb_name')||'Votre laboratoire';
-  var link=_chatPortalLink();
+  var link=_chatPortalLink(cab);
   var lines=[
     'Bonjour,',
     '',
@@ -14855,7 +14857,7 @@ function _chatNotificationText(cab,preview){
 
 function _chatNotificationHtml(cab,preview){
   var laboName=localStorage.getItem('lb_name')||'Votre laboratoire';
-  var link=_chatPortalLink();
+  var link=_chatPortalLink(cab);
   var safePreview=chatEscH(_chatNotificationPreview(preview)).replace(/\n/g,'<br/>');
   return '<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a;">'+
     '<div style="background:#2563eb;color:#fff;padding:18px 22px;border-radius:12px 12px 0 0;">'+

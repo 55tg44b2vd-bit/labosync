@@ -65,31 +65,46 @@ async function resolvePortalIdFromCode(code, serviceKey) {
     return String(lookupRows[0].data.portalId).trim();
   }
 
+  const matches = await findPortalRowsByCode(code, serviceKey);
+  if (!matches || !matches.length) return null;
+  if (matches.length === 1) return portalIdFromRowId(matches[0].id);
+  return null;
+}
+
+async function findPortalRowsByCode(code, serviceKey) {
   // Anciens portails sans index cablogin_ : recherche par code JSON (sans filtre like qui fait planter l'API)
   const rows = await sbFetch(
     `labo_data?data->>cabCode=eq.${encodeURIComponent(code)}&select=id,data,updated_at&limit=15`,
     serviceKey
   );
-  if (!rows || !rows.length) return null;
-  const portalRows = rows.filter((r) => /^portal_/i.test(String(r.id || '')));
-  if (!portalRows.length) return null;
-  if (portalRows.length === 1) return portalIdFromRowId(portalRows[0].id);
-  return null;
+  if (!rows || !rows.length) return [];
+  return rows.filter((r) => /^portal_/i.test(String(r.id || '')));
 }
 
 async function findPortalByCredentials(code, pwd, serviceKey) {
   const portalId = await resolvePortalIdFromCode(code, serviceKey);
-  if (!portalId) return null;
 
-  const found = await readPortalRow(portalId, serviceKey);
-  if (!found) return null;
+  if (portalId) {
+    const found = await readPortalRow(portalId, serviceKey);
+    if (portalRowMatchesCredentials(found, code, pwd)) return found;
+  }
 
+  // Si l'index cablogin_ est obsolète, retombe sur une recherche directe des portails avec ce code.
+  const portalRows = await findPortalRowsByCode(code, serviceKey);
+  for (const row of portalRows) {
+    const candidate = { row, portalId: portalIdFromRowId(row.id) };
+    if (portalRowMatchesCredentials(candidate, code, pwd)) return candidate;
+  }
+
+  return null;
+}
+
+function portalRowMatchesCredentials(found, code, pwd) {
+  if (!found || !found.row || !found.row.data) return false;
   const raw = found.row.data || {};
   const storedCode = String(raw.cabCode || '').trim().toUpperCase();
   const storedPwd = String(raw.cabPwd || '').trim();
-  if (storedCode !== code || storedPwd !== pwd) return null;
-
-  return found;
+  return storedCode === code && storedPwd === pwd;
 }
 
 function authFailure() {
