@@ -4385,6 +4385,7 @@ function renderDashboard(){
     missingByCab[k].items.push(j);
   });
   const missingGroups=Object.keys(missingByCab).map(function(k){return missingByCab[k];});
+  const pendingResponseJobs=jobs.filter(function(j){return j.pendingResponse;});
 
   el.innerHTML=
     '<div style="margin-bottom:28px;">'+
@@ -4396,6 +4397,7 @@ function renderDashboard(){
       kcard(String(activeJobs.length),t('dash.jobs_today'),'#2a6049')+
       (urgentOrLate.length?kcard(String(urgentOrLate.length),'urgents / en retard','#c8410a'):'')+
       (allItemsWithMissing.length?kcard(String(allItemsWithMissing.length),'questions à poser','#c2410c'):'')+
+      (pendingResponseJobs.length?kcard(String(pendingResponseJobs.length),'en attente de réponse','#a16207'):'')+
       (readyToDeliver.length?kcard(String(readyToDeliver.length),'sans bon de livraison','#2563eb'):'')+
       (pendingBLs.length?kcard(String(pendingBLs.length),'BL à facturer','#d97706'):'')+
       (pendingBLs.length?kcard(fmtEur(pendingTotal),'en attente de règlement','#c8410a'):'')+
@@ -4405,6 +4407,7 @@ function renderDashboard(){
 
     (urgentOrLate.length?section('🔥 Urgent & en retard',listJobs(urgentOrLate,true),'#c8410a'):'')+
     '<div id="dash-pending-orders" data-pending-orders></div>'+
+    (pendingResponseJobs.length?section('⏸ En attente de réponse',listPendingResponseJobs(pendingResponseJobs),'#a16207'):'')+
     (missingGroups.length?section('📞 Questions à poser aux praticiens',listMissingByCab(missingGroups),'#c2410c'):'')+
     (readyToDeliver.length?section('📦 Sans bon de livraison',listJobs(readyToDeliver,false),'#2a6049'):'')+
     (dueToday.length?section('📅 À livrer aujourd\'hui',listJobs(dueToday,false),'#2563eb'):'')+
@@ -4469,6 +4472,29 @@ function renderDashboard(){
           '<div style="font-size:.74rem;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escH(u.preview||'Nouveau message')+'</div>'+
         '</div>'+
         '<div style="background:#c8410a;color:#fff;border-radius:99px;padding:2px 9px;font-size:.68rem;font-weight:700;">'+u.count+'</div>'+
+      '</div>';
+    }).join('');
+  }
+  function listPendingResponseJobs(list){
+    return list.slice(0,12).map(function(j){
+      const cab=j.cabinet?cabinets.find(function(c){return c.id===j.cabinet;}):null;
+      const typeLbl=(typeof getJobTypeLabel==='function')?getJobTypeLabel(j):(j.type||'');
+      const ref=j.trackCode||String(j.id).slice(-6);
+      const commentBlock=j.responseComment?
+        '<div style="font-size:.76rem;color:var(--ink);margin-top:6px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;white-space:pre-wrap;">📝 '+escH(j.responseComment)+'</div>':'';
+      return '<div style="padding:10px 0;border-bottom:1px solid var(--border);">'+
+        '<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;">'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-weight:600;font-size:.88rem;color:var(--ink);">'+escH(j.patient||'')+'</div>'+
+            '<div style="font-size:.72rem;color:var(--ink-soft);margin-top:2px;">'+escH(typeLbl)+(cab?' · '+escH(cab.name):'')+' · réf. '+escH(ref)+'</div>'+
+            commentBlock+
+          '</div>'+
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
+            '<button onclick="openJobDetail(\''+escH(j.id)+'\')" class="btn btn-b" style="font-size:.72rem;padding:5px 10px;">📝 Note</button>'+
+            (cab&&cab.phone?'<button onclick="openPendingResponseWhatsApp(\''+escH(j.id)+'\')" class="btn btn-b" style="font-size:.72rem;padding:5px 10px;background:#25d366;color:#fff;border-color:#25d366;">📲 WhatsApp</button>':'')+
+            '<button onclick="clearJobPendingResponse(\''+escH(j.id)+'\')" class="btn btn-a" style="font-size:.72rem;padding:5px 10px;">▶ Flux normal</button>'+
+          '</div>'+
+        '</div>'+
       '</div>';
     }).join('');
   }
@@ -6573,6 +6599,10 @@ function renderTable(){
     const missingTooltip=missingItemsArr.map(function(it){return _miCatLabel(it.category)+(it.text?' : '+it.text:'');}).join(' | ');
     const missing=missingCnt?missingTooltip:'';
     const missingBadge=missingCnt?`<span class="badge" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;cursor:pointer;" onclick="editMissingInfo('${j.id}')" title="${(missingTooltip+'').replace(/'/g,'&#39;').replace(/"/g,'&quot;')}">❓ ${missingCnt} info${missingCnt>1?'s':''} manquante${missingCnt>1?'s':''}</span> `:'';
+    const pendingRespBadge=j.pendingResponse?'<span class="badge" style="background:#fef3c7;color:#a16207;border:1px solid #fde68a;">⏸ Attente réponse</span> ':'';
+    const pendingRespBtn=j.pendingResponse
+      ?'<button onclick="clearJobPendingResponse(\''+j.id+'\')" title="Remettre dans le flux normal" style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px 4px;">▶</button> '
+      :'<button onclick="setJobPendingResponse(\''+j.id+'\')" title="En attente de réponse" style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px 4px;">⏸</button> ';
     const ficheBtn=planningOn?`<button type="button" class="btn-print-lab-sheet" data-id="${j.id}" title="Imprimer la fiche labo" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:2px 4px;">🖨️</button> `:'';
     if(!planningOn||!j.tasks||!j.tasks.length){
       // Travail simple (mode prog OFF) : une seule ligne sans étapes
@@ -6584,13 +6614,13 @@ function renderTable(){
       const qForJob=(typeof queue!=='undefined'&&queue||[]).find(function(q){return String(q.jobId||'')===String(j.id);});
       const progBtn=(qForJob&&planningOn)?'<button type="button" class="btn-q-auto" data-qid="'+escH2(qForJob.id)+'" title="Programmer automatiquement" style="padding:4px 9px;font-size:.7rem;margin-right:4px;">Auto</button>':'';
       rows.push(`<tr>
-        <td onclick="openJobDetail('${j.id}')" style="font-weight:500;cursor:pointer;">${j.urgent?'<span class="badge bg-urgent">🔴 URGENT</span> ':''}${missingBadge}${notProgBadge}${j.patient}${teethHint}${j.note?`<div style="font-size:.65rem;color:var(--ink-soft);font-style:italic;margin-top:2px;">📝 ${j.note}</div>`:''}${missing?`<div style="font-size:.65rem;color:#c2410c;margin-top:2px;">❓ ${(missing+'').replace(/</g,'&lt;')}</div>`:''}</td>
+        <td onclick="openJobDetail('${j.id}')" style="font-weight:500;cursor:pointer;">${j.urgent?'<span class="badge bg-urgent">🔴 URGENT</span> ':''}${pendingRespBadge}${missingBadge}${notProgBadge}${j.patient}${teethHint}${j.note?`<div style="font-size:.65rem;color:var(--ink-soft);font-style:italic;margin-top:2px;">📝 ${j.note}</div>`:''}${j.responseComment?`<div style="font-size:.65rem;color:#a16207;margin-top:2px;">💬 ${(j.responseComment+'').replace(/</g,'&lt;')}</div>`:''}${missing?`<div style="font-size:.65rem;color:#c2410c;margin-top:2px;">❓ ${(missing+'').replace(/</g,'&lt;')}</div>`:''}</td>
         <td><span class="badge bg-type">${getJobTypeLabel(j)}</span></td>
         <td style="color:var(--ink-soft);font-style:italic;">—</td>
         <td style="color:var(--ink-soft);font-style:italic;">—</td>
         <td>${_jobLabDeliveryDate(j)?'<span style="color:#2a6049;font-weight:500;">'+delivStr+'</span>':'<span style="color:var(--ink-soft);">'+created+'</span>'}</td>
         <td style="text-align:center;white-space:nowrap;">
-          ${progBtn}${ficheBtn}<button onclick="editJob('${j.id}')" title="Modifier ce travail" style="background:none;border:none;cursor:pointer;font-size:.95rem;padding:2px 6px;">✏️</button>
+          ${pendingRespBtn}${progBtn}${ficheBtn}<button onclick="editJob('${j.id}')" title="Modifier ce travail" style="background:none;border:none;cursor:pointer;font-size:.95rem;padding:2px 6px;">✏️</button>
           <button class="btn-del" data-id="${j.id}" title="Supprimer">✕</button>
         </td>
       </tr>`);
@@ -6599,8 +6629,9 @@ function renderTable(){
         const late=new Date(t.dueDate)<today;
         rows.push(`<tr>
           ${i===0?`<td rowspan="${j.tasks.length}" onclick="openJobDetail('${j.id}')" style="font-weight:500;border-right:1px solid #e2e8f0;cursor:pointer;">
-            ${j.urgent?'<span class="badge bg-urgent">🔴 URGENT</span> ':''}${missingBadge}${j.patient}
+            ${j.urgent?'<span class="badge bg-urgent">🔴 URGENT</span> ':''}${pendingRespBadge}${missingBadge}${j.patient}
             ${j.note?`<div style="font-size:.65rem;color:var(--ink-soft);font-style:italic;margin-top:2px;">📝 ${j.note}</div>`:''}
+            ${j.responseComment?`<div style="font-size:.65rem;color:#a16207;margin-top:2px;">💬 ${(j.responseComment+'').replace(/</g,'&lt;')}</div>`:''}
             ${missing?`<div style="font-size:.65rem;color:#c2410c;margin-top:2px;">❓ ${(missing+'').replace(/</g,'&lt;')}</div>`:''}
           </td>`:''}
           ${i===0?`<td rowspan="${j.tasks.length}" style="border-right:1px solid #e2e8f0;"><span class="badge bg-type">${getJobTypeLabel(j)}</span></td>`:''}
@@ -6608,7 +6639,7 @@ function renderTable(){
           <td><span class="badge bg-${t.tech}">${getTech(t.tech).label}</span></td>
           <td>${late?'<span class="badge bg-late">⚠️ Retard</span> ':''}${fmtL(t.dueDate)}</td>
           ${i===0?`<td rowspan="${j.tasks.length}" style="text-align:center;white-space:nowrap;">
-            ${ficheBtn}<button onclick="editJob('${j.id}')" title="Modifier ce travail" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:2px 4px;">✏️</button>
+            ${pendingRespBtn}${ficheBtn}<button onclick="editJob('${j.id}')" title="Modifier ce travail" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:2px 4px;">✏️</button>
             <button class="btn-del" data-id="${j.id}" title="Supprimer">✕</button>
             <button class="btn-qr" data-id="${j.id}" title="QR Code" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:2px 4px;">🔲</button>
           </td>`:''}
@@ -7938,6 +7969,88 @@ function reprogramJob(id){
   alert(t('toast.reprogrammed'));
 }
 function deleteWaiting(id){if(!confirm('Supprimer ?'))return;waiting=waiting.filter(x=>x.id!==id);saveWaiting();renderWaiting();updateWaitingBadge();}
+
+/* ══════════════════════════════════════════
+   §19b — EN ATTENTE DE RÉPONSE (CABINET)
+   ══════════════════════════════════════════ */
+function isJobPendingResponse(j){return !!j&&!!j.pendingResponse;}
+function getPendingResponseJobs(){return jobs.filter(isJobPendingResponse);}
+function _syncQueuePendingFields(job){
+  if(typeof queue==='undefined'||!queue||!job)return;
+  const q=queue.find(function(x){return String(x.jobId||'')===String(job.id);});
+  if(!q)return;
+  if(job.pendingResponse){
+    q.pendingResponse=true;
+    q.pendingResponseAt=job.pendingResponseAt||null;
+    q.responseComment=job.responseComment||'';
+    q.responseCommentAt=job.responseCommentAt||null;
+  }else{
+    delete q.pendingResponse;delete q.pendingResponseAt;
+    delete q.responseComment;delete q.responseCommentAt;
+  }
+}
+function _buildPendingResponseWaText(job){
+  const cab=job.cabinet?cabinets.find(function(c){return c.id===job.cabinet;}):null;
+  const laboName=localStorage.getItem('lb_name')||'Notre laboratoire';
+  const ref=job.trackCode||String(job.id).slice(-6);
+  const patient=job.patient||'patient';
+  let msg='Bonjour';
+  if(cab&&cab.name)msg+=',';
+  msg+='\n\nConcernant le travail '+patient+' (réf. '+ref+'), nous avons une question et attendons votre retour.\n\nMerci,\n'+laboName;
+  return msg;
+}
+function openPendingResponseWhatsApp(jobId){
+  const job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job){if(typeof showToast==='function')showToast('Travail introuvable','#c0392b');return;}
+  const text=_buildPendingResponseWaText(job);
+  const cab=job.cabinet?cabinets.find(function(c){return c.id===job.cabinet;}):null;
+  if(cab&&cab.phone){
+    const digits=(cab.phone||'').replace(/[^\d+]/g,'').replace(/^\+/,'');
+    window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(text),'_blank');
+  }else{
+    window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+    if(typeof showToast==='function')showToast('Numéro cabinet manquant — message ouvert sans destinataire','#d97706',4000);
+  }
+}
+function setJobPendingResponse(jobId){
+  const job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job)return;
+  job.pendingResponse=true;
+  job.pendingResponseAt=new Date().toISOString();
+  _syncQueuePendingFields(job);
+  saveJobs();
+  if(typeof saveQueue==='function')saveQueue();
+  render();
+  openPendingResponseWhatsApp(jobId);
+  if(typeof showToast==='function')showToast('⏸ Travail en attente de réponse','#a16207');
+}
+function clearJobPendingResponse(jobId){
+  const job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job)return;
+  if(!confirm('Remettre ce travail dans le flux normal ?'))return;
+  job.pendingResponse=false;
+  delete job.pendingResponseAt;
+  _syncQueuePendingFields(job);
+  saveJobs();
+  if(typeof saveQueue==='function')saveQueue();
+  const overlay=document.getElementById('job-detail-overlay');
+  if(overlay)overlay.remove();
+  render();
+  if(typeof showToast==='function')showToast('✅ Travail remis dans le flux normal','#2a6049');
+}
+function saveJobResponseComment(jobId){
+  const job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job)return;
+  const ta=document.getElementById('jdr-comment');
+  const text=ta?ta.value.trim():'';
+  job.responseComment=text;
+  job.responseCommentAt=new Date().toISOString();
+  _syncQueuePendingFields(job);
+  saveJobs();
+  if(typeof saveQueue==='function')saveQueue();
+  if(typeof renderDashboard==='function')renderDashboard();
+  if(typeof showToast==='function')showToast('💾 Commentaire enregistré','#2563eb');
+}
 
 /* ══════════════════════════════════════════
    §20 — SUIVI (PORTAL)
@@ -15716,6 +15829,19 @@ function openJobDetail(jobId){
   const notProgrammedHtml=progOn&&(!job.tasks||!job.tasks.length)
     ?'<div style="background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;border-radius:9px;padding:9px 12px;font-size:.84rem;font-weight:700;margin-bottom:12px;">Travail rentré non programmé</div>'
     :'';
+  const pendingResponseHtml=isActiveJob?(
+    job.pendingResponse
+      ?'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px;margin-bottom:14px;">'+
+        '<div style="font-weight:700;font-size:.88rem;color:#a16207;margin-bottom:8px;">⏸ En attente de réponse du cabinet</div>'+
+        '<label style="font-size:.72rem;font-weight:600;color:var(--ink-soft);display:block;margin-bottom:4px;">Commentaire (question posée / réponse reçue)</label>'+
+        '<textarea id="jdr-comment" style="width:100%;min-height:72px;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px;font-size:.84rem;font-family:inherit;resize:vertical;outline:none;">'+escH(job.responseComment||'')+'</textarea>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">'+
+          '<button onclick="saveJobResponseComment(\''+jobIdJs+'\')" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:.8rem;font-weight:600;cursor:pointer;">💾 Enregistrer</button>'+
+          (cab&&cab.phone?'<button onclick="openPendingResponseWhatsApp(\''+jobIdJs+'\')" style="background:#25d366;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:.8rem;font-weight:600;cursor:pointer;">📲 WhatsApp</button>':'')+
+          '<button onclick="clearJobPendingResponse(\''+jobIdJs+'\')" style="background:#2a6049;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:.8rem;font-weight:600;cursor:pointer;">▶ Remettre dans le flux normal</button>'+
+        '</div></div>'
+      :'<button onclick="setJobPendingResponse(\''+jobIdJs+'\')" style="margin-bottom:14px;background:#fef3c7;color:#a16207;border:1px solid #fde68a;border-radius:9px;padding:10px 20px;font-size:.84rem;font-weight:700;cursor:pointer;width:100%;">⏸ En attente de réponse</button>'
+  ):'';
   const itemsHtml='<div style="margin-top:12px;"><div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:6px;">Travaux associés</div>'+
     priceItems.map(function(item){
       var lbl=(customTypes.find(function(c){return c.id===item.type;})||{}).label||TYPE_LABELS[item.type]||item.type;
@@ -15804,6 +15930,7 @@ function openJobDetail(jobId){
         </div>
       </div>
       ${notProgrammedHtml}
+      ${pendingResponseHtml}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
         <div style="background:var(--surface);border-radius:9px;padding:10px 12px;">
           <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:3px;">Créé le</div>

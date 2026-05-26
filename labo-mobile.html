@@ -421,6 +421,14 @@ input,select,textarea{font-size:16px;font-family:inherit;}
         <div id="home-urgent"></div>
       </div>
 
+      <div class="mcard" id="home-pending-response-card" style="display:none;border-left:4px solid #a16207;">
+        <div class="mcard-header">
+          <div class="mcard-title" style="color:#a16207;">⏸ En attente de réponse</div>
+          <span id="home-pending-response-cnt" style="background:#a16207;color:#fff;border-radius:99px;padding:2px 9px;font-size:.7rem;font-weight:700;"></span>
+        </div>
+        <div id="home-pending-response"></div>
+      </div>
+
       <div class="mcard" id="home-missing-card" style="display:none;border-left:4px solid #c2410c;">
         <div class="mcard-header">
           <div class="mcard-title" style="color:#c2410c;">📞 Questions à poser aux praticiens</div>
@@ -1547,6 +1555,7 @@ function renderAll(){
   renderStats();
   renderHomeUrgent();
   renderHomePendingOrders();
+  renderHomePendingResponse();
   renderHomeMissing();
   renderHomeReady();
   renderHomeDueToday();
@@ -1625,7 +1634,7 @@ function renderHomeRecentDocs(){
 /* ── HOME JOBS ── */
 function renderHomeJobs(){
   var el=document.getElementById('home-jobs');if(!el)return;
-  var active=jobs.filter(function(j){return!bdl.find(function(b){return b.jobId===j.id;});}).slice(0,5);
+  var active=jobs.filter(function(j){return!bdl.find(function(b){return b.jobId===j.id;})&&!j.pendingResponse;}).slice(0,5);
   if(!active.length){el.innerHTML='<div class="empty"><div class="empty-icon">🦷</div>Aucun travail en cours</div>';return;}
   el.innerHTML=active.map(function(j){
     var cab=j.cabinet?cabinets.find(function(c){return c.id===j.cabinet;}):null;
@@ -2408,6 +2417,103 @@ function _resetMissingFormState(prefix){
   _missingState[prefix]={selected:{},customs:{}};
   var chk=document.getElementById(prefix+'-missing');if(chk)chk.checked=false;
   var wrap=document.getElementById(prefix+'-missing-wrap');if(wrap)wrap.style.display='none';
+}
+
+/* ── EN ATTENTE DE RÉPONSE (CABINET) ── */
+function _syncQueuePendingFieldsMob(job){
+  if(!queue||!job)return;
+  var q=queue.find(function(x){return String(x.jobId||'')===String(job.id);});
+  if(!q)return;
+  if(job.pendingResponse){
+    q.pendingResponse=true;
+    q.pendingResponseAt=job.pendingResponseAt||null;
+    q.responseComment=job.responseComment||'';
+    q.responseCommentAt=job.responseCommentAt||null;
+  }else{
+    delete q.pendingResponse;delete q.pendingResponseAt;
+    delete q.responseComment;delete q.responseCommentAt;
+  }
+}
+function _buildPendingResponseWaTextMob(job){
+  var cab=job.cabinet?cabinets.find(function(c){return c.id===job.cabinet;}):null;
+  var laboName=localStorage.getItem('lb_name')||'Notre laboratoire';
+  var ref=job.trackCode||String(job.id).slice(-6);
+  var patient=job.patient||'patient';
+  var msg='Bonjour';
+  if(cab&&cab.name)msg+=',';
+  msg+='\n\nConcernant le travail '+patient+' (réf. '+ref+'), nous avons une question et attendons votre retour.\n\nMerci,\n'+laboName;
+  return msg;
+}
+function openPendingResponseWhatsApp(jobId){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job){toast('Travail introuvable','var(--red)');return;}
+  var text=_buildPendingResponseWaTextMob(job);
+  var cab=job.cabinet?cabinets.find(function(c){return c.id===job.cabinet;}):null;
+  if(cab&&cab.phone){
+    var digits=(cab.phone||'').replace(/[^\d+]/g,'').replace(/^\+/,'');
+    window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(text),'_blank');
+  }else{
+    window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+    toast('Numéro cabinet manquant','var(--orange)',4000);
+  }
+}
+function setJobPendingResponse(jobId){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job)return;
+  job.pendingResponse=true;
+  job.pendingResponseAt=new Date().toISOString();
+  _syncQueuePendingFieldsMob(job);
+  saveData();
+  renderAll();
+  openPendingResponseWhatsApp(jobId);
+  toast('⏸ En attente de réponse','#a16207');
+}
+function clearJobPendingResponse(jobId){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job)return;
+  if(!confirm('Remettre ce travail dans le flux normal ?'))return;
+  job.pendingResponse=false;
+  delete job.pendingResponseAt;
+  _syncQueuePendingFieldsMob(job);
+  saveData();
+  renderAll();
+  toast('✅ Remis dans le flux normal','var(--green)');
+}
+function editJobResponseComment(jobId){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job)return;
+  var t=prompt('Commentaire (question posée / réponse reçue) :',job.responseComment||'');
+  if(t===null)return;
+  job.responseComment=t.trim();
+  job.responseCommentAt=new Date().toISOString();
+  _syncQueuePendingFieldsMob(job);
+  saveData();
+  renderAll();
+  toast('💾 Commentaire enregistré','var(--accent)');
+}
+function renderHomePendingResponse(){
+  var card=document.getElementById('home-pending-response-card');
+  var el=document.getElementById('home-pending-response');
+  var cnt=document.getElementById('home-pending-response-cnt');
+  if(!el||!card)return;
+  var list=jobs.filter(function(j){return j.pendingResponse;});
+  if(!list.length){card.style.display='none';return;}
+  card.style.display='';
+  if(cnt)cnt.textContent=list.length;
+  el.innerHTML=list.slice(0,8).map(function(j){
+    var cab=j.cabinet?cabinets.find(function(c){return c.id===j.cabinet;}):null;
+    var ref=j.trackCode||String(j.id).slice(-6);
+    var commentHtml=j.responseComment?'<div style="font-size:.74rem;color:var(--ink);margin-top:6px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;white-space:pre-wrap;line-height:1.4;">📝 '+esc(j.responseComment)+'</div>':'';
+    return '<div style="padding:10px 0;border-bottom:1px solid var(--border);">'+
+      '<div style="font-weight:600;font-size:.86rem;">'+esc(j.patient||'')+'</div>'+
+      '<div style="font-size:.7rem;color:var(--ink-soft);margin-top:2px;">'+esc(getJobTypeLabel(j))+(cab?' · '+esc(cab.name):'')+' · réf. '+esc(ref)+'</div>'+
+      commentHtml+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'+
+        '<button onclick="editJobResponseComment(\''+esc(j.id)+'\')" style="flex:1;min-width:72px;background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:8px;font-size:.72rem;font-weight:600;cursor:pointer;min-height:34px;">📝 Note</button>'+
+        (cab&&cab.phone?'<button onclick="openPendingResponseWhatsApp(\''+esc(j.id)+'\')" style="flex:1;min-width:72px;background:#25d366;color:#fff;border:none;border-radius:8px;padding:8px;font-size:.72rem;font-weight:600;cursor:pointer;min-height:34px;">📲 WhatsApp</button>':'')+
+        '<button onclick="clearJobPendingResponse(\''+esc(j.id)+'\')" style="flex:1;min-width:72px;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px;font-size:.72rem;font-weight:600;cursor:pointer;min-height:34px;">▶ OK</button>'+
+      '</div></div>';
+  }).join('');
 }
 
 /* ── HOME MISSING INFO (questions à poser) ── */
@@ -3568,13 +3674,22 @@ function renderJobList(){
     var cabColor=cab&&cab.color?cab.color:'#94a3b8';
     // Statut visuel principal
     var statusBadge='';
-    if(j.urgent)statusBadge='<span style="background:#fee2e2;color:#dc2626;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">🔴 Urgent</span>';
+    if(j.pendingResponse)statusBadge='<span style="background:#fef3c7;color:#a16207;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">⏸ Attente réponse</span>';
+    else if(j.urgent)statusBadge='<span style="background:#fee2e2;color:#dc2626;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">🔴 Urgent</span>';
     else if(pct>=100)statusBadge='<span style="background:#d1fae5;color:#065f46;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">✓ Terminé</span>';
     else if(pct>0)statusBadge='<span style="background:#dbeafe;color:#1d4ed8;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">⏳ En cours</span>';
     else statusBadge='<span style="background:#f1f5f9;color:#64748b;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">○ À démarrer</span>';
     var dateStr=j.deliveryDate?fmtDate(j.deliveryDate):'';
     var isLate=j.deliveryDate&&new Date(j.deliveryDate)<new Date()&&pct<100;
-    return '<article class="ig-card'+(j.urgent?' urgent':'')+'" data-jid="'+esc(j.id)+'" style="background:var(--surface);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(15,23,42,.05);border:1px solid var(--border);'+(j.urgent?'border-left:4px solid #dc2626;':hasMissing?'border-left:4px solid #c2410c;':'')+'">'+
+    var pendingResp=j.pendingResponse;
+    var pendingActions=pendingResp
+      ?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">'+
+        '<button type="button" onclick="editJobResponseComment(\''+esc(j.id)+'\')" style="flex:1;background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:8px;font-size:.72rem;font-weight:600;cursor:pointer;">📝 Note</button>'+
+        '<button type="button" onclick="openPendingResponseWhatsApp(\''+esc(j.id)+'\')" style="flex:1;background:#25d366;color:#fff;border:none;border-radius:8px;padding:8px;font-size:.72rem;font-weight:600;cursor:pointer;">📲 WhatsApp</button>'+
+        '<button type="button" onclick="clearJobPendingResponse(\''+esc(j.id)+'\')" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px;font-size:.72rem;font-weight:600;cursor:pointer;">▶ Flux normal</button>'+
+      '</div>'
+      :'<button type="button" onclick="setJobPendingResponse(\''+esc(j.id)+'\')" style="margin-top:10px;width:100%;background:#fef3c7;color:#a16207;border:1px solid #fde68a;border-radius:8px;padding:9px;font-size:.78rem;font-weight:700;cursor:pointer;">⏸ En attente de réponse</button>';
+    return '<article class="ig-card'+(j.urgent?' urgent':'')+'" data-jid="'+esc(j.id)+'" style="background:var(--surface);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(15,23,42,.05);border:1px solid var(--border);'+(pendingResp?'border-left:4px solid #a16207;':j.urgent?'border-left:4px solid #dc2626;':hasMissing?'border-left:4px solid #c2410c;':'')+'">'+
       // Header carte : avatar cabinet + nom + statut
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'+
         '<div style="width:38px;height:38px;border-radius:50%;background:'+cabColor+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;">'+esc(cabInitial)+'</div>'+
@@ -3588,6 +3703,8 @@ function renderJobList(){
       '<div style="font-size:.92rem;color:var(--ink);font-weight:500;line-height:1.4;margin-bottom:8px;">'+esc(getJobTypeLabel(j))+(j.nb>1?' <span style="color:var(--ink-soft);font-weight:400;">× '+j.nb+'</span>':'')+'</div>'+
       // Notes / infos manquantes
       (hasMissing?'<div style="font-size:.78rem;color:#c2410c;background:#fff7ed;border-radius:8px;padding:8px 11px;margin-bottom:8px;line-height:1.45;">'+openItems.map(function(it){return _miCatIcon(it.category)+' '+esc(it.text||_miCatLabel(it.category).replace(/^[^ ]+\s/,''));}).join('<br/>')+'</div>':'')+
+      (j.responseComment?'<div style="font-size:.76rem;color:#a16207;background:#fffbeb;border-radius:8px;padding:8px 11px;margin-bottom:8px;line-height:1.45;">💬 '+esc(j.responseComment)+'</div>':'')+
+      pendingActions+
       // Footer : date + progression
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.74rem;color:var(--ink-soft);">'+
         '<div>'+(dateStr?(isLate?'<span style="color:#dc2626;font-weight:600;">⚠️ Retard · '+dateStr+'</span>':'📅 '+dateStr):'')+'</div>'+
