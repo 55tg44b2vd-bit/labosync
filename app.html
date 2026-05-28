@@ -580,6 +580,22 @@ body.has-sidebar #drawer{transform:translateX(0);}
   </div>
 </div>
 
+<script>
+(function(){
+  window.__labosyncEarlyLoginFallback = setTimeout(function(){
+    var loading=document.getElementById('auth-loading');
+    var overlay=document.getElementById('auth-overlay');
+    var app=document.getElementById('app-main');
+    var loginBtn=document.getElementById('btn-login');
+    if(loginBtn&&loginBtn.disabled)return;
+    if(loading&&loading.style.display!=='none'&&overlay&&(!app||app.style.display!=='block')){
+      loading.style.display='none';
+      overlay.style.display='flex';
+    }
+  }, 8000);
+})();
+</script>
+
 <!-- PAYWALL -->
 <div id="paywall-overlay" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);z-index:9998;overflow-y:auto;padding:40px 20px;">
   <button type="button" id="paywall-close" onclick="closePaywall()" aria-label="Fermer" title="Fermer" style="position:fixed;top:16px;right:16px;z-index:9999;width:44px;height:44px;border:none;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font-size:1.5rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);">×</button>
@@ -5728,7 +5744,7 @@ function openOrderQuestions(portalId,caseId,stepId){
   const step=stepId?_findStep(c,stepId):(c.steps||[]).find(function(s){return s.status==='pending';});
   if(!step)return;
   const cab=cabinets.find(function(x){return x.portalId===portalId;});if(!cab)return;
-  _orderQ={selected:{},customs:{},_caseId:caseId,_stepId:step.id,_patient:c.patient.name||''};
+  _orderQ={selected:{},customs:{},_portalId:portalId,_caseId:caseId,_stepId:step.id,_patient:c.patient.name||''};
   // Compat ancien code
   const o=Object.assign({},c,{id:caseId,patient:c.patient});
   const overlay=document.createElement('div');
@@ -5737,7 +5753,7 @@ function openOrderQuestions(portalId,caseId,stepId){
   overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:22px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;">'+
     '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">'+
       '<div style="font-size:1.1rem;font-weight:700;">❓ Demander des précisions à '+escH2(cab.name)+'</div>'+
-      '<button onclick="document.getElementById(\'oq-overlay\').remove()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#64748b;">×</button>'+
+      '<button type="button" onclick="document.getElementById(\'oq-overlay\').remove()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#64748b;">×</button>'+
     '</div>'+
     '<div style="font-size:.78rem;color:#64748b;margin-bottom:14px;">Code patient : <strong>'+escH2(o.patient.name)+'</strong>. Cochez les informations manquantes — un message groupé sera envoyé via le chat du portail.</div>'+
     '<div id="oq-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>'+
@@ -5745,8 +5761,8 @@ function openOrderQuestions(portalId,caseId,stepId){
     '<div style="font-size:.74rem;color:#64748b;font-weight:600;margin-bottom:4px;">Message à envoyer au praticien (modifiable) :</div>'+
     '<textarea id="oq-msg" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:.84rem;outline:none;min-height:140px;resize:vertical;font-family:Inter,sans-serif;"></textarea>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">'+
-      '<button onclick="document.getElementById(\'oq-overlay\').remove()" style="background:none;border:1px solid #e2e8f0;color:#64748b;border-radius:8px;padding:9px 16px;font-size:.84rem;cursor:pointer;">Annuler</button>'+
-      '<button onclick="sendOrderQuestions(\''+escH2(portalId)+'\',\''+escH2(caseId)+'\',\''+escH2(step.id)+'\')" style="background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:.85rem;font-weight:600;cursor:pointer;">📨 Envoyer au praticien</button>'+
+      '<button type="button" onclick="document.getElementById(\'oq-overlay\').remove()" style="background:none;border:1px solid #e2e8f0;color:#64748b;border-radius:8px;padding:9px 16px;font-size:.84rem;cursor:pointer;">Annuler</button>'+
+      '<button type="button" onclick="sendOrderQuestions()" style="background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:.85rem;font-weight:600;cursor:pointer;">📨 Envoyer au praticien</button>'+
     '</div>'+
   '</div>';
   document.body.appendChild(overlay);
@@ -5770,41 +5786,22 @@ function renderOrderQChips(o){
       const val=_orderQ.customs[catId]||'';
       return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">'+
         '<span style="min-width:130px;font-size:.78rem;font-weight:600;color:#c2410c;">'+c.icon+' '+c.label+' :</span>'+
-        '<input type="text" value="'+escAttr(val)+'" placeholder="'+escAttr(c.ph)+'" oninput="_orderQ.customs[\''+catId+'\']=this.value;_buildOrderQText(\''+(o.id)+'\')" style="flex:1;border:1px solid #fed7aa;background:#fff;border-radius:7px;padding:6px 10px;font-size:.82rem;outline:none;"/>'+
+        '<input type="text" value="'+escAttr(val)+'" placeholder="'+escAttr(c.ph)+'" oninput="_orderQ.customs[\''+catId+'\']=this.value;_buildOrderQText()" style="flex:1;border:1px solid #fed7aa;background:#fff;border-radius:7px;padding:6px 10px;font-size:.82rem;outline:none;"/>'+
       '</div>';
     }).join('');
   }
-  _buildOrderQText(o.id);
+  _buildOrderQText();
 }
 
 function toggleOrderQChip(catId){
   _orderQ.selected[catId]=!_orderQ.selected[catId];
   if(!_orderQ.selected[catId])delete _orderQ.customs[catId];
-  // Trouver la commande pour reconstruire le texte
-  const order=Object.values(_pendingOrdersCache).flat().find(function(x){return x;});
-  // Plus simple : rebuild en utilisant l'orderId du textarea (récupéré par _buildOrderQText)
-  const overlay=document.getElementById('oq-overlay');
-  if(overlay){
-    // Récupérer l'orderId depuis le bouton submit
-    const btn=overlay.querySelector('button[onclick^="sendOrderQuestions"]');
-    if(btn){
-      const m=btn.getAttribute('onclick').match(/sendOrderQuestions\('([^']+)','([^']+)'\)/);
-      if(m){
-        const o=_findOrder(m[1],m[2]);
-        if(o)renderOrderQChips(o);
-      }
-    }
-  }
+  renderOrderQChips();
 }
 
 function _buildOrderQText(orderIdMaybe){
   const ta=document.getElementById('oq-msg');if(!ta)return;
-  // Trouver la commande
-  let o=null;
-  Object.keys(_pendingOrdersCache).forEach(function(pid){
-    const found=(_pendingOrdersCache[pid]||[]).find(function(x){return x.id===orderIdMaybe;});
-    if(found)o=found;
-  });
+  const o=_orderQ._portalId&&_orderQ._caseId?_findOrder(_orderQ._portalId,_orderQ._caseId):null;
   const keys=Object.keys(_orderQ.selected).filter(function(k){return _orderQ.selected[k];});
   if(!keys.length){ta.value='';return;}
   const lines=keys.map(function(catId){
@@ -5812,11 +5809,14 @@ function _buildOrderQText(orderIdMaybe){
     const txt=_orderQ.customs[catId]||c.ph;
     return '   • '+c.icon+' '+c.label+(txt?' :\n     '+txt:'');
   });
-  const patient=o?o.patient.name:'';
+  const patient=o&&o.patient?o.patient.name:_orderQ._patient;
   ta.value='Bonjour,\n\nMerci pour votre fiche de commande pour '+(patient||'votre patient')+'. Avant de lancer le travail, j\'aurais besoin de quelques précisions :\n\n'+lines.join('\n\n')+'\n\nMerci d\'avance pour votre retour 🙏';
 }
 
 async function sendOrderQuestions(portalId,caseId,stepId){
+  portalId=portalId||_orderQ._portalId;
+  caseId=caseId||_orderQ._caseId;
+  stepId=stepId||_orderQ._stepId;
   const c=_findOrder(portalId,caseId);if(!c)return;
   const cab=cabinets.find(function(x){return x.portalId===portalId;});if(!cab)return;
   const ta=document.getElementById('oq-msg');
@@ -15162,6 +15162,10 @@ async function notifyCabinetAboutChat(cab,preview,opts){
   if(!cab)return false;
   var directLink=await _chatDirectPortalLink(cab);
   if(_chatWhatsappUrl(cab,preview,directLink)){
+    if(opts.silent){
+      showToast('Message envoyé dans LaboSync. Cliquez sur WhatsApp si vous voulez prévenir le cabinet.','#2a6049',6500);
+      return false;
+    }
     if(_openChatWhatsappNotice(cab,preview,directLink))return true;
     if(!opts.silent){
       _showChatNotifyFallback(cab,preview,'WhatsApp n\'a pas pu s\'ouvrir automatiquement. Cliquez sur WhatsApp ci-dessous.',directLink);
@@ -15331,10 +15335,12 @@ async function _uploadChatFileDesktop(file, portalId){
 async function sendChatMsg(){
   if(!_chatPortalId||!_chatCabId) return;
   const input = document.getElementById('chat-input');
+  const sendBtn = document.querySelector('#chat-modal button[onclick="sendChatMsg()"]');
   const content = input.value.trim();
   if(!content && !_chatPendingPhoto && !_chatPendingAttachment) return;
   const laboName = localStorage.getItem('lb_name')||'Laboratoire';
   input.disabled = true;
+  if(sendBtn){sendBtn.disabled=true;sendBtn.textContent='Envoi…';}
   // Upload du fichier non-image si présent
   let attachment = null;
   if(_chatPendingAttachment){
@@ -15345,6 +15351,7 @@ async function sendChatMsg(){
       console.error('Upload échoué', e);
       showToast('Erreur d\'envoi du fichier — '+(e.message||''),'#c0392b');
       input.disabled = false;
+      if(sendBtn){sendBtn.disabled=false;sendBtn.textContent='Envoyer';}
       return;
     }
   }
@@ -15364,6 +15371,7 @@ async function sendChatMsg(){
     else { showToast(ti('toast.error',{msg:'Échec envoi message'}),'#c0392b'); }
   }catch(e){ showToast(ti('toast.network_error',{msg:String(e).slice(0,50)}),'#c0392b'); }
   input.disabled = false;
+  if(sendBtn){sendBtn.disabled=false;sendBtn.textContent='Envoyer';}
   input.focus();
 }
 
