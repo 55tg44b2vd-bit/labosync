@@ -505,6 +505,25 @@ function parseBillingRate(val) {
   return Number.isFinite(rate) && rate >= 0 ? Math.round(rate * 100) / 100 : null;
 }
 
+function cleanText(val, max = 300) {
+  return String(val || '').trim().slice(0, max);
+}
+
+function cleanBool(val, fallback = false) {
+  return typeof val === 'boolean' ? val : fallback;
+}
+
+function cleanSelect(val, allowed, fallback) {
+  const raw = cleanText(val, 40);
+  return allowed.includes(raw) ? raw : fallback;
+}
+
+function cleanNonNegativeNumber(val) {
+  if (val === undefined || val === null || val === '') return null;
+  const n = parseFloat(val);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 10) / 10 : null;
+}
+
 function readCourierBillingRates(prof) {
   const base =
     typeof prof?.billingRatePerCourse === 'number' && prof.billingRatePerCourse >= 0
@@ -696,6 +715,35 @@ exports.handler = async (event) => {
             displayName: prof.displayName || user.user_metadata?.display_name || '',
             phone: prof.phone || '',
             email: user.email,
+            recoveryEmail: prof.recoveryEmail || '',
+            emergencyContactName: prof.emergencyContactName || '',
+            emergencyContactPhone: prof.emergencyContactPhone || '',
+            availabilityStatus: prof.availabilityStatus || 'active',
+            workingDays: prof.workingDays || '',
+            workingHours: prof.workingHours || '',
+            vacationUntil: prof.vacationUntil || '',
+            homeAddress: prof.homeAddress || '',
+            serviceZones: prof.serviceZones || '',
+            radiusKm: typeof prof.radiusKm === 'number' && prof.radiusKm >= 0 ? prof.radiusKm : null,
+            acceptPickup: prof.acceptPickup !== false,
+            acceptDelivery: prof.acceptDelivery !== false,
+            acceptMultiStop: prof.acceptMultiStop !== false,
+            missionNotes: prof.missionNotes || '',
+            preferredNavApp: prof.preferredNavApp || 'google_maps',
+            notifyNewMission: prof.notifyNewMission !== false,
+            notifyMissionChanged: prof.notifyMissionChanged !== false,
+            notifyMissionCancelled: prof.notifyMissionCancelled !== false,
+            compactMode: !!prof.compactMode,
+            billingCompany: prof.billingCompany || '',
+            billingSiret: prof.billingSiret || '',
+            billingAddress: prof.billingAddress || '',
+            billingIban: prof.billingIban || '',
+            billingPaymentNote: prof.billingPaymentNote || '',
+            docPermit: !!prof.docPermit,
+            docInsurance: !!prof.docInsurance,
+            docVehicleRegistration: !!prof.docVehicleRegistration,
+            docIdentity: !!prof.docIdentity,
+            docNotes: prof.docNotes || '',
             stats: prof.stats || {},
             billingRatePerCourse:
               typeof prof.billingRatePerCourse === 'number' && prof.billingRatePerCourse >= 0
@@ -716,8 +764,37 @@ exports.handler = async (event) => {
       }
       const row = await sbGet(profileRowId(user.id));
       const prof = row?.data || { stats: {} };
-      prof.displayName = String(body.displayName || prof.displayName || '').slice(0, 120);
-      prof.phone = String(body.phone || '').slice(0, 40);
+      prof.displayName = cleanText(body.displayName || prof.displayName || '', 120);
+      prof.phone = cleanText(body.phone, 40);
+      prof.recoveryEmail = cleanText(body.recoveryEmail, 160);
+      prof.emergencyContactName = cleanText(body.emergencyContactName, 120);
+      prof.emergencyContactPhone = cleanText(body.emergencyContactPhone, 40);
+      prof.availabilityStatus = cleanSelect(body.availabilityStatus, ['active', 'paused', 'inactive'], 'active');
+      prof.workingDays = cleanText(body.workingDays, 160);
+      prof.workingHours = cleanText(body.workingHours, 120);
+      prof.vacationUntil = cleanText(body.vacationUntil, 20);
+      prof.homeAddress = cleanText(body.homeAddress, 300);
+      prof.serviceZones = cleanText(body.serviceZones, 600);
+      prof.radiusKm = cleanNonNegativeNumber(body.radiusKm);
+      prof.acceptPickup = cleanBool(body.acceptPickup, true);
+      prof.acceptDelivery = cleanBool(body.acceptDelivery, true);
+      prof.acceptMultiStop = cleanBool(body.acceptMultiStop, true);
+      prof.missionNotes = cleanText(body.missionNotes, 600);
+      prof.preferredNavApp = cleanSelect(body.preferredNavApp, ['google_maps', 'waze', 'apple_maps', 'other'], 'google_maps');
+      prof.notifyNewMission = cleanBool(body.notifyNewMission, true);
+      prof.notifyMissionChanged = cleanBool(body.notifyMissionChanged, true);
+      prof.notifyMissionCancelled = cleanBool(body.notifyMissionCancelled, true);
+      prof.compactMode = cleanBool(body.compactMode, false);
+      prof.billingCompany = cleanText(body.billingCompany, 160);
+      prof.billingSiret = cleanText(body.billingSiret, 40);
+      prof.billingAddress = cleanText(body.billingAddress, 500);
+      prof.billingIban = cleanText(body.billingIban, 80);
+      prof.billingPaymentNote = cleanText(body.billingPaymentNote, 500);
+      prof.docPermit = cleanBool(body.docPermit, false);
+      prof.docInsurance = cleanBool(body.docInsurance, false);
+      prof.docVehicleRegistration = cleanBool(body.docVehicleRegistration, false);
+      prof.docIdentity = cleanBool(body.docIdentity, false);
+      prof.docNotes = cleanText(body.docNotes, 500);
       if (body.billingRatePerCourse !== undefined && body.billingRatePerCourse !== null && body.billingRatePerCourse !== '') {
         prof.billingRatePerCourse = parseBillingRate(body.billingRatePerCourse);
       }

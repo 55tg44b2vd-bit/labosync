@@ -20,6 +20,11 @@
     if (typeof global.toast === 'function') global.toast(msg, color || 'var(--ink)');
   }
 
+  function getMobileState() {
+    if (typeof global.__labMobileState === 'function') return global.__labMobileState();
+    return global;
+  }
+
   function updateMobTopbarBranding() {
     var logo = document.getElementById('mob-lab-logo');
     var title = document.getElementById('mob-topbar-title');
@@ -221,7 +226,8 @@
   }
 
   function removeQueueItemInPlace(qId) {
-    var q = global.queue || [];
+    var state = getMobileState();
+    var q = state.queue || [];
     for (var i = q.length - 1; i >= 0; i--) {
       if (q[i] && q[i].id === qId) q.splice(i, 1);
     }
@@ -396,9 +402,14 @@
       needsProg: canMobProg(),
     };
     if (missingItems.length) job.missingInfoItems = missingItems;
-    global.jobs.push(job);
-    if (canMobProg() && global.queue) {
-      global.queue.push({
+    var state = getMobileState();
+    if (!state.jobs) {
+      mobToast('Erreur interne : liste des travaux introuvable', 'var(--red)');
+      return false;
+    }
+    state.jobs.push(job);
+    if (canMobProg() && state.queue) {
+      state.queue.push({
         id: job.id + '_q',
         patient: lbl,
         type: items[0].type,
@@ -418,12 +429,13 @@
   }
 
   function programQueueItemMobile(qId) {
-    var q = (global.queue || []).find(function (x) {
+    var state = getMobileState();
+    var q = (state.queue || []).find(function (x) {
       return x.id === qId;
     });
     if (!q && String(qId).indexOf('job_') === 0) {
       var jid = String(qId).slice(4);
-      var jobOnly = global.jobs.find(function (j) {
+      var jobOnly = (state.jobs || []).find(function (j) {
         return j.id === jid;
       });
       if (jobOnly) {
@@ -451,12 +463,12 @@
         tasks = tasks.concat(global.buildTasksMobile(it.type));
       });
     }
-    var existing = q.jobId ? global.jobs.find(function (j) { return j.id === q.jobId; }) : null;
+    var existing = q.jobId ? (state.jobs || []).find(function (j) { return j.id === q.jobId; }) : null;
     if (existing) {
       existing.tasks = tasks;
       existing.needsProg = false;
     } else {
-      global.jobs.push({
+      (state.jobs || []).push({
         id: q.jobId || String(Date.now()),
         patient: q.patient,
         type: items[0].type,
@@ -480,8 +492,9 @@
     var el = document.getElementById('mob-prog-queue');
     var cnt = document.getElementById('mob-prog-queue-cnt');
     if (!el) return;
-    var list = (global.queue || []).slice();
-    global.jobs.forEach(function (j) {
+    var state = getMobileState();
+    var list = (state.queue || []).slice();
+    (state.jobs || []).forEach(function (j) {
       if ((!j.tasks || !j.tasks.length) && j.needsProg) {
         list.push({
           id: 'job_' + j.id,
@@ -506,7 +519,7 @@
     }
     el.innerHTML = list
       .map(function (q) {
-        var cab = q.cabinet ? global.cabinets.find(function (c) { return c.id === q.cabinet; }) : null;
+        var cab = q.cabinet ? (state.cabinets || []).find(function (c) { return c.id === q.cabinet; }) : null;
         return (
           '<article class="mcard" style="margin-bottom:10px;border-left:4px solid var(--accent);">' +
           '<div style="font-weight:700;font-size:.95rem;margin-bottom:4px;">' +

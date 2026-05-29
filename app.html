@@ -5613,6 +5613,7 @@ async function rejectOrder(portalId,caseId,stepId){
 
 // Modifier un travail existant (changer types, patient, note, date, urgent)
 let _editJob={id:null,patient:'',requestedDeliveryDate:'',labDeliveryDate:'',labDeliverySlot:'12',deliveryDate:'',urgent:false,items:[],note:''};
+let _editMissing={selected:{},customs:{}};
 
 function editJob(jobId){
   const job=jobs.find(function(j){return j.id===jobId;});if(!job){alert('Travail introuvable');return;}
@@ -5631,6 +5632,7 @@ function editJob(jobId){
     items:items.map(function(it){return{type:it.type,nb:it.nb||1};}),
     note:job.note||''
   };
+  _resetEditMissingState();
   const overlay=document.createElement('div');
   overlay.id='edit-job-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
@@ -5655,6 +5657,15 @@ function editJob(jobId){
             '<select id="ej-delivery-slot" onchange="_editJob.labDeliverySlot=this.value" style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:9px 11px;font-size:.88rem;">'+_deliverySlotOptionsHtml(_editJob.labDeliverySlot)+'</select></div>':'')+
         '</div>'+
         '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.86rem;margin-bottom:14px;color:#c0392b;"><input type="checkbox" id="ej-urgent" '+(_editJob.urgent?'checked':'')+' onchange="_editJob.urgent=this.checked"/>🔴 Urgent</label>'+
+        '<div style="margin-bottom:14px;">'+
+          '<label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:.86rem;color:#c2410c;font-weight:600;"><input type="checkbox" id="ej-imissing" onchange="toggleEditMissingPanel()"/>❓ Infos manquantes (appel praticien)</label>'+
+          '<div id="ej-missing-wrap" style="display:none;margin-top:9px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;">'+
+            '<div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#c2410c;margin-bottom:8px;">Que manque-t-il ?</div>'+
+            '<div style="background:#fff;border:1px solid #fed7aa;border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:.78rem;color:#7c2d12;line-height:1.45;">La question sera ajoutée au travail. Ensuite, ouvrez <strong>Messages → Questions à envoyer</strong> pour relire et envoyer au praticien.</div>'+
+            '<div id="ej-missing-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>'+
+            '<div id="ej-missing-customs" style="margin-top:8px;display:none;"></div>'+
+          '</div>'+
+        '</div>'+
         '<div style="margin-bottom:14px;">'+
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
             '<label style="font-size:.74rem;font-weight:600;color:#64748b;">Types de travaux *</label>'+
@@ -5713,6 +5724,58 @@ function renderEditJobItems(){
   }
 }
 
+function toggleEditMissingPanel(){
+  var chk=document.getElementById('ej-imissing');
+  var wrap=document.getElementById('ej-missing-wrap');
+  if(wrap)wrap.style.display=chk&&chk.checked?'':'none';
+  if(chk&&chk.checked)renderMissingChipsEdit();
+}
+
+function renderMissingChipsEdit(){
+  var el=document.getElementById('ej-missing-chips');if(!el)return;
+  el.innerHTML=MISSING_CATEGORIES.map(function(c){
+    var on=!!_editMissing.selected[c.id];
+    return '<button type="button" onclick="toggleMissingChipEdit(\''+c.id+'\')" style="border:1.5px solid '+(on?'#c2410c':'#fed7aa')+';background:'+(on?'#c2410c':'#fff')+';color:'+(on?'#fff':'#c2410c')+';border-radius:99px;padding:5px 12px;font-size:.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">'+c.icon+' '+c.label+'</button>';
+  }).join('');
+  var customs=document.getElementById('ej-missing-customs');
+  var keys=Object.keys(_editMissing.selected).filter(function(k){return _editMissing.selected[k];});
+  if(!customs)return;
+  if(!keys.length){customs.style.display='none';customs.innerHTML='';return;}
+  customs.style.display='block';
+  customs.innerHTML=keys.map(function(catId){
+    var c=MISSING_CATEGORIES.find(function(x){return x.id===catId;})||{icon:'❓',label:'Autre',ph:'Question libre…'};
+    var val=_editMissing.customs[catId]||'';
+    return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">'+
+      '<span style="min-width:120px;font-size:.78rem;font-weight:600;color:#c2410c;">'+c.icon+' '+c.label+'</span>'+
+      '<input type="text" value="'+escAttr(val)+'" placeholder="'+escAttr(c.ph)+'" oninput="_editMissing.customs[\''+catId+'\']=this.value" style="flex:1;border:1px solid #fed7aa;background:#fff;border-radius:7px;padding:6px 10px;font-size:.82rem;outline:none;"/>'+
+    '</div>';
+  }).join('');
+}
+
+function toggleMissingChipEdit(catId){
+  _editMissing.selected[catId]=!_editMissing.selected[catId];
+  if(!_editMissing.selected[catId])delete _editMissing.customs[catId];
+  renderMissingChipsEdit();
+}
+
+function _readMissingItemsFromEdit(){
+  var chk=document.getElementById('ej-imissing');
+  if(!chk||!chk.checked)return [];
+  var keys=Object.keys(_editMissing.selected).filter(function(k){return _editMissing.selected[k];});
+  var now=new Date().toISOString();
+  return keys.map(function(catId){
+    var c=MISSING_CATEGORIES.find(function(x){return x.id===catId;})||{ph:''};
+    var text=(_editMissing.customs[catId]||c.ph||'').trim();
+    return {id:'mi_'+Date.now()+'_'+Math.random().toString(36).substr(2,5),category:catId,text:text,resolved:false,createdAt:now};
+  });
+}
+
+function _resetEditMissingState(){
+  _editMissing={selected:{},customs:{}};
+  var chk=document.getElementById('ej-imissing');if(chk)chk.checked=false;
+  var wrap=document.getElementById('ej-missing-wrap');if(wrap)wrap.style.display='none';
+}
+
 function saveEditJob(){
   const job=jobs.find(function(j){return j.id===_editJob.id;});if(!job)return;
   const validItems=_editJob.items.filter(function(it){return it.type;});
@@ -5731,6 +5794,11 @@ function saveEditJob(){
   job.deliveryDate=job.labDeliveryDate;
   job.urgent=!!_editJob.urgent;
   job.note=_editJob.note||'';
+  var newMissing=_readMissingItemsFromEdit();
+  if(newMissing.length){
+    var existingMissing=_ensureMissingItems(job);
+    Array.prototype.push.apply(existingMissing,newMissing);
+  }
   var ejTooth=_teethArraysFromMap(_labTeethPick.teeth,_labTeethPick.links);
   job.teeth=ejTooth.teeth;
   job.links=ejTooth.links;
@@ -5740,9 +5808,12 @@ function saveEditJob(){
   // Tâches : on ne re-génère PAS automatiquement (sauf si prog activée + pas de tâches existantes)
   // Le labo peut les re-générer manuellement si besoin
   saveJobs();
+  saveQueue();
   document.getElementById('edit-job-overlay').remove();
-  showToast('✅ Travail mis à jour','#2a6049');
+  showToast(newMissing.length?'✅ Travail mis à jour — question à envoyer dans Messages':'✅ Travail mis à jour','#2a6049');
   render();
+  renderDashboard();
+  renderMessagesMissingSection();
 }
 
 // Sub-modale pour demander des précisions sur une commande

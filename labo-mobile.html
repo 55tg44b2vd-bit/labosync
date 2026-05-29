@@ -749,6 +749,7 @@ function canAccessWorkspace(ws){if(hasPerm('*'))return true;if(ws==='admin')retu
 let jobs=[], archive=[], cabinets=[], bdl=[], documents=[], tarifs=[];
 let waiting=[], queue=[], conges=[], absences=[];
 let TECHS={}, customTypes=[], syns=[], scanHist=[], fourns=[], bdc=[];
+window.__labMobileState=function(){return{jobs:jobs,archive:archive,cabinets:cabinets,bdl:bdl,documents:documents,tarifs:tarifs,waiting:waiting,queue:queue,conges:conges,absences:absences,TECHS:TECHS,customTypes:customTypes,syns:syns,scanHist:scanHist,fourns:fourns,bdc:bdc};};
 
 let _currentCabId=null;
 let _chatCabId=null;
@@ -4507,6 +4508,7 @@ function openQuickJobSheet(){
   var types=getAllJobTypes();
   var lastCab=localStorage.getItem('lb_last_cab')||'';
   _qjItems=[{type:types[0]?types[0].id:'',nb:1}];
+  _resetMissingFormState('qj');
   var overlay=document.createElement('div');
   overlay.id='qj-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;display:flex;align-items:flex-end;justify-content:center;';
@@ -4524,7 +4526,6 @@ function openQuickJobSheet(){
         '<div class="form-row"><label>Date de livraison</label><input type="date" id="qj-delivery" style="font-size:16px;"/></div>'+
       '</div>'+
       '<div class="form-row"><label>Note</label><textarea id="qj-note" placeholder="Notes, instructions..." rows="2" style="font-size:16px;"></textarea></div>'+
-      '<div class="form-check" style="margin:8px 0;"><input type="checkbox" id="qj-urgent"/><label for="qj-urgent">🔴 Urgent</label></div>'+
       '<div class="form-check" style="margin:0 0 8px;"><input type="checkbox" id="qj-missing" onchange="toggleMissingPanel(\'qj\')"/><label for="qj-missing">❓ Infos manquantes (appel praticien)</label></div>'+
       '<div id="qj-missing-wrap" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:10px;">'+
         '<div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#c2410c;margin-bottom:8px;">Que manque-t-il ?</div>'+
@@ -4565,7 +4566,7 @@ function openQuickJobSheet(){
     var cab=document.getElementById('qj-cab').value;
     var delivery=document.getElementById('qj-delivery').value;
     var note=document.getElementById('qj-note').value.trim();
-    var urgent=document.getElementById('qj-urgent').checked;
+    var urgent=false;
     var missingItems=_readMissingFromForm('qj');
     var items=_qjItems.filter(function(it){return it.type;}).map(function(it){return{type:it.type,nb:parseInt(it.nb)||1};});
     if(!items.length){toast('Ajoutez au moins un type','var(--red)');return;}

@@ -21,6 +21,11 @@
 }
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh;}
 input,select,textarea{font-size:16px;font-family:inherit;}
+.field select,.field textarea{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:12px;background:var(--bg);font-family:inherit;}
+.field textarea{min-height:82px;resize:vertical;line-height:1.35;}
+.check-row{display:flex;align-items:flex-start;gap:9px;font-size:.82rem;color:var(--ink);padding:7px 0;}
+.check-row input{width:18px;height:18px;accent-color:var(--accent);margin-top:1px;flex:0 0 auto;}
+.section-help{font-size:.74rem;color:var(--ink-soft);line-height:1.4;margin:-2px 0 12px;}
 #auth-screen{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(145deg,#0f172a,#1e3a5f 55%,#1d4ed8);}
 .auth-card{background:var(--surface);border-radius:20px;padding:28px 22px;width:100%;max-width:400px;box-shadow:var(--shadow);}
 .auth-brand{text-align:center;margin-bottom:22px;}
@@ -33,6 +38,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 .btn{border:none;border-radius:10px;padding:14px;font-weight:600;font-size:.9rem;cursor:pointer;width:100%;min-height:48px;}
 .btn-primary{background:var(--accent);color:#fff;}
 .btn-secondary{background:var(--bg);border:1.5px solid var(--border);color:var(--ink-soft);margin-top:8px;}
+.btn-link{background:none;border:none;color:var(--accent);font-size:.8rem;font-weight:600;cursor:pointer;padding:0;font-family:inherit;}
 #auth-err{color:var(--red);font-size:.78rem;text-align:center;min-height:18px;margin-top:10px;}
 .auth-toggle{text-align:center;margin-top:14px;font-size:.78rem;color:var(--ink-soft);}
 .auth-toggle a{color:var(--accent);font-weight:600;cursor:pointer;}
@@ -52,6 +58,8 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 .view{display:none;}
 .view.on{display:block;}
 .mcard{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:var(--shadow);}
+body.compact-mode .mcard{padding:10px;margin-bottom:7px;}
+body.compact-mode .mcard-sub,body.compact-mode .mcard-stop{font-size:.72rem;}
 .mcard-type{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
 .mcard-type.pickup{color:var(--green);}
 .mcard-type.delivery{color:var(--orange);}
@@ -97,6 +105,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
       <div class="field"><label>Email</label><input type="email" id="auth-email" autocomplete="email"/></div>
       <div class="field"><label>Mot de passe</label><input type="password" id="auth-pass" autocomplete="current-password"/></div>
       <button type="button" class="btn btn-primary" id="btn-login">Se connecter</button>
+      <p class="auth-toggle"><button type="button" class="btn-link" id="link-forgot">Mot de passe oublié ?</button></p>
       <p class="auth-toggle">Pas encore de compte ? <a id="link-signup">Créer un compte coursier</a></p>
     </div>
     <div id="auth-signup" style="display:none;">
@@ -105,6 +114,18 @@ input,select,textarea{font-size:16px;font-family:inherit;}
       <div class="field"><label>Mot de passe (6 car. min.)</label><input type="password" id="auth-pass2" autocomplete="new-password"/></div>
       <button type="button" class="btn btn-primary" id="btn-signup">Créer mon compte</button>
       <p class="auth-toggle"><a id="link-login">← Retour connexion</a></p>
+    </div>
+    <div id="auth-forgot" style="display:none;">
+      <p style="font-size:.78rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.45;">Indiquez votre e-mail : nous vous enverrons un lien pour choisir un nouveau mot de passe.</p>
+      <div class="field"><label>Email</label><input type="email" id="auth-forgot-email" autocomplete="email"/></div>
+      <button type="button" class="btn btn-primary" id="btn-forgot-send">Envoyer le lien</button>
+      <p class="auth-toggle"><a id="link-forgot-back">← Retour connexion</a></p>
+    </div>
+    <div id="auth-recovery" style="display:none;">
+      <p style="font-size:.78rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.45;">Choisissez un nouveau mot de passe pour votre compte coursier.</p>
+      <div class="field"><label>Nouveau mot de passe</label><input type="password" id="auth-recovery-pass" autocomplete="new-password" placeholder="Minimum 6 caractères"/></div>
+      <div class="field"><label>Confirmer</label><input type="password" id="auth-recovery-pass2" autocomplete="new-password"/></div>
+      <button type="button" class="btn btn-primary" id="btn-recovery-save">Enregistrer le mot de passe</button>
     </div>
     <div id="auth-err"></div>
   </div>
@@ -160,9 +181,68 @@ input,select,textarea{font-size:16px;font-family:inherit;}
     </div>
     <div id="view-profile" class="view">
       <div class="mcard">
+        <div style="font-weight:700;margin-bottom:10px;">Informations du coursier</div>
         <div class="field"><label>Nom affiché</label><input type="text" id="prof-name"/></div>
         <div class="field"><label>Téléphone</label><input type="tel" id="prof-phone" placeholder="06 12 34 56 78"/></div>
+        <div class="field"><label>Email de secours</label><input type="email" id="prof-recovery-email" placeholder="autre@email.fr"/></div>
+        <div class="field"><label>Contact d'urgence</label><input type="text" id="prof-emergency-name" placeholder="Nom du contact"/></div>
+        <div class="field"><label>Téléphone urgence</label><input type="tel" id="prof-emergency-phone" placeholder="06 12 34 56 78"/></div>
         <button type="button" class="btn btn-primary" id="btn-save-prof">Enregistrer</button>
+      </div>
+      <div class="mcard" style="margin-top:12px;">
+        <div style="font-weight:700;margin-bottom:8px;">Disponibilité</div>
+        <p class="section-help">Visible par les labos pour savoir quand vous confier une course.</p>
+        <div class="field"><label>Statut</label><select id="prof-availability-status"><option value="active">Disponible</option><option value="paused">En pause</option><option value="inactive">Indisponible</option></select></div>
+        <div class="field"><label>Jours travaillés</label><input type="text" id="prof-working-days" placeholder="Lun-Ven, samedi matin..."/></div>
+        <div class="field"><label>Horaires</label><input type="text" id="prof-working-hours" placeholder="8h30-18h"/></div>
+        <div class="field"><label>Absent jusqu'au</label><input type="date" id="prof-vacation-until"/></div>
+      </div>
+      <div class="mcard" style="margin-top:12px;">
+        <div style="font-weight:700;margin-bottom:8px;">Zone et missions</div>
+        <div class="field"><label>Adresse de départ</label><input type="text" id="prof-home-address" placeholder="Adresse habituelle de départ"/></div>
+        <div class="field"><label>Villes / secteurs couverts</label><textarea id="prof-service-zones" placeholder="Ex. Paris 15, Boulogne, Issy-les-Moulineaux..."></textarea></div>
+        <div class="field"><label>Rayon approximatif (km)</label><input type="number" min="0" step="1" id="prof-radius-km" placeholder="25"/></div>
+        <label class="check-row"><input type="checkbox" id="prof-accept-pickup"/>J'accepte les récupérations</label>
+        <label class="check-row"><input type="checkbox" id="prof-accept-delivery"/>J'accepte les livraisons</label>
+        <label class="check-row"><input type="checkbox" id="prof-accept-multistop"/>J'accepte les tournées multi-arrêts</label>
+        <div class="field"><label>Notes visibles par les labos</label><textarea id="prof-mission-notes" placeholder="Ex. laisser les colis à l'accueil, prévenir 30 min avant..."></textarea></div>
+        <div class="field"><label>Application GPS préférée</label><select id="prof-nav-app"><option value="google_maps">Google Maps</option><option value="waze">Waze</option><option value="apple_maps">Plans Apple</option><option value="other">Autre</option></select></div>
+      </div>
+      <div class="mcard" style="margin-top:12px;">
+        <div style="font-weight:700;margin-bottom:8px;">Notifications et affichage</div>
+        <label class="check-row"><input type="checkbox" id="prof-notify-new"/>Nouvelle course</label>
+        <label class="check-row"><input type="checkbox" id="prof-notify-changed"/>Course modifiée</label>
+        <label class="check-row"><input type="checkbox" id="prof-notify-cancelled"/>Course annulée</label>
+        <label class="check-row"><input type="checkbox" id="prof-compact-mode"/>Mode compact dans les listes</label>
+      </div>
+      <div class="mcard" style="margin-top:12px;">
+        <div style="font-weight:700;margin-bottom:8px;">Facturation</div>
+        <div class="field"><label>Société / Auto-entrepreneur</label><input type="text" id="prof-billing-company" placeholder="Nom légal"/></div>
+        <div class="field"><label>SIRET</label><input type="text" id="prof-billing-siret" inputmode="numeric" placeholder="123 456 789 00012"/></div>
+        <div class="field"><label>Adresse de facturation</label><textarea id="prof-billing-address"></textarea></div>
+        <div class="field"><label>IBAN / RIB</label><input type="text" id="prof-billing-iban" placeholder="FR76..."/></div>
+        <div class="field"><label>Note paiement</label><textarea id="prof-billing-payment-note" placeholder="Ex. Paiement mensuel par virement, paiement hors app..."></textarea></div>
+      </div>
+      <div class="mcard" style="margin-top:12px;">
+        <div style="font-weight:700;margin-bottom:8px;">Documents</div>
+        <p class="section-help">Suivi administratif simple. L'upload de fichiers pourra être ajouté ensuite.</p>
+        <label class="check-row"><input type="checkbox" id="prof-doc-permit"/>Permis vérifié</label>
+        <label class="check-row"><input type="checkbox" id="prof-doc-insurance"/>Assurance vérifiée</label>
+        <label class="check-row"><input type="checkbox" id="prof-doc-vehicle"/>Carte grise vérifiée</label>
+        <label class="check-row"><input type="checkbox" id="prof-doc-identity"/>Pièce d'identité vérifiée</label>
+        <div class="field"><label>Notes documents</label><textarea id="prof-doc-notes" placeholder="Dates d'expiration, documents à renouveler..."></textarea></div>
+      </div>
+      <div class="mcard" style="margin-top:12px;">
+        <div style="font-weight:700;margin-bottom:10px;">Compte et sécurité</div>
+        <div class="field"><label>Email actuel</label><input type="email" id="prof-email-current" readonly/></div>
+        <div class="field"><label>Nouvel email</label><input type="email" id="prof-email-new" placeholder="nouveau@email.fr" autocomplete="email"/></div>
+        <button type="button" class="btn btn-secondary" id="btn-update-email">Changer l'email</button>
+        <div style="height:1px;background:var(--border);margin:14px 0;"></div>
+        <div class="field"><label>Nouveau mot de passe</label><input type="password" id="prof-pass-new" autocomplete="new-password" placeholder="Minimum 6 caractères"/></div>
+        <div class="field"><label>Confirmer</label><input type="password" id="prof-pass-confirm" autocomplete="new-password"/></div>
+        <button type="button" class="btn btn-secondary" id="btn-update-pass">Changer le mot de passe</button>
+        <button type="button" class="btn btn-secondary" id="btn-signout-all">Déconnecter toutes les sessions</button>
+        <div id="account-msg" style="font-size:.78rem;min-height:20px;margin-top:10px;color:var(--ink-soft);"></div>
       </div>
       <div class="mcard" style="margin-top:12px;">
         <div style="font-weight:700;margin-bottom:8px;">Laboratoires partenaires</div>
@@ -196,6 +276,8 @@ let _bootPromise=null;
 let _bootGen=0;
 let _pollTimer=null;
 let _missionNotifySnap=null;
+let _pwdRecovery=false;
+let _profilePrefs={notifyNewMission:true,notifyMissionChanged:true,notifyMissionCancelled:true,preferredNavApp:'google_maps',compactMode:false};
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},2800);}
@@ -257,6 +339,9 @@ function buildMapsDirectionsUrl(stops){
   }).filter(Boolean);
   if(!addrs.length)return '';
   const enc=function(a){return encodeURIComponent(a);};
+  const nav=(_profilePrefs&&_profilePrefs.preferredNavApp)||'google_maps';
+  if(nav==='waze')return 'https://waze.com/ul?q='+enc(addrs[addrs.length-1])+'&navigate=yes';
+  if(nav==='apple_maps')return 'https://maps.apple.com/?daddr='+enc(addrs[addrs.length-1])+'&dirflg=d';
   if(addrs.length===1)return 'https://www.google.com/maps/dir/?api=1&destination='+enc(addrs[0])+'&travelmode=driving';
   const origin=enc(addrs[0]);
   const dest=enc(addrs[addrs.length-1]);
@@ -514,19 +599,123 @@ async function loadStats(){
 
 async function loadProfile(){
   const j=await api('getProfile');
-  document.getElementById('prof-name').value=j.profile.displayName||'';
-  document.getElementById('prof-phone').value=j.profile.phone||'';
+  const p=j.profile||{};
+  _profilePrefs={
+    notifyNewMission:p.notifyNewMission!==false,
+    notifyMissionChanged:p.notifyMissionChanged!==false,
+    notifyMissionCancelled:p.notifyMissionCancelled!==false,
+    preferredNavApp:p.preferredNavApp||'google_maps',
+    compactMode:!!p.compactMode
+  };
+  document.body.classList.toggle('compact-mode',!!p.compactMode);
+  setVal('prof-name',p.displayName||'');
+  setVal('prof-phone',p.phone||'');
+  setVal('prof-recovery-email',p.recoveryEmail||'');
+  setVal('prof-emergency-name',p.emergencyContactName||'');
+  setVal('prof-emergency-phone',p.emergencyContactPhone||'');
+  setVal('prof-availability-status',p.availabilityStatus||'active');
+  setVal('prof-working-days',p.workingDays||'');
+  setVal('prof-working-hours',p.workingHours||'');
+  setVal('prof-vacation-until',p.vacationUntil||'');
+  setVal('prof-home-address',p.homeAddress||'');
+  setVal('prof-service-zones',p.serviceZones||'');
+  setVal('prof-radius-km',p.radiusKm!=null?String(p.radiusKm):'');
+  setChecked('prof-accept-pickup',p.acceptPickup!==false);
+  setChecked('prof-accept-delivery',p.acceptDelivery!==false);
+  setChecked('prof-accept-multistop',p.acceptMultiStop!==false);
+  setVal('prof-mission-notes',p.missionNotes||'');
+  setVal('prof-nav-app',p.preferredNavApp||'google_maps');
+  setChecked('prof-notify-new',p.notifyNewMission!==false);
+  setChecked('prof-notify-changed',p.notifyMissionChanged!==false);
+  setChecked('prof-notify-cancelled',p.notifyMissionCancelled!==false);
+  setChecked('prof-compact-mode',!!p.compactMode);
+  setVal('prof-billing-company',p.billingCompany||'');
+  setVal('prof-billing-siret',p.billingSiret||'');
+  setVal('prof-billing-address',p.billingAddress||'');
+  setVal('prof-billing-iban',p.billingIban||'');
+  setVal('prof-billing-payment-note',p.billingPaymentNote||'');
+  setChecked('prof-doc-permit',!!p.docPermit);
+  setChecked('prof-doc-insurance',!!p.docInsurance);
+  setChecked('prof-doc-vehicle',!!p.docVehicleRegistration);
+  setChecked('prof-doc-identity',!!p.docIdentity);
+  setVal('prof-doc-notes',p.docNotes||'');
+  const emailEl=document.getElementById('prof-email-current');
+  if(emailEl)emailEl.value=p.email||currentUser?.email||'';
   const rateEl=document.getElementById('billing-rate');
   const extraEl=document.getElementById('billing-rate-extra');
-  if(rateEl&&j.profile.billingRatePerCourse!=null)rateEl.value=String(j.profile.billingRatePerCourse);
+  if(rateEl&&p.billingRatePerCourse!=null)rateEl.value=String(p.billingRatePerCourse);
   if(extraEl){
-    if(j.profile.billingRatePerExtraStop!=null&&j.profile.billingRatePerExtraStop>0)extraEl.value=String(j.profile.billingRatePerExtraStop);
+    if(p.billingRatePerExtraStop!=null&&p.billingRatePerExtraStop>0)extraEl.value=String(p.billingRatePerExtraStop);
     else extraEl.value='';
   }
   const labs=await api('listLinkedLabs');
   document.getElementById('labs-list').innerHTML=(labs.labs||[]).length
     ?(labs.labs||[]).map(function(l){return '<div style="padding:6px 0;border-bottom:1px solid var(--border);">🏭 '+esc(l.labName)+'</div>';}).join('')
     :'Aucun laboratoire pour l\'instant. Demandez à un labo de vous ajouter avec votre email d\'inscription.';
+}
+
+function elVal(id){
+  const el=document.getElementById(id);
+  return el?String(el.value||'').trim():'';
+}
+function setVal(id,value){
+  const el=document.getElementById(id);
+  if(el)el.value=value==null?'':String(value);
+}
+function elChecked(id){
+  const el=document.getElementById(id);
+  return !!(el&&el.checked);
+}
+function setChecked(id,value){
+  const el=document.getElementById(id);
+  if(el)el.checked=!!value;
+}
+function profilePayload(extra){
+  return Object.assign({
+    displayName:elVal('prof-name'),
+    phone:elVal('prof-phone'),
+    recoveryEmail:elVal('prof-recovery-email'),
+    emergencyContactName:elVal('prof-emergency-name'),
+    emergencyContactPhone:elVal('prof-emergency-phone'),
+    availabilityStatus:elVal('prof-availability-status')||'active',
+    workingDays:elVal('prof-working-days'),
+    workingHours:elVal('prof-working-hours'),
+    vacationUntil:elVal('prof-vacation-until'),
+    homeAddress:elVal('prof-home-address'),
+    serviceZones:elVal('prof-service-zones'),
+    radiusKm:elVal('prof-radius-km'),
+    acceptPickup:elChecked('prof-accept-pickup'),
+    acceptDelivery:elChecked('prof-accept-delivery'),
+    acceptMultiStop:elChecked('prof-accept-multistop'),
+    missionNotes:elVal('prof-mission-notes'),
+    preferredNavApp:elVal('prof-nav-app')||'google_maps',
+    notifyNewMission:elChecked('prof-notify-new'),
+    notifyMissionChanged:elChecked('prof-notify-changed'),
+    notifyMissionCancelled:elChecked('prof-notify-cancelled'),
+    compactMode:elChecked('prof-compact-mode'),
+    billingCompany:elVal('prof-billing-company'),
+    billingSiret:elVal('prof-billing-siret'),
+    billingAddress:elVal('prof-billing-address'),
+    billingIban:elVal('prof-billing-iban'),
+    billingPaymentNote:elVal('prof-billing-payment-note'),
+    docPermit:elChecked('prof-doc-permit'),
+    docInsurance:elChecked('prof-doc-insurance'),
+    docVehicleRegistration:elChecked('prof-doc-vehicle'),
+    docIdentity:elChecked('prof-doc-identity'),
+    docNotes:elVal('prof-doc-notes'),
+    billingRatePerCourse:document.getElementById('billing-rate')?.value||null,
+    billingRatePerExtraStop:document.getElementById('billing-rate-extra')?.value||null,
+  },extra||{});
+}
+function applyProfilePrefs(p){
+  _profilePrefs={
+    notifyNewMission:p.notifyNewMission!==false,
+    notifyMissionChanged:p.notifyMissionChanged!==false,
+    notifyMissionCancelled:p.notifyMissionCancelled!==false,
+    preferredNavApp:p.preferredNavApp||'google_maps',
+    compactMode:!!p.compactMode
+  };
+  document.body.classList.toggle('compact-mode',!!p.compactMode);
 }
 
 function showApp(){
@@ -537,6 +726,7 @@ function showApp(){
 function showLogin(){
   document.getElementById('auth-screen').style.display='flex';
   document.getElementById('app').style.display='none';
+  if(!_pwdRecovery)showAuthMode('login');
   stopRealtime();
 }
 
@@ -579,12 +769,15 @@ function buildMissionNotifySnap(list){
 }
 function notifyIfNeeded(){
   if(!('Notification' in window)||Notification.permission!=='granted')return;
+  const prefs=_profilePrefs||{};
   const snap=buildMissionNotifySnap(_missions);
   if(!_missionNotifySnap){_missionNotifySnap=snap;return;}
   Object.keys(snap).forEach(function(id){
     const cur=snap[id],prev=_missionNotifySnap[id];
-    if(!prev&&cur.status==='offered')courierNotify('Nouvelle course',cur.title,'courier-offer-'+id);
-    if(prev&&prev.status!=='completed'&&cur.status==='completed')courierNotify('Course terminée',cur.title,'courier-done-'+id);
+    if(!prev&&cur.status==='offered'&&prefs.notifyNewMission!==false)courierNotify('Nouvelle course',cur.title,'courier-offer-'+id);
+    if(prev&&prev.status!==cur.status&&/cancel/i.test(cur.status||'')&&prefs.notifyMissionCancelled!==false)courierNotify('Course annulée',cur.title,'courier-cancel-'+id);
+    if(prev&&prev.status!=='completed'&&cur.status==='completed'&&prefs.notifyMissionChanged!==false)courierNotify('Course terminée',cur.title,'courier-done-'+id);
+    if(prev&&prev.status===cur.status&&prev.done!==cur.done&&prefs.notifyMissionChanged!==false)courierNotify('Course mise à jour',cur.title,'courier-update-'+id);
   });
   _missionNotifySnap=snap;
 }
@@ -631,13 +824,36 @@ async function onMissionAction(e){
 }
 
 document.getElementById('link-signup').onclick=function(){
-  document.getElementById('auth-login').style.display='none';
-  document.getElementById('auth-signup').style.display='';
+  showAuthMode('signup');
 };
 document.getElementById('link-login').onclick=function(){
-  document.getElementById('auth-signup').style.display='none';
-  document.getElementById('auth-login').style.display='';
+  showAuthMode('login');
 };
+document.getElementById('link-forgot').onclick=function(){
+  const loginEmail=document.getElementById('auth-email');
+  const forgotEmail=document.getElementById('auth-forgot-email');
+  showAuthMode('forgot');
+  if(loginEmail&&forgotEmail)forgotEmail.value=(loginEmail.value||'').trim();
+  if(forgotEmail)forgotEmail.focus();
+};
+document.getElementById('link-forgot-back').onclick=function(){showAuthMode('login');};
+
+function courierPwdResetRedirectUrl(){
+  try{return (window.location.origin||'')+'/courier.html';}catch(e){return '';}
+}
+
+function showAuthMode(mode){
+  const login=document.getElementById('auth-login');
+  const signup=document.getElementById('auth-signup');
+  const forgot=document.getElementById('auth-forgot');
+  const recovery=document.getElementById('auth-recovery');
+  const err=document.getElementById('auth-err');
+  if(login)login.style.display=mode==='login'?'':'none';
+  if(signup)signup.style.display=mode==='signup'?'':'none';
+  if(forgot)forgot.style.display=mode==='forgot'?'':'none';
+  if(recovery)recovery.style.display=mode==='recovery'?'':'none';
+  if(err){err.textContent='';err.style.color='';}
+}
 
 document.getElementById('btn-login').onclick=async function(){
   showAuthErr('');
@@ -683,32 +899,145 @@ document.getElementById('btn-signup').onclick=async function(){
   else showAuthErr('Compte créé ! Vérifiez votre email si demandé, puis connectez-vous.');
 };
 
+document.getElementById('btn-forgot-send').onclick=async function(){
+  const email=document.getElementById('auth-forgot-email').value.trim();
+  const err=document.getElementById('auth-err');
+  if(!email){showAuthErr('Renseignez votre e-mail.');return;}
+  this.disabled=true;
+  const prev=this.textContent;
+  this.textContent='Envoi…';
+  try{
+    const{error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:courierPwdResetRedirectUrl()});
+    if(error)showAuthErr(error.message);
+    else{
+      showAuthMode('login');
+      if(err){err.textContent='Si cette adresse correspond à un compte, un e-mail avec un lien a été envoyé.';err.style.color='var(--green)';}
+    }
+  }catch(e){
+    showAuthErr(e.message||'Erreur réseau');
+  }finally{
+    this.disabled=false;
+    this.textContent=prev;
+  }
+};
+
+document.getElementById('btn-recovery-save').onclick=async function(){
+  const p1=document.getElementById('auth-recovery-pass').value.trim();
+  const p2=document.getElementById('auth-recovery-pass2').value.trim();
+  const err=document.getElementById('auth-err');
+  if(!p1||!p2){showAuthErr('Remplissez tous les champs.');return;}
+  if(p1.length<6){showAuthErr('Au moins 6 caractères.');return;}
+  if(p1!==p2){showAuthErr('Les mots de passe ne correspondent pas.');return;}
+  this.disabled=true;
+  const prev=this.textContent;
+  this.textContent='Enregistrement…';
+  try{
+    const{error}=await sb.auth.updateUser({password:p1});
+    if(error)showAuthErr(error.message);
+    else{
+      _pwdRecovery=false;
+      if(err){err.textContent='Mot de passe mis à jour. Redirection…';err.style.color='var(--green)';}
+      try{location.replace((location.origin||'')+(location.pathname||'/courier.html'));}catch(_){location.reload();}
+    }
+  }catch(e){
+    showAuthErr(e.message||'Erreur');
+  }finally{
+    this.disabled=false;
+    this.textContent=prev;
+  }
+};
+
 document.getElementById('billing-month')?.addEventListener('change',function(){loadBilling().catch(function(e){toast(e.message);});});
 document.getElementById('btn-print-billing')?.addEventListener('click',printBillingReleve);
 document.getElementById('btn-save-billing-rate')?.addEventListener('click',async function(){
   try{
     const rate=document.getElementById('billing-rate')?.value;
     const extra=document.getElementById('billing-rate-extra')?.value;
-    await api('saveProfile',{
-      displayName:document.getElementById('prof-name')?.value.trim()||'',
-      phone:document.getElementById('prof-phone')?.value.trim()||'',
+    const payload=profilePayload({
       billingRatePerCourse:rate===''||rate==null?null:rate,
       billingRatePerExtraStop:extra===''||extra==null?null:extra,
     });
+    await api('saveProfile',payload);
+    applyProfilePrefs(payload);
     toast('Tarif enregistré');
     loadBilling().catch(function(){});
   }catch(e){toast(e.message);}
 });
 document.getElementById('btn-save-prof').onclick=async function(){
   try{
-    await api('saveProfile',{
-      displayName:document.getElementById('prof-name').value.trim(),
-      phone:document.getElementById('prof-phone').value.trim(),
-      billingRatePerCourse:document.getElementById('billing-rate')?.value||null,
-      billingRatePerExtraStop:document.getElementById('billing-rate-extra')?.value||null,
-    });
+    const payload=profilePayload();
+    await api('saveProfile',payload);
+    applyProfilePrefs(payload);
     toast('Profil enregistré');
   }catch(e){toast(e.message);}
+};
+
+function setAccountMsg(msg,isError){
+  const el=document.getElementById('account-msg');
+  if(!el)return;
+  el.textContent=msg||'';
+  el.style.color=isError?'var(--red)':(msg?'var(--green)':'var(--ink-soft)');
+}
+
+document.getElementById('btn-update-email').onclick=async function(){
+  const email=document.getElementById('prof-email-new').value.trim();
+  if(!email){setAccountMsg('Renseignez le nouvel email.',true);return;}
+  this.disabled=true;
+  const prev=this.textContent;
+  this.textContent='Envoi…';
+  try{
+    const{data,error}=await sb.auth.updateUser({email:email});
+    if(error){setAccountMsg(error.message,true);return;}
+    const current=document.getElementById('prof-email-current');
+    if(data&&data.user&&data.user.email&&current)current.value=data.user.email;
+    document.getElementById('prof-email-new').value='';
+    setAccountMsg('Email de confirmation envoyé. Validez le lien pour finaliser le changement.',false);
+  }catch(e){
+    setAccountMsg(e.message||'Erreur réseau',true);
+  }finally{
+    this.disabled=false;
+    this.textContent=prev;
+  }
+};
+
+document.getElementById('btn-update-pass').onclick=async function(){
+  const p1=document.getElementById('prof-pass-new').value.trim();
+  const p2=document.getElementById('prof-pass-confirm').value.trim();
+  if(!p1||!p2){setAccountMsg('Remplissez les deux champs mot de passe.',true);return;}
+  if(p1.length<6){setAccountMsg('Le mot de passe doit faire au moins 6 caractères.',true);return;}
+  if(p1!==p2){setAccountMsg('Les mots de passe ne correspondent pas.',true);return;}
+  this.disabled=true;
+  const prev=this.textContent;
+  this.textContent='Enregistrement…';
+  try{
+    const{error}=await sb.auth.updateUser({password:p1});
+    if(error){setAccountMsg(error.message,true);return;}
+    document.getElementById('prof-pass-new').value='';
+    document.getElementById('prof-pass-confirm').value='';
+    setAccountMsg('Mot de passe enregistré.',false);
+  }catch(e){
+    setAccountMsg(e.message||'Erreur réseau',true);
+  }finally{
+    this.disabled=false;
+    this.textContent=prev;
+  }
+};
+
+document.getElementById('btn-signout-all').onclick=async function(){
+  if(!confirm('Déconnecter ce compte de tous les appareils ?'))return;
+  this.disabled=true;
+  const prev=this.textContent;
+  this.textContent='Déconnexion…';
+  try{
+    const{error}=await sb.auth.signOut({scope:'global'});
+    if(error){setAccountMsg(error.message,true);return;}
+    location.reload();
+  }catch(e){
+    setAccountMsg(e.message||'Erreur réseau',true);
+  }finally{
+    this.disabled=false;
+    this.textContent=prev;
+  }
 };
 
 document.getElementById('btn-logout').onclick=function(){
@@ -809,9 +1138,30 @@ function scheduleBoot(session,force){
   return _bootPromise;
 }
 
+function hasRecoveryHash(){
+  try{return /type=recovery|type%3[Dd]recovery/i.test(location.hash||'');}catch(_){return false;}
+}
+
 sb.auth.onAuthStateChange(function(event,session){
   if(event==='SIGNED_OUT'){currentUser=null;_accessToken='';_bootPromise=null;_bootGen++;showLogin();return;}
   if(session&&session.access_token)_accessToken=session.access_token;
+  if(event==='PASSWORD_RECOVERY'&&session){
+    _pwdRecovery=true;
+    currentUser=session.user;
+    _accessToken=session.access_token||_accessToken;
+    document.getElementById('auth-screen').style.display='flex';
+    document.getElementById('app').style.display='none';
+    showAuthMode('recovery');
+    return;
+  }
+  if(session&&session.user&&(event==='INITIAL_SESSION'||event==='SIGNED_IN')&&(_pwdRecovery||hasRecoveryHash())){
+    _pwdRecovery=true;
+    currentUser=session.user;
+    document.getElementById('auth-screen').style.display='flex';
+    document.getElementById('app').style.display='none';
+    showAuthMode('recovery');
+    return;
+  }
   if(session&&session.user&&(event==='INITIAL_SESSION'||event==='SIGNED_IN')){
     scheduleBoot(session,event==='SIGNED_IN');
   }
