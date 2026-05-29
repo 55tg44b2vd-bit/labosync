@@ -9,6 +9,7 @@ const {
   findLabUserIdForPortal,
   laboDataUpsert,
 } = require('./_labosync-auth');
+const portalChat = require('./_portal-chat');
 exports.handler = async (event) => {
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
   const headers = buildCors(event);
@@ -168,10 +169,29 @@ exports.handler = async (event) => {
 
     const type = params.type;
     const normalizedId = auth.portalId;
+
+    if (type === 'chat') {
+      try {
+        const since = params.since ? String(params.since) : null;
+        const bundle = await portalChat.listChat(normalizedId, { since });
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify(portalChat.buildChatResponse(bundle)),
+        };
+      } catch (e) {
+        console.error('[portal] chat list', e);
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ error: 'Lecture messages impossible' }),
+        };
+      }
+    }
+
     const rowId =
-      type === 'chat' ? `chat_${normalizedId}` : type === 'orders' ? `orders_${normalizedId}` : `portal_${normalizedId}`;
-    const legacyRowId =
-      type === 'chat' ? `chat_${portalId}` : type === 'orders' ? `orders_${portalId}` : `portal_${portalId}`;
+      type === 'orders' ? `orders_${normalizedId}` : `portal_${normalizedId}`;
+    const legacyRowId = type === 'orders' ? `orders_${portalId}` : `portal_${portalId}`;
     let rows = [];
     const firstRead = await readRow(rowId);
     if (!firstRead.ok) {
@@ -230,6 +250,24 @@ exports.handler = async (event) => {
       };
     }
 
+    if (action === 'chat_mark_read') {
+      if (!isValidPortalId(portalId)) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'portalId invalide' }) };
+      }
+      const auth = await authorizePortalAccess(portalId);
+      if (!auth) {
+        return { statusCode: 401, headers, body: JSON.stringify({ error: 'Accès portail refusé' }) };
+      }
+      const reader = auth.role === 'lab' ? 'lab' : 'cabinet';
+      try {
+        const reads = await portalChat.markChatRead(auth.portalId, reader);
+        return { statusCode: 200, headers, body: JSON.stringify({ ok: true, reads }) };
+      } catch (e) {
+        console.error('[portal] chat_mark_read', e);
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Marquage lecture échoué' }) };
+      }
+    }
+
     if (action === 'chat') {
       const { sender, senderName, content, image, attachment } = body;
       if (!isValidPortalId(portalId) || !sender || (!content && !image && !attachment)) {
@@ -254,119 +292,35 @@ exports.handler = async (event) => {
         return { statusCode: 403, headers, body: JSON.stringify({ error: 'Sender non autorisé' }) };
       }
 
-      if (content && String(content).length > 5000) {
+      if (content && String(content).length > portalChat.MAX_CONTENT) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Message trop long' }) };
       }
-      if (image && String(image).length > 3_000_000) {
+      if (image && String(image).length > portalChat.MAX_IMAGE) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Image trop volumineuse' }) };
       }
-      if (attachment && (!attachment.url || String(attachment.url).length > 2048)) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Pièce jointe invalide' }) };
-      }
-
-      const normalizedId = auth.portalId;
-      const rowId = `chat_${normalizedId}`;
-      const legacyRowId = `chat_${portalId}`;
-
-      let rows = [];
-      const firstRead = await readRow(rowId);
-      if (!firstRead.ok) {
-        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Lecture chat échouée : ' + firstRead.error }) };
-      }
-      rows = firstRead.rows;
-      if ((!rows || !rows.length) && legacyRowId !== rowId) {
-        const legacyRead = await readRow(legacyRowId);
-        if (!legacyRead.ok) {
-          return { statusCode: 500, headers, body: JSON.stringify({ error: 'Lecture chat échouée : ' + legacyRead.error }) };
+      if (attachment) {
+        const hasKey = attachment.storageKey && String(attachment.storageKey).length <= 512;
+        const hasUrl = attachment.url && String(attachment.url).length <= 2048;
+        if (!hasKey && !hasUrl) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'Pièce jointe invalide' }) };
         }
-        rows = legacyRead.rows;
       }
-      const existing = rows[0] && rows[0].data && rows[0].data.messages ? rows[0].data.messages : [];
 
-      const newMsg = {
-        id: Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-        sender,
-        senderName: clampStr(senderName || sender, 80),
-        content: clampStr(content || '', 5000),
-        createdAt: new Date().toISOString(),
-      };
-      if (image) newMsg.image = image;
-      if (attachment && attachment.url) {
-        newMsg.attachment = {
-          url: clampStr(attachment.url, 2048),
-          name: clampStr(attachment.name || 'fichier', 200),
-          size: parseInt(attachment.size, 10) || 0,
-          type: clampStr(attachment.type || 'file', 40),
+      try {
+        const newMsg = await portalChat.insertChatMessage(
+          auth.portalId,
+          { sender, senderName, content, image, attachment },
+          auth
+        );
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ ok: true, message: newMsg }),
         };
+      } catch (e) {
+        console.error('[portal] chat insert', e);
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Écriture message échouée' }) };
       }
-
-      const trimmed = [...existing, newMsg].slice(-200);
-
-      let chatLabUserId = auth.userId || null;
-      if (!chatLabUserId && rows[0]?.data?.labUserId) {
-        chatLabUserId = String(rows[0].data.labUserId);
-      }
-      if (!chatLabUserId) {
-        const portalRead = await readRow(`portal_${normalizedId}`);
-        if (portalRead.ok && portalRead.rows[0]?.data?.labUserId) {
-          chatLabUserId = String(portalRead.rows[0].data.labUserId);
-        } else if (legacyRowId !== rowId) {
-          const legacyPortal = await readRow(legacyRowId.replace(/^chat_/, 'portal_'));
-          if (legacyPortal.ok && legacyPortal.rows[0]?.data?.labUserId) {
-            chatLabUserId = String(legacyPortal.rows[0].data.labUserId);
-          }
-        }
-      }
-      if (!chatLabUserId) {
-        chatLabUserId = await findLabUserIdForPortal(normalizedId);
-      }
-      if (!chatLabUserId && portalId !== normalizedId) {
-        chatLabUserId = await findLabUserIdForPortal(portalId);
-      }
-      if (chatLabUserId) {
-        try {
-          await laboDataUpsert(`portal_owner_${normalizedId}`, {
-            labUserId: chatLabUserId,
-            portalId: normalizedId,
-          });
-        } catch (e) {
-          console.warn('[portal] portal_owner from chat', e);
-        }
-      }
-
-      const writeResp = await fetch(`${SB_URL}/rest/v1/labo_data`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SERVICE_KEY,
-          Authorization: `Bearer ${SERVICE_KEY}`,
-          Prefer: 'resolution=merge-duplicates,return=minimal',
-        },
-        body: JSON.stringify({
-          id: rowId,
-          data: { messages: trimmed, labUserId: chatLabUserId },
-          updated_at: new Date().toISOString(),
-        }),
-      });
-
-      if (!writeResp.ok) {
-        const txt = await writeResp.text();
-        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Écriture échouée : ' + txt }) };
-      }
-
-      let laboName = clampStr(senderName || '', 80);
-      if (sender === 'labo') {
-        const portalRead = await readRow(`portal_${normalizedId}`);
-        if (portalRead.ok && portalRead.rows[0]?.data?.laboName) {
-          laboName = clampStr(portalRead.rows[0].data.laboName, 80);
-        }
-      }
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({ ok: true, message: newMsg }),
-      };
     }
 
     if (action === 'orders') {

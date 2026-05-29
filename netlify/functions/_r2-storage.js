@@ -8,6 +8,15 @@ const {
 } = require('./_labosync-auth');
 
 const ALLOWED_EXT = new Set(['stl', 'obj', 'ply', 'zip', 'pdf', '3mf', '7z', 'rar']);
+const CHAT_ALLOWED_EXT = new Set([
+  ...ALLOWED_EXT,
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'gif',
+  'heic',
+]);
 
 function r2Config() {
   const accountId = (process.env.R2_ACCOUNT_ID || '').trim();
@@ -24,6 +33,11 @@ function r2Config() {
 function maxFileBytes() {
   const n = parseInt(process.env.R2_MAX_FILE_BYTES || '', 10);
   return Number.isFinite(n) && n > 0 ? n : 150 * 1024 * 1024;
+}
+
+function maxChatFileBytes() {
+  const n = parseInt(process.env.R2_CHAT_MAX_FILE_BYTES || '', 10);
+  return Number.isFinite(n) && n > 0 ? n : 50 * 1024 * 1024;
 }
 
 function getPortalToken(event) {
@@ -54,12 +68,30 @@ function buildObjectKey(labUserId, portalId, caseId, stepId, fileName) {
   return `labs/${uid}/portal/${pid}/case/${cid}/step/${sid}/${Date.now()}_${fn}`;
 }
 
+function buildChatObjectKey(labUserId, portalId, fileName) {
+  const uid = String(labUserId || '').trim();
+  const pid = String(portalId || '')
+    .trim()
+    .toLowerCase();
+  const fn = safeFileName(fileName);
+  return `labs/${uid}/portal/${pid}/chat/${Date.now()}_${fn}`;
+}
+
 function parseObjectKey(key) {
-  const m = String(key || '').match(
-    /^labs\/([^/]+)\/portal\/([^/]+)\/case\/([^/]+)\/step\/([^/]+)\/(.+)$/,
-  );
+  const raw = String(key || '');
+  const chat = raw.match(/^labs\/([^/]+)\/portal\/([^/]+)\/chat\/(.+)$/);
+  if (chat) {
+    return {
+      kind: 'chat',
+      labUserId: chat[1],
+      portalId: chat[2],
+      fileName: chat[3],
+    };
+  }
+  const m = raw.match(/^labs\/([^/]+)\/portal\/([^/]+)\/case\/([^/]+)\/step\/([^/]+)\/(.+)$/);
   if (!m) return null;
   return {
+    kind: 'case',
     labUserId: m[1],
     portalId: m[2],
     caseId: m[3],
@@ -141,9 +173,12 @@ async function presignDownload(cfg, key) {
 
 module.exports = {
   ALLOWED_EXT,
+  CHAT_ALLOWED_EXT,
   r2Config,
   maxFileBytes,
+  maxChatFileBytes,
   buildObjectKey,
+  buildChatObjectKey,
   parseObjectKey,
   safeFileName,
   authorizeAccess,

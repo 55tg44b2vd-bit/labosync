@@ -2121,9 +2121,8 @@ function setupTabs(){
       if(id==='neworder'){_cabDraftBannerPending=_loadDraft();renderOrderForm();}
       if(id==='orders')renderOrdersList();
       if(id==='messages'){
-        // Mark as read
         document.getElementById('chat-notif').style.display='none';
-        if(sessionPortalId) localStorage.setItem('chat_seen_cab_'+sessionPortalId, new Date().toISOString());
+        _markPortalChatReadCab();
         loadPortalChat(true);
         startPortalChatPoll();
       }
@@ -2413,6 +2412,31 @@ var _portalChatInterval = null;
 var _portalChatLoading = false;
 var _portalLastChatKey = '';
 var _portalLastChatMsgs = null;
+var _portalChatServerState = null;
+
+function _parseCabChatBundle(rows){
+  const data=(rows&&rows[0]&&rows[0].data)||{};
+  return {
+    messages:Array.isArray(data.messages)?data.messages:[],
+    reads:data.reads||{labReadAt:null,cabinetReadAt:null},
+    unread:data.unread||{lab:0,cabinet:0}
+  };
+}
+
+async function _markPortalChatReadCab(){
+  if(!sessionPortalId)return;
+  try{
+    await fetch('/.netlify/functions/portal',{
+      method:'POST',
+      headers:_portalCabHeaders(),
+      body:JSON.stringify({action:'chat_mark_read',portalId:sessionPortalId})
+    });
+    if(_portalChatServerState){
+      _portalChatServerState.reads=Object.assign({},_portalChatServerState.reads,{cabinetReadAt:new Date().toISOString()});
+      _portalChatServerState.unread=Object.assign({},_portalChatServerState.unread,{cabinet:0});
+    }
+  }catch(e){console.warn('_markPortalChatReadCab',e);}
+}
 
 function _portalChatCacheKey(){
   return 'cab_chat_cache_'+(sessionPortalId||'_');
@@ -2472,7 +2496,9 @@ async function loadPortalChat(scrollToBottom, opts){
   _portalChatLoading = true;
   try{
     const rows = await _portalFetchChatRows();
-    const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
+    const bundle=_parseCabChatBundle(rows);
+    const msgs=bundle.messages;
+    _portalChatServerState=bundle;
     const key = JSON.stringify(msgs.map(function(m){return [m.id,m.createdAt,m.sender,m.content,m.image?1:0,m.attachment&&m.attachment.url].join('|');}));
     if(key!==_portalLastChatKey || opts.force){
       _portalLastChatKey = key;
@@ -2480,11 +2506,7 @@ async function loadPortalChat(scrollToBottom, opts){
       _portalWriteCachedChat(msgs);
       renderPortalChat(msgs, scrollToBottom);
     }
-    // Update last seen
-    if(msgs.length){
-      const lastLaboMsg = [...msgs].reverse().find(function(m){return m.sender==='labo';});
-      if(lastLaboMsg) localStorage.setItem('chat_seen_cab_'+sessionPortalId, lastLaboMsg.createdAt);
-    }
+    if(scrollToBottom) _markPortalChatReadCab();
   }catch(e){
     console.warn('Portal chat error',e);
     if(!_portalReadCachedChat()){
@@ -2512,17 +2534,9 @@ function renderPortalChat(msgs, scrollToBottom){
     if(m.image){
       attachHtml = '<img src="'+esc(m.image)+'" style="max-width:220px;max-height:180px;border-radius:8px;display:block;cursor:pointer;" onclick="chatViewImg(this.src)"/>';
     } else if(m.attachment){
-      const a = m.attachment;
-      if(a.type==='image'){
-        attachHtml = '<img src="'+esc(a.url)+'" style="max-width:220px;max-height:180px;border-radius:8px;display:block;cursor:pointer;" onclick="chatViewImg(this.src)"/>';
-      } else {
-        const ic = a.type==='stl'?'🦷':a.type==='pdf'?'📄':'📎';
-        const sz = a.size?_humanFileSizeCab(a.size):'';
-        attachHtml = '<a href="'+esc(a.url)+'" target="_blank" rel="noopener" download="'+esc(a.name||'fichier')+'" style="display:flex;align-items:center;gap:10px;background:'+(isCab?'rgba(255,255,255,.18)':'var(--bg)')+';border:1px solid '+(isCab?'rgba(255,255,255,.3)':'var(--border)')+';border-radius:8px;padding:8px 10px;text-decoration:none;color:inherit;max-width:240px;">'+
-          '<span style="font-size:1.5rem;line-height:1;flex-shrink:0;">'+ic+'</span>'+
-          '<span style="flex:1;min-width:0;"><span style="display:block;font-weight:600;font-size:.84rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(a.name||'fichier')+'</span><span style="display:block;font-size:.7rem;opacity:.85;">'+esc((a.type||'').toUpperCase())+(sz?' · '+sz:'')+' · cliquer pour ouvrir</span></span>'+
-        '</a>';
-      }
+      attachHtml=(typeof LabR2!=='undefined'&&LabR2.buildChatAttachmentHtml)
+        ?LabR2.buildChatAttachmentHtml(m.attachment,{isOutgoing:isCab,esc:esc,humanSize:_humanFileSizeCab})
+        :'';
     }
     const bubbleContent = attachHtml
       ? attachHtml + (m.content?'<div style="margin-top:5px;font-size:.82rem;">'+chatRenderContent(m.content,isCab)+'</div>':'')
@@ -2532,6 +2546,9 @@ function renderPortalChat(msgs, scrollToBottom){
       +'<div style="font-size:.62rem;color:var(--ink-soft);padding:0 3px;">'+esc(m.senderName||m.sender)+' · '+date+' '+time+'</div>'
       +'</div>';
   }).join('');
+  if(typeof LabR2!=='undefined'&&LabR2.bindChatAttachmentButtons){
+    LabR2.bindChatAttachmentButtons(el,_portalCabHeaders);
+  }
   if(scrollToBottom) el.scrollTop = el.scrollHeight;
 }
 
@@ -2550,8 +2567,10 @@ async function sendPortalMsg(){
   let attachment = null;
   if(_portalPendingAttachment){
     try{
-      const url = await _uploadPortalChatFile(_portalPendingAttachment.file, sessionPortalId);
-      attachment = {url:url, name:_portalPendingAttachment.name, size:_portalPendingAttachment.size, type:_portalPendingAttachment.type};
+      attachment = await _uploadPortalChatFile(_portalPendingAttachment.file, sessionPortalId);
+      if(attachment&&attachment.url&&!attachment.storageKey){
+        attachment={url:attachment.url,name:_portalPendingAttachment.name,size:_portalPendingAttachment.size,type:_portalPendingAttachment.type,storage:'legacy'};
+      }
     }catch(e){
       console.error('Upload échoué', e);
       showToast('❌ Erreur d\'envoi du fichier','#c0392b');
@@ -2612,7 +2631,7 @@ function portalFileSelected(input){
       document.getElementById('portal-photo-preview').style.display = 'block';
     });
   } else {
-    // Fichiers (STL, PDF, OBJ…) : Supabase Storage
+    // Fichiers (STL, PDF, OBJ…) : R2 privé (repli Supabase si R2 indisponible)
     const ext = (file.name.split('.').pop()||'').toLowerCase();
     const fileType = ext==='stl'?'stl':ext==='obj'?'obj':ext==='ply'?'ply':ext==='pdf'?'pdf':'file';
     _portalPendingAttachment = {file:file, name:file.name, size:file.size, type:fileType};
@@ -2635,13 +2654,18 @@ function portalClearPhoto(){
 }
 
 async function _uploadPortalChatFile(file, portalId){
+  if(typeof LabR2!=='undefined'&&LabR2.uploadChatFile){
+    return await LabR2.uploadChatFile(file,portalId,_portalCabHeaders());
+  }
   const sb = supabase.createClient(SB_URL, SB_ANON);
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
   const path = portalId+'/'+Date.now()+'_'+safeName;
   const {data, error} = await sb.storage.from('chat-files').upload(path, file, {cacheControl:'3600', upsert:false});
   if(error) throw error;
   const {data:pub} = sb.storage.from('chat-files').getPublicUrl(path);
-  return pub.publicUrl;
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  const fileType=ext==='stl'?'stl':ext==='pdf'?'pdf':'file';
+  return {url:pub.publicUrl,name:file.name,size:file.size,type:fileType,storage:'legacy'};
 }
 
 function chatCompressImage(file, cb){
@@ -2788,13 +2812,15 @@ function checkPortalChatNotif(){
   fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId),{headers:_portalCabHeaders()})
     .then(function(r){return r.ok?r.json():[];})
     .then(function(rows){
-      const msgs = (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
+      const bundle=_parseCabChatBundle(rows);
+      const msgs=bundle.messages;
       const laboMsgs = msgs.filter(function(m){return m.sender==='labo';});
       if(!laboMsgs.length) return;
-      const lastSeen = localStorage.getItem('chat_seen_cab_'+sessionPortalId)||'';
-      const unseen = laboMsgs.filter(function(m){return m.createdAt>lastSeen;});
+      const cabRead=bundle.reads.cabinetReadAt||'';
+      const unseen = laboMsgs.filter(function(m){return m.createdAt>cabRead;});
+      const unreadCount=bundle.unread.cabinet!=null?bundle.unread.cabinet:unseen.length;
       const notif = document.getElementById('chat-notif');
-      if(notif) notif.style.display = unseen.length>0 ? 'inline' : 'none';
+      if(notif) notif.style.display = unreadCount>0 ? 'inline' : 'none';
       if(unseen.length){
         const latest=unseen[unseen.length-1];
         if(_cabChatNotifyAt[sessionPortalId]!==latest.createdAt){

@@ -2744,7 +2744,7 @@ function _showMissingMsgSheetMobile(cab,initialText){
 
 async function _fetchCabRepliesMobile(cab,sinceISO){
   if(!cab.portalId)return [];
-  var msgs=await _fetchPortalChat(cab.portalId);
+  var msgs=await _fetchPortalChat(cab.portalId,{since:sinceISO||''});
   return msgs.filter(function(m){return m.sender==='cabinet'&&(!sinceISO||m.createdAt>sinceISO);});
 }
 
@@ -2905,10 +2905,12 @@ function renderHomeMessages(){
   Object.keys(_msgLastMessages||{}).forEach(function(cabId){
     var last=_msgLastMessages[cabId];
     if(!last||last.sender==='labo')return;
-    var seen=localStorage.getItem('lb_chat_seen_'+cabId)||'';
-    if(last.createdAt&&last.createdAt>seen){
-      var cab=cabinets.find(function(c){return c.id===cabId;});
-      if(cab)unread.push({cab:cab,last:last});
+    var cab=cabinets.find(function(c){return c.id===cabId;});
+    if(!cab||!cab.portalId)return;
+    var st=_mobChatServerState[cab.portalId]||{};
+    var labRead=(st.reads&&st.reads.labReadAt)||'';
+    if(last.createdAt&&last.createdAt>labRead){
+      unread.push({cab:cab,last:last});
     }
   });
   if(!unread.length){card.style.display='none';return;}
@@ -3290,7 +3292,7 @@ async function publishPortal(cab){
 function openChat(cabId){
   var cab=cabinets.find(function(c){return c.id===cabId;});if(!cab||!cab.portalId)return;
   _chatCabId=cabId;
-  localStorage.setItem('lb_chat_seen_'+cabId,new Date().toISOString());
+  _markPortalChatReadLabMobile(cab.portalId);
   document.getElementById('chat-cab-name').textContent=cab.name;
   document.getElementById('chat-view').classList.add('on');
   document.getElementById('chat-input').value='';
@@ -3300,6 +3302,8 @@ function openChat(cabId){
 }
 
 function closeChat(){
+  var cab=_chatCabId?cabinets.find(function(c){return c.id===_chatCabId;}):null;
+  if(cab&&cab.portalId)_markPortalChatReadLabMobile(cab.portalId);
   document.getElementById('chat-view').classList.remove('on');
   _chatCabId=null;
   if(_chatPoll){clearInterval(_chatPoll);_chatPoll=null;}
@@ -3324,22 +3328,16 @@ function renderChat(msgs){
     if(m.image){
       attachHtml='<a href="'+esc(m.image)+'" target="_blank" rel="noopener"><img src="'+esc(m.image)+'" style="max-width:220px;max-height:220px;border-radius:10px;display:block;cursor:zoom-in;"/></a>';
     } else if(m.attachment){
-      var a=m.attachment;
-      if(a.type==='image'){
-        attachHtml='<a href="'+esc(a.url)+'" target="_blank" rel="noopener"><img src="'+esc(a.url)+'" style="max-width:220px;max-height:220px;border-radius:10px;display:block;cursor:zoom-in;"/></a>';
-      } else {
-        // Fichier non-image (STL, PDF, etc.) — bouton de téléchargement
-        var icon=a.type==='stl'?'🦷':a.type==='pdf'?'📄':'📎';
-        var sizeStr=a.size?_humanFileSize(a.size):'';
-        attachHtml='<a href="'+esc(a.url)+'" target="_blank" rel="noopener" download="'+esc(a.name||'fichier')+'" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:8px 10px;text-decoration:none;color:inherit;max-width:240px;">'+
-          '<span style="font-size:1.6rem;line-height:1;flex-shrink:0;">'+icon+'</span>'+
-          '<span style="flex:1;min-width:0;"><span style="display:block;font-weight:600;font-size:.84rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(a.name||'fichier')+'</span><span style="display:block;font-size:.7rem;opacity:.8;">'+esc((a.type||'').toUpperCase())+(sizeStr?' · '+sizeStr:'')+' · Tap pour ouvrir</span></span>'+
-        '</a>';
-      }
+      attachHtml=(typeof LabR2!=='undefined'&&LabR2.buildChatAttachmentHtml)
+        ?LabR2.buildChatAttachmentHtml(m.attachment,{isOutgoing:isLabo,esc:esc,humanSize:_humanFileSize})
+        :'';
     }
     var combined=attachHtml+(content?(attachHtml?'<div style="margin-top:6px;">'+content+'</div>':content):'');
     return '<div class="chat-bubble '+(isLabo?'labo':'cabinet')+'">'+combined+'<span class="chat-time">'+time+'</span></div>';
   }).join('');
+  if(typeof LabR2!=='undefined'&&LabR2.bindChatAttachmentButtons){
+    LabR2.bindChatAttachmentButtons(el,labR2HeadersMobile);
+  }
   el.scrollTop=el.scrollHeight;
 }
 
@@ -3349,9 +3347,7 @@ function _humanFileSize(bytes){
   return (bytes/(1024*1024)).toFixed(1)+' Mo';
 }
 
-/* ── UPLOAD DE FICHIERS DANS LE CHAT ─────────────────────────────────────
-   Permet d'envoyer des photos et fichiers STL via Supabase Storage.
-   Bucket : chat-files (public read, taille max 50 Mo). */
+/* ── UPLOAD DE FICHIERS DANS LE CHAT (R2 privé, repli Supabase) ── */
 var _pendingChatAttachment=null;
 function onChatFileSelected(input){
   var file=input.files&&input.files[0];if(!file)return;
@@ -3381,14 +3377,18 @@ function cancelChatAttachment(){
   var p=document.getElementById('chat-attach-preview');if(p){p.style.display='none';p.innerHTML='';}
 }
 async function _uploadChatFile(file,portalId){
+  if(typeof LabR2!=='undefined'&&LabR2.uploadChatFile){
+    return await LabR2.uploadChatFile(file,portalId,labR2HeadersMobile());
+  }
   var sbAnon=supabase.createClient(SB_URL,SB_KEY);
-  // Nettoyer le nom de fichier pour éviter les caractères problématiques
   var safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
   var path=portalId+'/'+Date.now()+'_'+safeName;
   var{data,error}=await sbAnon.storage.from('chat-files').upload(path,file,{cacheControl:'3600',upsert:false});
   if(error)throw error;
   var{data:pub}=sbAnon.storage.from('chat-files').getPublicUrl(path);
-  return pub.publicUrl;
+  var ext=(file.name.split('.').pop()||'').toLowerCase();
+  var fileType=ext==='stl'?'stl':ext==='pdf'?'pdf':'file';
+  return {url:pub.publicUrl,name:file.name,size:file.size,type:fileType,storage:'legacy'};
 }
 
 async function sendChat(){
@@ -3402,8 +3402,10 @@ async function sendChat(){
     var p=document.getElementById('chat-attach-preview');
     if(p)p.innerHTML='<span style="color:var(--accent);">⏳ Envoi en cours…</span>';
     try{
-      var url=await _uploadChatFile(_pendingChatAttachment.file,cab.portalId);
-      attachment={url:url,name:_pendingChatAttachment.name,size:_pendingChatAttachment.size,type:_pendingChatAttachment.type};
+      attachment=await _uploadChatFile(_pendingChatAttachment.file,cab.portalId);
+      if(attachment&&attachment.url&&!attachment.storageKey){
+        attachment={url:attachment.url,name:_pendingChatAttachment.name,size:_pendingChatAttachment.size,type:_pendingChatAttachment.type,storage:'legacy'};
+      }
     }catch(e){
       console.error('Upload échoué',e);
       toast('Erreur d\'envoi du fichier — vérifiez votre connexion','var(--red)');
@@ -3718,17 +3720,46 @@ function renderJobList(){
 
 /* ── MESSAGES LIST ── */
 var _msgLastMessages={};
+var _mobChatServerState={};
+
+function _parseMobChatBundle(rows){
+  var data=(rows&&rows[0]&&rows[0].data)||{};
+  return {
+    messages:Array.isArray(data.messages)?data.messages:[],
+    reads:data.reads||{labReadAt:null,cabinetReadAt:null},
+    unread:data.unread||{lab:0,cabinet:0}
+  };
+}
+
+async function _markPortalChatReadLabMobile(portalId){
+  if(!portalId||!_token)return;
+  try{
+    await fetch('/.netlify/functions/portal',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},
+      body:JSON.stringify({action:'chat_mark_read',portalId:portalId})
+    });
+    var st=_mobChatServerState[portalId];
+    if(st){
+      st.reads=Object.assign({},st.reads,{labReadAt:new Date().toISOString()});
+      st.unread=Object.assign({},st.unread,{lab:0});
+    }
+  }catch(e){console.warn('_markPortalChatReadLabMobile',e);}
+}
 
 /** Même source que app.html (API portail) — évite chat_ID vs chat_id et RLS anon. */
-async function _fetchPortalChat(portalId){
+async function _fetchPortalChat(portalId,opts){
+  opts=opts||{};
   if(!portalId||!_token)return [];
   try{
-    var r=await fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(portalId),{
-      headers:{'Authorization':'Bearer '+_token}
-    });
+    var url='/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(portalId);
+    if(opts.since)url+='&since='+encodeURIComponent(opts.since);
+    var r=await fetch(url,{headers:{'Authorization':'Bearer '+_token}});
     if(!r.ok){console.warn('_fetchPortalChat',portalId,r.status);return [];}
     var rows=await r.json();
-    return (rows[0]&&rows[0].data&&rows[0].data.messages)?rows[0].data.messages:[];
+    var bundle=_parseMobChatBundle(rows);
+    if(!opts.since)_mobChatServerState[portalId]=bundle;
+    return bundle.messages;
   }catch(e){console.warn('_fetchPortalChat',e);return [];}
 }
 
@@ -3780,8 +3811,9 @@ function mobSeedDedupeQuiet(cab,unseen){
 function mobNotifyCabinetMessages(cab,msgs){
   if(!cab||!cab.portalId||!msgs||!msgs.length)return;
   if(_chatCabId===cab.id)return;
-  var lastSeen=localStorage.getItem('lb_chat_seen_'+cab.id)||'';
-  var unseen=msgs.filter(function(m){return m.sender==='cabinet'&&m.createdAt>lastSeen;});
+  var st=_mobChatServerState[cab.portalId]||{};
+  var labRead=(st.reads&&st.reads.labReadAt)||'';
+  var unseen=msgs.filter(function(m){return m.sender==='cabinet'&&m.createdAt>labRead;});
   if(!unseen.length)return;
   if(!_mobChatPushBootstrapDone){
     mobSeedDedupeQuiet(cab,unseen);
@@ -3809,13 +3841,12 @@ function startMobChatRealtime(){
     var pid=cab.portalId;
     var ch=sbClient.channel('mob_chat_'+pid).on('postgres_changes',{
       event:'UPDATE',schema:'public',table:'labo_data',filter:'id=eq.chat_'+pid
-    },function(payload){
-      try{
-        var data=payload.new&&payload.new.data;
-        var msgs=data&&data.messages?data.messages:[];
+    },function(){
+      _fetchPortalChat(pid).then(function(msgs){
         mobNotifyCabinetMessages(cab,msgs);
         if(msgs.length)_msgLastMessages[cab.id]=msgs[msgs.length-1];
-      }catch(e){}
+        renderHomeMessages();
+      }).catch(function(e){console.warn('mob chat rt',e);});
     }).subscribe();
     _mobChatRtChannels.push(ch);
   });

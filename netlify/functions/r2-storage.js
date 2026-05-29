@@ -1,9 +1,12 @@
 const { buildCors } = require('./_labosync-auth');
 const {
   ALLOWED_EXT,
+  CHAT_ALLOWED_EXT,
   r2Config,
   maxFileBytes,
+  maxChatFileBytes,
   buildObjectKey,
+  buildChatObjectKey,
   parseObjectKey,
   safeFileName,
   authorizeAccess,
@@ -97,6 +100,69 @@ exports.handler = async (event) => {
           mime: contentType,
           ext,
           storageKey,
+          uploadedAt: new Date().toISOString(),
+        },
+      }),
+    };
+  }
+
+  if (action === 'prepare_chat_upload') {
+    const portalId = String(body.portalId || '').trim().toLowerCase();
+    const fileName = safeFileName(body.fileName);
+    const fileSize = parseInt(body.fileSize, 10) || 0;
+    const contentType = String(body.contentType || 'application/octet-stream').slice(0, 120);
+
+    if (!portalId || !fileName) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Paramètres manquants' }) };
+    }
+
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    if (!CHAT_ALLOWED_EXT.has(ext)) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          error:
+            'Type de fichier non autorisé (' +
+            ext +
+            '). Autorisés : ' +
+            Array.from(CHAT_ALLOWED_EXT).join(', '),
+        }),
+      };
+    }
+
+    if (fileSize <= 0 || fileSize > maxChatFileBytes()) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          error: 'Taille invalide (max ' + Math.round(maxChatFileBytes() / (1024 * 1024)) + ' Mo)',
+        }),
+      };
+    }
+
+    const auth = await authorizeAccess(event, portalId, null);
+    if (!auth.ok) {
+      return { statusCode: 401, headers, body: JSON.stringify({ error: auth.error }) };
+    }
+
+    const storageKey = buildChatObjectKey(auth.labUserId, portalId, fileName);
+    const uploadUrl = await presignUpload(cfg, storageKey, contentType);
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        ok: true,
+        uploadUrl,
+        storageKey,
+        file: {
+          name: fileName,
+          size: fileSize,
+          mime: contentType,
+          ext,
+          storageKey,
+          storage: 'r2',
           uploadedAt: new Date().toISOString(),
         },
       }),
