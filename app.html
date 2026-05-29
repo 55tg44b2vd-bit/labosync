@@ -3277,6 +3277,12 @@ function _isJobLate(j){
   if(typeof bdl!=='undefined'&&bdl&&bdl.find(function(b){return b.jobId===j.id;}))return false;
   return Date.now()>dl.getTime();
 }
+function _isJobDueForDeliveryNote(j,todayISO){
+  if(!j)return false;
+  var deliveryDate=_jobLabDeliveryDate(j);
+  if(!deliveryDate)return false;
+  return deliveryDate<=(todayISO||fmtISO(new Date()));
+}
 function _fmtJobDeliveryLine(j){
   migrateJobDelivery(j);
   var lab=_jobLabDeliveryDate(j),req=_jobRequestedDeliveryDate(j),slot=_fmtDeliverySlot(j.labDeliverySlot);
@@ -4373,7 +4379,9 @@ function renderDashboard(){
 
   const jobsWithoutBL=jobs.filter(function(j){return !(bdl||[]).find(function(b){return b.jobId===j.id;});});
   const urgentOrLate=jobsWithoutBL.filter(function(j){return j.urgent||_isJobLate(j);});
-  const readyToDeliver=jobsWithoutBL.filter(function(j){return typeof isJobComplete==='function'&&isJobComplete(j);});
+  const readyToDeliver=jobsWithoutBL.filter(function(j){
+    return typeof isJobComplete==='function'&&isJobComplete(j)&&_isJobDueForDeliveryNote(j,todayISO);
+  });
   const dueToday=jobsWithoutBL.filter(function(j){return _jobLabDeliveryDate(j)===todayISO;});
   const pendingBLs=(bdl||[]).filter(function(b){return !b.invoiced;});
   const pendingTotal=pendingBLs.reduce(function(s,b){return s+(b.total||0);},0);
@@ -13460,12 +13468,13 @@ function renderLivraisons(){
   };
 
   // Jobs sans BL (programmés ou non)
+  const todayISO=fmtISO(new Date());
   const jobsNoBL=jobs.filter(function(j){
-    return !hasBLForItem(j)&&matchJob(j);
+    return !hasBLForItem(j)&&_isJobDueForDeliveryNote(j,todayISO)&&matchJob(j);
   });
   // Items en file d'attente non programmés (pas encore dans jobs)
   const queueNoBL=queue.filter(function(q){
-    return !hasBLForItem(q)&&matchJob(q);
+    return !hasBLForItem(q)&&_isJobDueForDeliveryNote(q,todayISO)&&matchJob(q);
   }).map(function(q){return Object.assign({},q,{tasks:[],_fromQueue:true});});
   const noBL=[...jobsNoBL,...queueNoBL].sort(function(a,b){
     var da=_jobLabDeliveryDate(a)||(a.createdAt?String(a.createdAt).slice(0,10):'');

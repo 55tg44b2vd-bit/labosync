@@ -21,13 +21,17 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
-  --bg:#f1f5f9;--surface:#ffffff;--ink:#0f172a;--ink-soft:#475569;
+  --bg:#eef2f8;--surface:#ffffff;--ink:#0f172a;--ink-soft:#64748b;
   --accent:#2563eb;--accent-hover:#1d4ed8;--accent-soft:#eff6ff;
   --green:#059669;--green-soft:#d1fae5;--red:#dc2626;--red-soft:#fef2f2;
   --orange:#d97706;--orange-soft:#fffbeb;
-  --border:#e2e8f0;
-  --shadow:0 1px 3px rgba(15,23,42,.06);
-  --shadow-lg:0 4px 12px rgba(15,23,42,.1);
+  --purple:#7c3aed;--purple-soft:#f5f3ff;
+  --teal:#0d9488;--teal-soft:#ccfbf1;
+  --border:#e8edf4;
+  --radius-lg:18px;--radius-md:14px;--radius-sm:10px;
+  --shadow:0 2px 8px rgba(15,23,42,.05);
+  --shadow-lg:0 8px 28px rgba(15,23,42,.1);
+  --shadow-card:0 1px 2px rgba(15,23,42,.04),0 6px 20px rgba(15,23,42,.06);
 }
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;min-height:100dvh;-webkit-font-smoothing:antialiased;padding-bottom:env(safe-area-inset-bottom);}
 input,select,textarea{font-size:16px;font-family:inherit;}
@@ -54,7 +58,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 
 /* ── APP SHELL ── */
 #app{display:none;min-height:100vh;min-height:100dvh;flex-direction:column;}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;}
+.topbar{background:rgba(255,255,255,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;}
 .topbar-brand{font-weight:800;font-size:1rem;color:var(--ink);flex:1;}
 .topbar-brand span{color:var(--accent);}
 .topbar-brand-block{display:flex;align-items:center;gap:10px;flex:1;min-width:0;}
@@ -72,29 +76,56 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 .topbar-logout{background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:.72rem;color:var(--ink-soft);cursor:pointer;min-height:36px;}
 
 /* ── BOTTOM NAV ── */
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -2px 8px rgba(15,23,42,.06);}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--border);display:flex;z-index:100;padding:6px 8px calc(6px + env(safe-area-inset-bottom));box-shadow:0 -4px 24px rgba(15,23,42,.08);gap:4px;}
 @keyframes fade-in{from{opacity:0}to{opacity:1}}
 .ps-item:active{background:var(--bg);}
 .ps-item:hover{background:var(--bg);}
 #btn-topbar-profile:active{transform:scale(.92);}
-.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;cursor:pointer;color:var(--ink-soft);font-size:.62rem;font-weight:600;transition:color .15s;border:none;background:none;min-height:56px;justify-content:center;}
-.nav-item.on{color:var(--accent);}
-.nav-item .nav-icon{font-size:1.2rem;}
-.nav-item .nav-badge{position:absolute;top:4px;right:calc(50% - 18px);background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;cursor:pointer;color:var(--ink-soft);font-size:.6rem;font-weight:600;transition:all .18s;border:none;background:transparent;border-radius:12px;min-height:52px;justify-content:center;position:relative;}
+.nav-item.on{color:var(--accent);background:var(--accent-soft);}
+.nav-item .nav-icon{font-size:1.22rem;line-height:1;}
+.nav-item .nav-badge{position:absolute;top:2px;right:calc(50% - 20px);background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:.55rem;font-weight:700;min-width:16px;text-align:center;}
 
 /* ── MAIN CONTENT ── */
-.main{flex:1;padding:16px 14px 140px;overflow-y:auto;}
+.main{flex:1;padding:12px 16px 150px;overflow-y:auto;}
 .view{display:none;}
 .view.on{display:block;}
 
-/* ── CARDS ── */
-.mcard{background:var(--surface);border-radius:14px;border:1px solid var(--border);padding:16px;margin-bottom:12px;box-shadow:var(--shadow);}
-.mcard-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
-.mcard-title{font-weight:700;font-size:.95rem;}
+/* ── HOME HERO & HUB ── */
+.home-hero{background:linear-gradient(135deg,#1d4ed8 0%,#3b82f6 55%,#60a5fa 100%);border-radius:var(--radius-lg);padding:20px 18px;margin-bottom:16px;color:#fff;box-shadow:0 10px 32px rgba(37,99,235,.28);}
+.home-hero-date{font-size:.72rem;font-weight:600;opacity:.88;text-transform:capitalize;letter-spacing:.02em;}
+.home-hero-title{font-size:1.35rem;font-weight:800;margin-top:6px;line-height:1.2;letter-spacing:-.02em;}
+.home-hero-sub{font-size:.8rem;margin-top:8px;opacity:.92;line-height:1.45;}
+.hub-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;}
+.hub-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 12px;text-align:left;cursor:pointer;font-family:inherit;color:inherit;box-shadow:var(--shadow-card);transition:transform .15s,box-shadow .15s;min-height:88px;display:flex;flex-direction:column;gap:8px;}
+.hub-tile:active{transform:scale(.98);}
+.hub-tile-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;}
+.hub-tile-val{font-size:1.35rem;font-weight:800;line-height:1;letter-spacing:-.02em;}
+.hub-tile-lbl{font-size:.68rem;font-weight:600;color:var(--ink-soft);line-height:1.3;}
+.hub-tile--blue .hub-tile-icon{background:#dbeafe;}
+.hub-tile--green .hub-tile-icon{background:#d1fae5;}
+.hub-tile--orange .hub-tile-icon{background:#ffedd5;}
+.hub-tile--purple .hub-tile-icon{background:#ede9fe;}
+.home-section-label{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:4px 2px 10px;}
 
-/* ── STATS ── */
+/* ── CARDS ── */
+.mcard{background:var(--surface);border-radius:var(--radius-md);border:1px solid var(--border);padding:16px;margin-bottom:12px;box-shadow:var(--shadow-card);}
+.mcard-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;}
+.mcard-title{font-weight:700;font-size:.92rem;line-height:1.3;}
+.mcard-link{background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:5px 10px;font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.mcard-count{background:var(--ink);color:#fff;border-radius:99px;padding:2px 9px;font-size:.68rem;font-weight:700;}
+.list-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);}
+.list-row:last-child{border-bottom:none;padding-bottom:0;}
+.list-row:first-child{padding-top:0;}
+.list-row-title{font-weight:600;font-size:.86rem;}
+.list-row-meta{font-size:.7rem;color:var(--ink-soft);margin-top:3px;line-height:1.4;}
+.btn-chip{background:var(--accent);color:#fff;border:none;border-radius:9px;padding:7px 12px;font-size:.7rem;font-weight:600;cursor:pointer;min-height:34px;white-space:nowrap;font-family:inherit;}
+.btn-chip--green{background:var(--green);}
+.btn-chip--soft{background:var(--accent-soft);color:var(--accent);}
+
+/* ── STATS (legacy / cabinet detail) ── */
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
-.stat-box{background:var(--surface);border-radius:12px;padding:14px;border:1px solid var(--border);box-shadow:var(--shadow);}
+.stat-box{background:var(--surface);border-radius:var(--radius-md);padding:14px;border:1px solid var(--border);box-shadow:var(--shadow-card);}
 .stat-val{font-size:1.5rem;font-weight:800;line-height:1;}
 .stat-val.blue{color:var(--accent);}
 .stat-val.green{color:var(--green);}
@@ -102,8 +133,42 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 .stat-val.red{color:var(--red);}
 .stat-lbl{font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-top:4px;}
 
+/* ── TRAVAUX FEED ── */
+.view-head{margin-bottom:14px;}
+.view-head-title{font-size:1.15rem;font-weight:800;letter-spacing:-.02em;color:var(--ink);}
+.view-head-count{font-weight:600;color:var(--ink-soft);font-size:.88rem;}
+.search-bar--compact{margin:0;}
+.search-bar--compact input{padding:10px 12px 10px 36px;font-size:.88rem;border-radius:var(--radius-sm);}
+.job-card{background:var(--surface);border-radius:var(--radius-md);padding:14px;margin-bottom:12px;box-shadow:var(--shadow-card);border:1px solid var(--border);}
+.job-card--urgent{border-left:4px solid var(--red);}
+.job-card--pending{border-left:4px solid #a16207;}
+.job-card--missing{border-left:4px solid #c2410c;}
+.job-card__head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.job-card__avatar{width:40px;height:40px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.95rem;flex-shrink:0;}
+.job-card__info{flex:1;min-width:0;}
+.job-card__patient{font-weight:700;font-size:.96rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.job-card__cab{font-size:.72rem;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;}
+.job-card__badge{font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;flex-shrink:0;}
+.job-card__type{font-size:.9rem;font-weight:500;line-height:1.4;margin-bottom:8px;color:var(--ink);}
+.job-card__alert{font-size:.76rem;border-radius:9px;padding:8px 11px;margin-bottom:8px;line-height:1.45;}
+.job-card__alert--missing{color:#c2410c;background:#fff7ed;}
+.job-card__alert--comment{color:#a16207;background:#fffbeb;}
+.job-card__foot{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.74rem;color:var(--ink-soft);}
+.job-card__progress{height:4px;background:var(--bg);border-radius:99px;overflow:hidden;margin-top:8px;}
+.job-card__progress-fill{height:100%;border-radius:99px;transition:width .25s ease;}
+.job-card__actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+.job-card__actions .btn-chip{flex:1;min-width:0;}
+
+/* ── FAB ── */
+.fab-main{position:fixed;right:16px;bottom:calc(70px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:1.75rem;font-weight:300;line-height:1;cursor:pointer;box-shadow:0 8px 24px rgba(37,99,235,.4);z-index:90;display:flex;align-items:center;justify-content:center;transition:transform .25s ease,background .2s;}
+.fab-main:active{transform:scale(.92);}
+.fab-menu-overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:85;display:flex;align-items:flex-end;justify-content:flex-end;padding:0 16px calc(128px + env(safe-area-inset-bottom)) 0;animation:fade-in .15s ease;}
+.fab-menu-stack{display:flex;flex-direction:column;gap:12px;align-items:flex-end;}
+.fab-menu-item{display:flex;align-items:center;gap:12px;background:#fff;border:none;border-radius:32px;padding:12px 20px;font-size:.9rem;font-weight:600;color:var(--ink);box-shadow:var(--shadow-lg);cursor:pointer;font-family:inherit;min-height:48px;}
+.fab-menu-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.05rem;color:#fff;}
+
 /* ── CABINET LIST ── */
-.cab-card{background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:box-shadow .15s;box-shadow:var(--shadow);}
+.cab-card{background:var(--surface);border-radius:var(--radius-md);border:1px solid var(--border);padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:box-shadow .15s,transform .12s;box-shadow:var(--shadow-card);}
 .cab-card:active{box-shadow:var(--shadow-lg);}
 .cab-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
 .cab-info{flex:1;min-width:0;}
@@ -210,8 +275,8 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 
 /* ── SEARCH ── */
 .search-bar{position:relative;margin-bottom:14px;}
-.search-bar input{width:100%;border:1.5px solid var(--border);border-radius:12px;padding:12px 14px 12px 38px;background:var(--surface);color:var(--ink);outline:none;}
-.search-bar input:focus{border-color:var(--accent);}
+.search-bar input{width:100%;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px 12px 38px;background:var(--surface);color:var(--ink);outline:none;box-shadow:var(--shadow);}
+.search-bar input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.1);}
 .search-bar::before{content:'🔍';position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:.85rem;pointer-events:none;}
 
 /* ── PULL TO REFRESH HINT ── */
@@ -409,30 +474,32 @@ input,select,textarea{font-size:16px;font-family:inherit;}
 
   <div class="main">
     <!-- ── DASHBOARD / AUJOURD'HUI ── -->
-    <div class="view on" id="view-home"><div id="home-greeting" style="margin-bottom:14px;"></div>
-      <p id="mob-home-ws-hint" style="font-size:.78rem;color:var(--ink-soft);margin:-8px 0 14px;line-height:1.4;"></p>
-      <div class="stats-grid" id="stats-grid"></div>
+    <div class="view on" id="view-home">
+      <div id="home-greeting"></div>
+      <p id="mob-home-ws-hint" style="font-size:.78rem;color:var(--ink-soft);margin:-4px 0 12px;line-height:1.4;"></p>
+      <p class="home-section-label">Accès rapide</p>
+      <div class="hub-grid" id="stats-grid"></div>
 
       <div class="mcard" id="home-urgent-card" style="display:none;border-left:4px solid var(--red);">
         <div class="mcard-header">
           <div class="mcard-title" style="color:var(--red);">🔥 Urgent &amp; en retard</div>
-          <span id="home-urgent-cnt" style="background:var(--red);color:#fff;border-radius:99px;padding:2px 9px;font-size:.7rem;font-weight:700;"></span>
+          <span id="home-urgent-cnt" class="mcard-count" style="background:var(--red);"></span>
         </div>
         <div id="home-urgent"></div>
       </div>
 
       <div class="mcard" id="home-pending-response-card" style="display:none;border-left:4px solid #a16207;">
         <div class="mcard-header">
-          <div class="mcard-title" style="color:#a16207;">⏸ En attente de réponse</div>
-          <span id="home-pending-response-cnt" style="background:#a16207;color:#fff;border-radius:99px;padding:2px 9px;font-size:.7rem;font-weight:700;"></span>
+          <div class="mcard-title" style="color:#a16207;">⏸ Réponse cabinet attendue</div>
+          <span id="home-pending-response-cnt" class="mcard-count" style="background:#a16207;"></span>
         </div>
         <div id="home-pending-response"></div>
       </div>
 
       <div class="mcard" id="home-missing-card" style="display:none;border-left:4px solid #c2410c;">
         <div class="mcard-header">
-          <div class="mcard-title" style="color:#c2410c;">📞 Questions à poser aux praticiens</div>
-          <span id="home-missing-cnt" style="background:#c2410c;color:#fff;border-radius:99px;padding:2px 9px;font-size:.7rem;font-weight:700;"></span>
+          <div class="mcard-title" style="color:#c2410c;">📞 Questions à poser</div>
+          <span id="home-missing-cnt" class="mcard-count" style="background:#c2410c;"></span>
         </div>
         <div id="home-missing"></div>
       </div>
@@ -440,15 +507,15 @@ input,select,textarea{font-size:16px;font-family:inherit;}
       <div class="mcard" id="home-pending-orders-card" style="display:none;border-left:4px solid #3b82f6;">
         <div class="mcard-header">
           <div class="mcard-title" style="color:#1d4ed8;">📥 Nouvelles commandes</div>
-          <span id="home-pending-orders-cnt" style="background:#3b82f6;color:#fff;border-radius:99px;padding:2px 9px;font-size:.7rem;font-weight:700;"></span>
+          <span id="home-pending-orders-cnt" class="mcard-count" style="background:#3b82f6;"></span>
         </div>
         <div id="home-pending-orders"></div>
       </div>
 
       <div class="mcard" id="home-ready-card" style="display:none;">
         <div class="mcard-header">
-          <div class="mcard-title">📦 Sans bon de livraison</div>
-          <button onclick="showView('livraisons')" style="background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:5px 10px;font-size:.7rem;font-weight:600;cursor:pointer;">Voir tout →</button>
+          <div class="mcard-title">📦 BL à créer aujourd'hui</div>
+          <button type="button" class="mcard-link" onclick="showView('livraisons')">Voir tout →</button>
         </div>
         <div id="home-ready"></div>
       </div>
@@ -463,15 +530,16 @@ input,select,textarea{font-size:16px;font-family:inherit;}
       <div class="mcard" id="home-messages-card" style="display:none;">
         <div class="mcard-header">
           <div class="mcard-title">💬 Messages non lus</div>
-          <button onclick="showView('messages')" style="background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:5px 10px;font-size:.7rem;font-weight:600;cursor:pointer;">Voir tout →</button>
+          <button type="button" class="mcard-link" onclick="showView('messages')">Voir tout →</button>
         </div>
         <div id="home-messages"></div>
       </div>
 
+      <p class="home-section-label">À suivre</p>
       <div class="mcard">
         <div class="mcard-header">
           <div class="mcard-title">🦷 Travaux en cours</div>
-          <button onclick="showView('travaux')" style="background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:5px 10px;font-size:.7rem;font-weight:600;cursor:pointer;">Voir tout →</button>
+          <button type="button" class="mcard-link" onclick="showView('travaux')">Voir tout →</button>
         </div>
         <div id="home-jobs"></div>
       </div>
@@ -479,7 +547,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
       <div class="mcard">
         <div class="mcard-header">
           <div class="mcard-title">⚡ À facturer</div>
-          <button onclick="showView('docs');setTimeout(function(){var t=document.querySelector('.docs-tab[data-dt=bl]');if(t)t.click();},50);" style="background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:5px 10px;font-size:.7rem;font-weight:600;cursor:pointer;">Voir tout →</button>
+          <button type="button" class="mcard-link" onclick="showView('docs');setTimeout(function(){var t=document.querySelector('.docs-tab[data-dt=bl]');if(t)t.click();},50);">Voir tout →</button>
         </div>
         <div id="home-pending"></div>
       </div>
@@ -523,9 +591,9 @@ input,select,textarea{font-size:16px;font-family:inherit;}
       <button id="mj-add-item" style="display:none;"></button>
       <button id="btn-add-job" style="display:none;"></button>
 
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div id="mob-travaux-title" style="font-size:1.05rem;font-weight:700;color:var(--ink);">Travaux en cours <span id="mj-count" style="font-weight:600;color:var(--ink-soft);font-size:.86rem;"></span></div>
-        <div class="search-bar" style="margin:0;flex:1;max-width:60%;"><input type="text" id="mj-search" placeholder="🔍 Rechercher…" oninput="renderJobList()" style="padding:8px 12px;font-size:.84rem;"/></div>
+      <div class="view-head">
+        <div id="mob-travaux-title" class="view-head-title">Travaux en cours <span id="mj-count" class="view-head-count"></span></div>
+        <div class="search-bar search-bar--compact" style="margin-top:10px;"><input type="text" id="mj-search" placeholder="Rechercher un patient…" oninput="renderJobList()"/></div>
       </div>
       <div id="mj-job-list"></div>
     </div>
@@ -603,9 +671,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
   </div>
 
   <!-- ── FAB MULTI-ACTIONS ── -->
-  <button id="fab-new-job" onclick="toggleFabMenu()" aria-label="Créer"
-    style="position:fixed;right:16px;bottom:calc(64px + env(safe-area-inset-bottom) + 14px);width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:1.8rem;font-weight:300;line-height:1;cursor:pointer;box-shadow:0 6px 18px rgba(37,99,235,.45),0 2px 5px rgba(0,0,0,.15);z-index:90;display:flex;align-items:center;justify-content:center;transition:transform .25s ease;"
-    ontouchstart="this.style.transform='scale(.9)'" ontouchend="this.style.transform='scale(1)'">+</button>
+  <button type="button" id="fab-new-job" class="fab-main" onclick="toggleFabMenu()" aria-label="Créer">+</button>
 
   <!-- ── BOTTOM NAV ── -->
   <nav class="bottom-nav">
@@ -722,6 +788,10 @@ function isJobComplete(job){
 }
 function fmtDate(d){if(!d)return'';try{return new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});}catch(e){return d;}}
 function fmtISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function isDueForDeliveryNote(job,todayISO){
+  if(!job||!job.deliveryDate)return false;
+  return job.deliveryDate<=(todayISO||fmtISO(new Date()));
+}
 function toast(msg,bg,dur){
   const t=document.createElement('div');t.className='toast';t.textContent=msg;
   t.style.opacity='0';t.style.transform='translateX(-50%) translateY(-8px)';
@@ -1577,21 +1647,37 @@ function renderAll(){
   if(_currentCabId)renderCabDetail(_currentCabId);
 }
 
-/* ── STATS ── */
+/* ── STATS / HUB ACCUEIL ── */
 function renderStats(){
+  var el=document.getElementById('stats-grid');if(!el)return;
   var pending=bdl.filter(function(b){return!b.invoiced;});
   var pendingTotal=pending.reduce(function(s,b){return s+(b.total||0);},0);
-  var docsMonth=documents.filter(function(d){
-    var now=new Date();
-    return d.type==='facture'&&d.date&&d.date.startsWith(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
-  });
-  var monthTotal=docsMonth.reduce(function(s,d){return s+(d.total||0);},0);
+  var todayISO=fmtISO(new Date());
   var activeJobs=jobs.filter(function(j){return!bdl.find(function(b){return b.jobId===j.id;});}).length;
-  document.getElementById('stats-grid').innerHTML=
-    '<div class="stat-box"><div class="stat-val blue">'+activeJobs+'</div><div class="stat-lbl">Travaux en cours</div></div>'+
-    '<div class="stat-box"><div class="stat-val orange">'+pending.length+'</div><div class="stat-lbl">BL à facturer</div></div>'+
-    '<div class="stat-box"><div class="stat-val red">'+fmtEur(pendingTotal)+'</div><div class="stat-lbl">En attente</div></div>'+
-    '<div class="stat-box"><div class="stat-val green">'+fmtEur(monthTotal)+'</div><div class="stat-lbl">Ce mois-ci</div></div>';
+  var livrDue=jobs.filter(function(j){
+    return !bdl.find(function(b){return b.jobId===j.id;})&&isDueForDeliveryNote(j,todayISO);
+  }).length;
+  el.innerHTML=
+    '<button type="button" class="hub-tile hub-tile--blue" onclick="showView(\'travaux\')">'+
+      '<span class="hub-tile-icon" aria-hidden="true">🦷</span>'+
+      '<span class="hub-tile-val">'+activeJobs+'</span>'+
+      '<span class="hub-tile-lbl">Travaux en cours</span>'+
+    '</button>'+
+    '<button type="button" class="hub-tile hub-tile--green" onclick="showView(\'livraisons\')">'+
+      '<span class="hub-tile-icon" aria-hidden="true">📦</span>'+
+      '<span class="hub-tile-val">'+livrDue+'</span>'+
+      '<span class="hub-tile-lbl">BL à créer</span>'+
+    '</button>'+
+    '<button type="button" class="hub-tile hub-tile--orange" onclick="showView(\'docs\');setTimeout(function(){var t=document.querySelector(\'.docs-tab[data-dt=bl]\');if(t)t.click();},50);">'+
+      '<span class="hub-tile-icon" aria-hidden="true">💰</span>'+
+      '<span class="hub-tile-val">'+pending.length+'</span>'+
+      '<span class="hub-tile-lbl">BL à facturer</span>'+
+    '</button>'+
+    '<button type="button" class="hub-tile hub-tile--purple" onclick="showView(\'messages\')">'+
+      '<span class="hub-tile-icon" aria-hidden="true">💳</span>'+
+      '<span class="hub-tile-val" style="font-size:1.05rem;">'+fmtEur(pendingTotal)+'</span>'+
+      '<span class="hub-tile-lbl">En attente de règlement</span>'+
+    '</button>';
 }
 
 /* ── HOME PENDING ── */
@@ -1641,12 +1727,12 @@ function renderHomeJobs(){
     var total=j.tasks?j.tasks.length:0;
     var done=j.tasks?j.tasks.filter(function(t){return!!t.done;}).length:0;
     var pct=total?Math.round(done/total*100):0;
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">'+
+    return '<div class="list-row">'+
       '<div style="flex:1;min-width:0;">'+
-        '<div style="font-weight:600;font-size:.84rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(j.patient||'')+(j.urgent?' <span style="color:var(--red);font-size:.7rem;">URGENT</span>':'')+'</div>'+
-        '<div style="font-size:.68rem;color:var(--ink-soft);margin-top:1px;">'+esc(getJobTypeLabel(j))+(cab?' · '+esc(cab.name):'')+'</div>'+
+        '<div class="list-row-title">'+esc(j.patient||'')+(j.urgent?' <span style="color:var(--red);font-size:.7rem;">URGENT</span>':'')+'</div>'+
+        '<div class="list-row-meta">'+esc(getJobTypeLabel(j))+(cab?' · '+esc(cab.name):'')+'</div>'+
       '</div>'+
-      '<div style="width:50px;text-align:right;font-size:.72rem;font-weight:700;color:'+(pct>=100?'var(--green)':'var(--accent)')+';">'+pct+'%</div>'+
+      '<div style="font-size:.78rem;font-weight:700;color:'+(pct>=100?'var(--green)':'var(--accent)')+';">'+pct+'%</div>'+
     '</div>';
   }).join('');
 }
@@ -1658,9 +1744,16 @@ function renderGreeting(){
   var salut=h<6?'Bonne nuit':h<12?'Bonjour':h<18?'Bon après-midi':'Bonsoir';
   var name=(localStorage.getItem('lb_user_name')||'').split(' ')[0]||'';
   var today=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+  var activeJobs=jobs.filter(function(j){return!bdl.find(function(b){return b.jobId===j.id;});}).length;
+  var pendingBL=bdl.filter(function(b){return!b.invoiced;}).length;
+  var sub=activeJobs+' travail'+(activeJobs>1?'s':'')+' en cours';
+  if(pendingBL)sub+=' · '+pendingBL+' BL à facturer';
   el.innerHTML=
-    '<div style="font-size:1.15rem;font-weight:700;color:var(--ink);">'+salut+(name?', '+esc(name):'')+' 👋</div>'+
-    '<div style="font-size:.78rem;color:var(--ink-soft);margin-top:2px;text-transform:capitalize;">'+today+'</div>';
+    '<div class="home-hero">'+
+      '<div class="home-hero-date">'+esc(today)+'</div>'+
+      '<div class="home-hero-title">'+salut+(name?', '+esc(name):'')+' 👋</div>'+
+      '<div class="home-hero-sub">'+esc(sub)+'</div>'+
+    '</div>';
 }
 
 /* ── HOME URGENT (urgent + en retard) ── */
@@ -2850,9 +2943,10 @@ function renderHomeReady(){
   var card=document.getElementById('home-ready-card');
   var el=document.getElementById('home-ready');
   if(!el||!card)return;
+  var todayISO=fmtISO(new Date());
   var list=jobs.filter(function(j){
     if(bdl.find(function(b){return b.jobId===j.id;}))return false;
-    return isJobComplete(j);
+    return isJobComplete(j)&&isDueForDeliveryNote(j,todayISO);
   });
   if(!list.length){card.style.display='none';return;}
   card.style.display='';
@@ -3676,44 +3770,41 @@ function renderJobList(){
     var cabColor=cab&&cab.color?cab.color:'#94a3b8';
     // Statut visuel principal
     var statusBadge='';
-    if(j.pendingResponse)statusBadge='<span style="background:#fef3c7;color:#a16207;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">⏸ Attente réponse</span>';
+    if(j.pendingResponse)statusBadge='<span style="background:#fef3c7;color:#a16207;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">⏸ Réponse cabinet attendue</span>';
     else if(j.urgent)statusBadge='<span style="background:#fee2e2;color:#dc2626;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">🔴 Urgent</span>';
     else if(pct>=100)statusBadge='<span style="background:#d1fae5;color:#065f46;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">✓ Terminé</span>';
     else if(pct>0)statusBadge='<span style="background:#dbeafe;color:#1d4ed8;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">⏳ En cours</span>';
-    else statusBadge='<span style="background:#f1f5f9;color:#64748b;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">○ À démarrer</span>';
+    else if(total>0)statusBadge='<span style="background:#eef2ff;color:#3730a3;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:99px;">📅 Planifié</span>';
+    else statusBadge='';
     var dateStr=j.deliveryDate?fmtDate(j.deliveryDate):'';
     var isLate=j.deliveryDate&&new Date(j.deliveryDate)<new Date()&&pct<100;
     var pendingResp=j.pendingResponse;
     var pendingActions=pendingResp
-      ?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">'+
-        '<button type="button" onclick="editJobResponseComment(\''+esc(j.id)+'\')" style="flex:1;background:var(--accent-soft);color:var(--accent);border:none;border-radius:8px;padding:8px;font-size:.72rem;font-weight:600;cursor:pointer;">📝 Note</button>'+
-        '<button type="button" onclick="openPendingResponseWhatsApp(\''+esc(j.id)+'\')" style="flex:1;background:#25d366;color:#fff;border:none;border-radius:8px;padding:8px;font-size:.72rem;font-weight:600;cursor:pointer;">📲 WhatsApp</button>'+
-        '<button type="button" onclick="clearJobPendingResponse(\''+esc(j.id)+'\')" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px;font-size:.72rem;font-weight:600;cursor:pointer;">▶ Flux normal</button>'+
+      ?'<div class="job-card__actions">'+
+        '<button type="button" class="btn-chip btn-chip--soft" onclick="editJobResponseComment(\''+esc(j.id)+'\')">📝 Note</button>'+
+        '<button type="button" class="btn-chip" style="background:#25d366;" onclick="openPendingResponseWhatsApp(\''+esc(j.id)+'\')">📲 WhatsApp</button>'+
+        '<button type="button" class="btn-chip btn-chip--green" onclick="clearJobPendingResponse(\''+esc(j.id)+'\')">▶ Flux normal</button>'+
       '</div>'
-      :'<button type="button" onclick="setJobPendingResponse(\''+esc(j.id)+'\')" style="margin-top:10px;width:100%;background:#fef3c7;color:#a16207;border:1px solid #fde68a;border-radius:8px;padding:9px;font-size:.78rem;font-weight:700;cursor:pointer;">⏸ En attente de réponse</button>';
-    return '<article class="ig-card'+(j.urgent?' urgent':'')+'" data-jid="'+esc(j.id)+'" style="background:var(--surface);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(15,23,42,.05);border:1px solid var(--border);'+(pendingResp?'border-left:4px solid #a16207;':j.urgent?'border-left:4px solid #dc2626;':hasMissing?'border-left:4px solid #c2410c;':'')+'">'+
-      // Header carte : avatar cabinet + nom + statut
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'+
-        '<div style="width:38px;height:38px;border-radius:50%;background:'+cabColor+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;">'+esc(cabInitial)+'</div>'+
-        '<div style="flex:1;min-width:0;">'+
-          '<div style="font-weight:700;font-size:.96rem;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(j.patient||'')+'</div>'+
-          '<div style="font-size:.72rem;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(cab?esc(cab.name):'Pas de cabinet')+'</div>'+
+      :'';
+    var cardMod=pendingResp?' job-card--pending':(j.urgent?' job-card--urgent':(hasMissing?' job-card--missing':''));
+    return '<article class="job-card'+cardMod+'" data-jid="'+esc(j.id)+'">'+
+      '<div class="job-card__head">'+
+        '<div class="job-card__avatar" style="background:'+cabColor+';">'+esc(cabInitial)+'</div>'+
+        '<div class="job-card__info">'+
+          '<div class="job-card__patient">'+esc(j.patient||'')+'</div>'+
+          '<div class="job-card__cab">'+(cab?esc(cab.name):'Pas de cabinet')+'</div>'+
         '</div>'+
         statusBadge+
       '</div>'+
-      // Type + qté
-      '<div style="font-size:.92rem;color:var(--ink);font-weight:500;line-height:1.4;margin-bottom:8px;">'+esc(getJobTypeLabel(j))+(j.nb>1?' <span style="color:var(--ink-soft);font-weight:400;">× '+j.nb+'</span>':'')+'</div>'+
-      // Notes / infos manquantes
-      (hasMissing?'<div style="font-size:.78rem;color:#c2410c;background:#fff7ed;border-radius:8px;padding:8px 11px;margin-bottom:8px;line-height:1.45;">'+openItems.map(function(it){return _miCatIcon(it.category)+' '+esc(it.text||_miCatLabel(it.category).replace(/^[^ ]+\s/,''));}).join('<br/>')+'</div>':'')+
-      (j.responseComment?'<div style="font-size:.76rem;color:#a16207;background:#fffbeb;border-radius:8px;padding:8px 11px;margin-bottom:8px;line-height:1.45;">💬 '+esc(j.responseComment)+'</div>':'')+
+      '<div class="job-card__type">'+esc(getJobTypeLabel(j))+(j.nb>1?' <span style="color:var(--ink-soft);font-weight:400;">× '+j.nb+'</span>':'')+'</div>'+
+      (hasMissing?'<div class="job-card__alert job-card__alert--missing">'+openItems.map(function(it){return _miCatIcon(it.category)+' '+esc(it.text||_miCatLabel(it.category).replace(/^[^ ]+\s/,''));}).join('<br/>')+'</div>':'')+
+      (j.responseComment?'<div class="job-card__alert job-card__alert--comment">💬 '+esc(j.responseComment)+'</div>':'')+
       pendingActions+
-      // Footer : date + progression
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.74rem;color:var(--ink-soft);">'+
+      '<div class="job-card__foot">'+
         '<div>'+(dateStr?(isLate?'<span style="color:#dc2626;font-weight:600;">⚠️ Retard · '+dateStr+'</span>':'📅 '+dateStr):'')+'</div>'+
         (total>0?'<div style="font-weight:600;color:'+(pct>=100?'var(--green)':'var(--accent)')+';">'+done+'/'+total+'</div>':'')+
       '</div>'+
-      // Barre de progression
-      (total>0?'<div style="height:4px;background:var(--bg);border-radius:99px;overflow:hidden;margin-top:8px;"><div style="height:100%;width:'+pct+'%;background:'+(pct>=100?'var(--green)':'var(--accent)')+';border-radius:99px;transition:width .25s ease;"></div></div>':'')+
+      (total>0?'<div class="job-card__progress"><div class="job-card__progress-fill" style="width:'+pct+'%;background:'+(pct>=100?'var(--green)':'var(--accent)')+';"></div></div>':'')+
     '</article>';
   }).join('');
 }
@@ -4284,11 +4375,12 @@ function renderLivraisons(){
   var search=(searchEl&&searchEl.value||'').toLowerCase().trim();
 
   if(_livrFilter==='todo'){
+    var todayISO=fmtISO(new Date());
     var jobsWithoutBL=jobs.filter(function(j){
-      return !bdl.find(function(b){return b.jobId===j.id;});
+      return !bdl.find(function(b){return b.jobId===j.id;})&&isDueForDeliveryNote(j,todayISO);
     });
     var queueWithoutBL=queue.filter(function(q){
-      return !bdl.find(function(b){return b.jobId===q.id;});
+      return !bdl.find(function(b){return b.jobId===q.id;})&&isDueForDeliveryNote(q,todayISO);
     });
     var allItems=jobsWithoutBL.concat(queueWithoutBL);
     var todoTotal=allItems.length;
@@ -4380,23 +4472,20 @@ function toggleFabMenu(){
   var existing=document.getElementById('fab-menu');
   if(existing){closeFabMenu();return;}
   var fab=document.getElementById('fab-new-job');
-  if(fab){fab.style.transform='rotate(45deg)';fab.textContent='+';fab.style.background='#dc2626';}
+  if(fab){fab.style.transform='rotate(45deg)';fab.style.background='#dc2626';}
   var overlay=document.createElement('div');
   overlay.id='fab-menu';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:85;display:flex;align-items:flex-end;justify-content:flex-end;padding:0 16px calc(132px + env(safe-area-inset-bottom)) 0;animation:fade-in .15s ease;';
+  overlay.className='fab-menu-overlay';
   overlay.innerHTML=
-    '<div style="display:flex;flex-direction:column;gap:12px;align-items:flex-end;">'+
-      '<button class="fab-act" onclick="closeFabMenu();openQuickJobSheet();" style="display:flex;align-items:center;gap:12px;background:#fff;border:none;border-radius:32px;padding:12px 20px;font-size:.92rem;font-weight:600;color:var(--ink);box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer;font-family:inherit;min-height:48px;">'+
-        '<span style="background:var(--accent);color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.05rem;">🦷</span>'+
-        'Nouveau travail'+
+    '<div class="fab-menu-stack">'+
+      '<button type="button" class="fab-menu-item" onclick="closeFabMenu();openQuickJobSheet();">'+
+        '<span class="fab-menu-icon" style="background:var(--accent);">🦷</span>Nouveau travail'+
       '</button>'+
-      '<button class="fab-act" onclick="closeFabMenu();_fabGoLivraisons();" style="display:flex;align-items:center;gap:12px;background:#fff;border:none;border-radius:32px;padding:12px 20px;font-size:.92rem;font-weight:600;color:var(--ink);box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer;font-family:inherit;min-height:48px;">'+
-        '<span style="background:#10b981;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.05rem;">📦</span>'+
-        'Générer un BL'+
+      '<button type="button" class="fab-menu-item" onclick="closeFabMenu();_fabGoLivraisons();">'+
+        '<span class="fab-menu-icon" style="background:var(--green);">📦</span>Générer un BL'+
       '</button>'+
-      '<button class="fab-act" onclick="closeFabMenu();_fabGoMessages();" style="display:flex;align-items:center;gap:12px;background:#fff;border:none;border-radius:32px;padding:12px 20px;font-size:.92rem;font-weight:600;color:var(--ink);box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer;font-family:inherit;min-height:48px;">'+
-        '<span style="background:#8b5cf6;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.05rem;">💬</span>'+
-        'Nouveau message'+
+      '<button type="button" class="fab-menu-item" onclick="closeFabMenu();_fabGoMessages();">'+
+        '<span class="fab-menu-icon" style="background:var(--purple);">💬</span>Nouveau message'+
       '</button>'+
     '</div>';
   document.body.appendChild(overlay);
@@ -4405,7 +4494,7 @@ function toggleFabMenu(){
 function closeFabMenu(){
   var m=document.getElementById('fab-menu');if(m)m.remove();
   var fab=document.getElementById('fab-new-job');
-  if(fab){fab.style.transform='';fab.style.background='var(--accent)';}
+  if(fab){fab.style.transform='';fab.style.background='';}
 }
 function _fabGoLivraisons(){
   showView('livraisons');
