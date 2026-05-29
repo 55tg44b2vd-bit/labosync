@@ -10,6 +10,7 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
+<script src="/lb-env-routing.js"></script>
 <title>Labosync</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -13851,6 +13852,12 @@ async function completeLabBoot(session){
     await sbClient.auth.signOut();
     throw new Error('Cet email est un compte coursier. Connectez-vous sur labosync.app/courier — ou utilisez un autre email pour le laboratoire.');
   }
+  try{
+    if(typeof lbEnvDetect==='function'&&lbEnvDetect()==='mobile'&&!/[?&]noenv=1(?:&|$)/.test(location.search||'')){
+      location.replace('/labo-mobile.html'+(location.search||'')+(location.hash||''));
+      return;
+    }
+  }catch(e){}
   if(_labBootInProgress)return;
   _labBootInProgress=true;
   try{
