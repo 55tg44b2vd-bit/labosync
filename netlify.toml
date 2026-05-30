@@ -2,6 +2,9 @@
   command = "node scripts/create-deploy-backup.cjs --required --reason netlify-build && node scripts/clean-push-artifacts.cjs && npm run verify:functions"
   functions = "netlify/functions"
 
+[functions."invoice-reminders-cron"]
+  schedule = "0 7 * * *"
+
 # Aliases pratiques pour l'app (la racine "/" sert index.html = landing par défaut)
 [[redirects]]
   from = "/app"

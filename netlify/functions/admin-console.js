@@ -1,3 +1,5 @@
+const { readErrorDashboard } = require('./_error-dashboard');
+
 exports.handler = async (event) => {
   const SB_URL = 'https://ljnfpslgwgagdisixuxz.supabase.co';
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -436,6 +438,12 @@ exports.handler = async (event) => {
   if (action === 'overview') {
     const [subRows, users] = await Promise.all([readSubRows(), readAuthUsers()]);
     const data = mergeOverview(subRows, users);
+    return json(200, { ok: true, data });
+  }
+
+  if (action === 'error_dashboard') {
+    const threshold = process.env.ERROR_ALERT_THRESHOLD || body.threshold || 20;
+    const data = await readErrorDashboard(SERVICE_KEY, { threshold, limit: body.limit || 500 });
     return json(200, { ok: true, data });
   }
 

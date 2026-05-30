@@ -4,6 +4,7 @@ const {
   getStripeConnect,
   platformStripeSecret,
 } = require('./_labosync-auth');
+const { requireLabPerm } = require('./_labosync-rbac');
 
 const SB_URL = 'https://ljnfpslgwgagdisixuxz.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -38,6 +39,11 @@ exports.handler = async (event) => {
           error: 'Connexion requise. Reconnectez-vous à Labosync puis réessayez.',
         }),
       };
+    }
+
+    const perm = requireLabPerm(user, 'action:billing_generate');
+    if (!perm.ok) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: perm.error, code: perm.code }) };
     }
 
     const connect = await getStripeConnect(user.id);

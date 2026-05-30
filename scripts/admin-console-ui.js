@@ -34,6 +34,7 @@
   let activeTab = 'accounts';
   let statPreset = '';
   let auditsLoaded = false;
+  let errorsLoaded = false;
 
   function $(id) {
     return document.getElementById(id);
@@ -248,6 +249,7 @@
     overviewData = null;
     selectedUserId = null;
     auditsLoaded = false;
+    errorsLoaded = false;
     setAdminSecret('');
     showLogin();
   }
@@ -462,6 +464,80 @@
     }
   }
 
+  function renderErrorGroups(title, items) {
+    const rows = (items || [])
+      .map(function (it) {
+        return (
+          '<div class="obs-row"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">' +
+          esc(it.key) +
+          '</span><strong>' +
+          esc(it.count) +
+          '</strong></div>'
+        );
+      })
+      .join('');
+    return '<div class="obs-list-box"><h3>' + esc(title) + '</h3>' + (rows || '<p style="font-size:.82rem;color:#64748b;">Aucune donnée</p>') + '</div>';
+  }
+
+  async function loadErrorDashboard() {
+    const el = $('error-dashboard');
+    if (!el) return;
+    el.innerHTML = '<p style="padding:20px;color:#64748b;">Chargement des erreurs…</p>';
+    try {
+      const j = await adminApi('error_dashboard', { limit: 500 });
+      const data = j.data || {};
+      const s = data.summary || {};
+      const recent = data.recent || [];
+      el.innerHTML =
+        '<div class="obs-grid">' +
+        '<div class="obs-card ' +
+        (s.status === 'alert' ? 'alert' : '') +
+        '"><div class="obs-n">' +
+        esc(s.lastHour || 0) +
+        '</div><div class="obs-l">Erreurs dernière heure</div></div>' +
+        '<div class="obs-card"><div class="obs-n">' +
+        esc(s.total24h || 0) +
+        '</div><div class="obs-l">Erreurs 24h</div></div>' +
+        '<div class="obs-card"><div class="obs-n">' +
+        esc(s.threshold || 20) +
+        '</div><div class="obs-l">Seuil alerte / heure</div></div>' +
+        '</div>' +
+        (s.status === 'alert'
+          ? '<p style="margin-bottom:12px;color:#b91c1c;font-weight:700;">Alerte : le volume d’erreurs dépasse le seuil configuré.</p>'
+          : '<p style="margin-bottom:12px;color:#166534;font-weight:600;">Aucun pic d’erreur détecté.</p>') +
+        '<div class="obs-list">' +
+        renderErrorGroups('Applications', s.apps) +
+        renderErrorGroups('Pages', s.pages) +
+        renderErrorGroups('Messages fréquents', s.messages) +
+        '</div>' +
+        '<div class="table-wrap"><table><thead><tr><th>Date</th><th>App</th><th>Message</th><th>Page</th><th>User</th></tr></thead><tbody>' +
+        (recent.length
+          ? recent
+              .map(function (er) {
+                return (
+                  '<tr><td>' +
+                  esc(fmtDate(er.at)) +
+                  '</td><td>' +
+                  esc(er.app || 'unknown') +
+                  '</td><td>' +
+                  esc((er.message || '').slice(0, 180)) +
+                  (er.traceId ? '<div class="id-cell mono">' + esc(er.traceId) + '</div>' : '') +
+                  '</td><td>' +
+                  esc(er.page || '—') +
+                  '</td><td class="id-cell mono">' +
+                  esc(er.userId || '—') +
+                  '</td></tr>'
+                );
+              })
+              .join('')
+          : '<tr><td colspan="5" style="text-align:center;padding:24px;color:#64748b;">Aucune erreur récente</td></tr>') +
+        '</tbody></table></div>';
+      errorsLoaded = true;
+    } catch (e) {
+      el.innerHTML = '<p style="padding:20px;color:#b91c1c;">' + esc(e.message) + '</p>';
+    }
+  }
+
   function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.tab-btn').forEach(function (b) {
@@ -471,6 +547,7 @@
       p.classList.toggle('on', p.id === 'panel-' + tab);
     });
     if (tab === 'activity' && !auditsLoaded) loadAudits();
+    if (tab === 'observability' && !errorsLoaded) loadErrorDashboard();
     if (tab === 'attention') renderAllTables();
   }
 
@@ -858,7 +935,9 @@
     $('btn-logout').addEventListener('click', handleLogout);
     $('btn-refresh').addEventListener('click', function () {
       auditsLoaded = false;
+      errorsLoaded = false;
       loadOverview().catch(function (e) { setGlobalMsg(e.message, true); });
+      if (activeTab === 'observability') loadErrorDashboard();
     });
     $('btn-export').addEventListener('click', exportCsv);
     $('search-input').addEventListener('input', renderAllTables);

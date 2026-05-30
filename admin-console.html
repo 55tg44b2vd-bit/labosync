@@ -92,6 +92,17 @@
   .note-item{background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;font-size:.82rem;}
   .note-meta{font-size:.7rem;color:var(--ink-soft);margin-bottom:4px;}
   .err-item{font-size:.78rem;padding:8px;background:#fef2f2;border-radius:6px;margin-bottom:6px;color:#7f1d1d;}
+  .obs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px;}
+  .obs-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;}
+  .obs-card.alert{border-color:#fecaca;background:#fef2f2;}
+  .obs-n{font-size:1.6rem;font-weight:800;color:var(--accent);}
+  .obs-card.alert .obs-n{color:var(--danger);}
+  .obs-l{font-size:.72rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-top:3px;}
+  .obs-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:14px;}
+  .obs-list-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;}
+  .obs-list-box h3{font-size:.78rem;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px;}
+  .obs-row{font-size:.82rem;border-top:1px solid var(--border);padding:8px 0;display:flex;gap:8px;justify-content:space-between;}
+  .obs-row:first-of-type{border-top:none;}
   .copy-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;}
   .tags-edit{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
   .tags-edit input{flex:1;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.82rem;}
@@ -145,6 +156,7 @@
     <div class="tabs">
       <button type="button" class="tab-btn on" data-tab="accounts">Comptes</button>
       <button type="button" class="tab-btn" data-tab="attention">À traiter</button>
+      <button type="button" class="tab-btn" data-tab="observability">Observabilité</button>
       <button type="button" class="tab-btn" data-tab="activity">Journal d’activité</button>
     </div>
     <div id="panel-accounts" class="tab-panel on">
@@ -184,6 +196,9 @@
           <tbody id="attention-tbody"></tbody>
         </table>
       </div>
+    </div>
+    <div id="panel-observability" class="tab-panel">
+      <div id="error-dashboard"><p style="padding:20px;color:#64748b;">Chargement des erreurs…</p></div>
     </div>
     <div id="panel-activity" class="tab-panel">
       <div class="table-wrap audit-list" id="audit-list"><p style="padding:20px;color:#64748b;">Chargement du journal…</p></div>

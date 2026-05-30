@@ -1280,6 +1280,11 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <span class="settings-row-body"><span class="settings-row-title">Paiements en ligne</span><span class="settings-row-desc">Configuration Stripe pour vos cabinets</span></span>
           <span class="settings-row-chevron">›</span>
         </button>
+        <button type="button" class="settings-row" onclick="openSettingsSection('relances')">
+          <span class="settings-row-icon">🔔</span>
+          <span class="settings-row-body"><span class="settings-row-title">Relances factures</span><span class="settings-row-desc">Relances automatiques J+3, J+7, J+14 (optionnel)</span></span>
+          <span class="settings-row-chevron">›</span>
+        </button>
       </div>
       <div class="settings-group" data-settings-group="systeme" data-settings-req="danger">
         <div class="settings-group-label">Système</div>
@@ -1624,6 +1629,31 @@ body.has-sidebar #drawer{transform:translateX(0);}
       </div>
     </div>
 
+    <div id="settings-sec-relances" class="settings-section">
+      <div class="settings-topbar">
+        <button type="button" class="settings-back" onclick="closeSettingsSection()" aria-label="Retour">←</button>
+        <h2>Relances factures</h2>
+        <span class="settings-topbar-spacer"></span>
+      </div>
+      <div class="card">
+        <h2>🔔 Relances automatiques</h2>
+        <p style="font-size:.76rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;">
+          Si un cabinet règle par <strong>virement bancaire</strong>, Labosync ne le détecte pas automatiquement.
+          Désactivez les relances auto si vous gérez les paiements hors ligne — vous pourrez toujours relancer manuellement depuis l’onglet Facturation.
+        </p>
+        <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;margin-bottom:14px;">
+          <input type="checkbox" id="billing-auto-reminders" style="width:20px;height:20px;margin-top:2px;"/>
+          <span>
+            <span style="font-weight:600;font-size:.88rem;display:block;">Activer les relances automatiques par email</span>
+            <span style="font-size:.72rem;color:var(--ink-soft);">Envoi quotidien à J+3, J+7 et J+14 après l’échéance (30 jours) pour les factures « envoyées » non payées.</span>
+          </span>
+        </label>
+        <button type="button" class="btn btn-a" id="btn-billing-reminders-save">Enregistrer</button>
+        <p id="billing-reminders-msg" style="font-size:.74rem;color:var(--ink-soft);margin-top:10px;min-height:16px;"></p>
+        <p style="font-size:.72rem;color:var(--ink-soft);margin-top:12px;">Les relances manuelles (bouton 🔔 sur chaque facture en retard) restent disponibles même si l’option est désactivée.</p>
+      </div>
+    </div>
+
     <div id="settings-sec-danger" class="settings-section">
       <div class="settings-topbar">
         <button type="button" class="settings-back" onclick="closeSettingsSection()" aria-label="Retour">←</button>
@@ -1799,6 +1829,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <option value="avoir" data-i18n="bill.filter.credits">Avoirs</option>
         </select>
         <button onclick="exportFacturesCSV()" style="background:#2a6049;color:#fff;border:none;border-radius:6px;padding:5px 11px;font-family:monospace;font-size:.72rem;cursor:pointer;white-space:nowrap;">📥 Export CSV</button>
+        <button onclick="exportFacturesComptaCSV()" style="background:#1a4a7a;color:#fff;border:none;border-radius:6px;padding:5px 11px;font-family:monospace;font-size:.72rem;cursor:pointer;white-space:nowrap;">📊 Export compta</button>
       </div>
     </div>
     <div id="bill-docs-list" style="padding:10px;"></div>
@@ -2872,6 +2903,7 @@ function openSettingsSection(id){
   sec.style.display='block';
   _settingsSectionOpen=id;
   if(id==='paiements'){loadStripeConnectUI();}
+  if(id==='relances'){syncBillingRemindersUi();}
   if(id==='tarifs'){renderTarifsList();}
   if(id==='programmation'){renderProgTypesList();}
   if(id==='labo'){setTimeout(function(){initAllSignaturePads();},80);}
@@ -9139,6 +9171,7 @@ async function cloudSave(){
         directeur:localStorage.getItem('lb_legal_directeur')||'',
         ce_num:localStorage.getItem('lb_legal_ce_num')||'',
       },
+      billingSettings:getBillingSettings(),
     };
     let r=await fetch(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
@@ -9306,6 +9339,9 @@ async function cloudRestore(silent=false){
       const lkeys=['raison','siret','adresse','tel','email','directeur','ce_num'];
       lkeys.forEach(function(k){if(li[k])localStorage.setItem('lb_legal_'+k,li[k]);else localStorage.removeItem('lb_legal_'+k);});
     }
+    if(p.billingSettings&&typeof p.billingSettings==='object'){
+      saveBillingSettings(p.billingSettings,true);
+    }
 
     refreshTypeSelects();
     saveJobs();saveArchive();saveCabinets();saveSyns();saveWaiting();saveConges();saveAbsences();
@@ -9411,16 +9447,42 @@ document.getElementById('btn-labo-name-save').addEventListener('click',function(
   if(typeof _updateHeaderLabName==='function')_updateHeaderLabName();
   scheduleSave();
 });
-document.getElementById('btn-role-save').addEventListener('click',function(){
+document.getElementById('btn-role-save').addEventListener('click',async function(){
   const sel=document.getElementById('user-role-select');
   if(!sel)return;
-  _userRole=sel.value||'admin';
-  localStorage.setItem('lb_user_role',_userRole);
-  applyRoleUi();
+  const role=sel.value||'admin';
   const msg=document.getElementById('role-msg');
-  if(msg){msg.textContent='Rôle appliqué : '+_userRole;}
-  reportAudit({action:'role_changed',target:_userRole});
+  try{
+    const token=await ensureFreshAccessToken(false);
+    const r=await fetch('/.netlify/functions/lab-role',{
+      method:'POST',
+      headers:_portalApiHeaders(),
+      body:JSON.stringify({action:'set',role:role})
+    });
+    const j=await r.json().catch(function(){return {};});
+    if(!r.ok)throw new Error(j.error||'Enregistrement impossible');
+    _userRole=j.role||role;
+    localStorage.setItem('lb_user_role',_userRole);
+    applyRoleUi();
+    if(msg){msg.textContent='Rôle enregistré (serveur) : '+_userRole;}
+    reportAudit({action:'role_changed',target:_userRole});
+    showToast('✅ Rôle mis à jour','#2a6049');
+  }catch(e){
+    if(msg){msg.textContent=e.message||'Erreur';}
+    showToast('❌ '+(e.message||'Erreur rôle'),'#c0392b');
+  }
 });
+var _btnBillingRemindersSave=document.getElementById('btn-billing-reminders-save');
+if(_btnBillingRemindersSave){
+  _btnBillingRemindersSave.addEventListener('click',function(){
+    const cb=document.getElementById('billing-auto-reminders');
+    saveBillingSettings({autoReminders:!!(cb&&cb.checked)});
+    if(typeof flushCloudSave==='function')flushCloudSave();
+    const m=document.getElementById('billing-reminders-msg');
+    if(m)m.textContent='Préférence enregistrée. Relances auto '+(cb&&cb.checked?'activées':'désactivées')+'.';
+    showToast(cb&&cb.checked?'🔔 Relances auto activées':'🔕 Relances auto désactivées','#2a6049');
+  });
+}
 /* ══════════════════════════════════════════
    §24 — QUEUE (FILE D'ATTENTE)
    ══════════════════════════════════════════ */
@@ -11049,6 +11111,28 @@ function syncSaisieCab(){
 let documents = JSON.parse(localStorage.getItem('lb_docs')||'[]');
 let tarifs    = JSON.parse(localStorage.getItem('lb_tarifs')||'[]');
 function saveDocs(){localStorage.setItem('lb_docs',JSON.stringify(documents));scheduleSave();}
+function getBillingSettings(){
+  try{
+    const raw=localStorage.getItem('lb_billing_settings');
+    const o=raw?JSON.parse(raw):{};
+    return {autoReminders:!!o.autoReminders,updatedAt:o.updatedAt||null};
+  }catch(e){return {autoReminders:false,updatedAt:null};}
+}
+function saveBillingSettings(settings,skipCloud){
+  const o={
+    autoReminders:!!(settings&&settings.autoReminders),
+    updatedAt:new Date().toISOString()
+  };
+  localStorage.setItem('lb_billing_settings',JSON.stringify(o));
+  if(!skipCloud&&typeof scheduleSave==='function')scheduleSave();
+  return o;
+}
+function syncBillingRemindersUi(){
+  const cb=document.getElementById('billing-auto-reminders');
+  if(!cb)return;
+  const s=getBillingSettings();
+  cb.checked=!!s.autoReminders;
+}
 function saveTarifs(){localStorage.setItem('lb_tarifs',JSON.stringify(tarifs));scheduleSave();}
 migrateTarifsToCustomTypes();
 
@@ -11169,6 +11253,35 @@ function saveBillDoc(){
 }
 
 // Rendu de la liste des documents de facturation avec filtres et actions
+function invoiceReminderInfo(doc,now){
+  if(!doc||doc.type!=='facture'||doc.status!=='envoye'||!doc.date)return null;
+  var due=new Date(doc.date+'T12:00:00');due.setDate(due.getDate()+30);
+  var days=Math.floor(((now||new Date())-due)/864e5);
+  if(days<1)return null;
+  var stages=[
+    {key:'J+3',days:3,label:'Relance J+3'},
+    {key:'J+7',days:7,label:'Relance J+7'},
+    {key:'J+14',days:14,label:'Relance J+14'}
+  ];
+  var sent=(doc.reminders||[]).map(function(r){return r&&r.stage;});
+  var available=stages.filter(function(s){return days>=s.days;});
+  var next=available.find(function(s){return sent.indexOf(s.key)<0;})||available[available.length-1]||stages[0];
+  return {daysOverdue:days,dueDate:due,stage:next.key,label:next.label,alreadySent:sent.indexOf(next.key)>=0};
+}
+function markInvoiceReminderSent(doc,stage,source){
+  if(!doc)return;
+  doc.reminders=Array.isArray(doc.reminders)?doc.reminders:[];
+  doc.reminders.unshift({stage:stage||'relance',source:source||'email',at:new Date().toISOString()});
+  saveDocs();
+  renderBillDocs();updateBillStats();
+}
+async function sendInvoiceReminder(docId){
+  const doc=documents.find(function(d){return d.id===docId;});if(!doc)return false;
+  const info=invoiceReminderInfo(doc,new Date());
+  const stage=info?info.stage:'relance';
+  const ok=await sendInvoiceEmail(docId,{reminderStage:stage});
+  return ok;
+}
 function renderBillDocs(){
   const el=document.getElementById('bill-docs-list');if(!el)return;
   const filterStatus=document.getElementById('bill-filter-status')?.value||'';
@@ -11186,9 +11299,8 @@ function renderBillDocs(){
     div.className='doc-card';
     const statusLabels={brouillon:t('status.brouillon'),envoye:t('status.envoye'),paye:t('status.paye'),annule:t('status.annule'),avoir:t('status.avoir')};
     const locked = doc.type==='facture' && (doc.status==='envoye'||doc.status==='paye');
-    // Retard : facture envoyée depuis >30 jours
-    const isOverdue = doc.type==='facture'&&doc.status==='envoye'&&doc.date&&
-      ((now - new Date(doc.date+'T12:00:00'))/(1000*60*60*24)>30);
+    const reminder=invoiceReminderInfo(doc,now);
+    const isOverdue=!!reminder;
     const typeIcon=doc.type==='devis'?'📋 Devis':doc.type==='avoir'?'↩️ Avoir':'🧾 Facture';
     const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
     const hasEmail=!!(cab&&cab.email);
@@ -11200,7 +11312,7 @@ function renderBillDocs(){
           (doc.stripePaymentStatus==='paid'&&doc.status==='envoye'?'<span style="font-size:.62rem;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:99px;font-weight:700;">💳 Payé en ligne</span>':'')+
           '<span style="font-size:.7rem;color:var(--ink-soft);">'+typeIcon+'</span>'+
           (locked?'<span style="font-size:.62rem;background:#fff3cd;color:#856404;padding:1px 6px;border-radius:99px;font-weight:600;">🔒</span>':'')+
-          (isOverdue?'<span style="font-size:.62rem;background:#fdecea;color:#c0392b;padding:1px 7px;border-radius:99px;font-weight:700;">⏰ EN RETARD</span>':'')+
+          (isOverdue?'<span style="font-size:.62rem;background:#fdecea;color:#c0392b;padding:1px 7px;border-radius:99px;font-weight:700;">⏰ RETARD J+'+reminder.daysOverdue+'</span>':'')+
           (doc.avoirOf?'<span style="font-size:.62rem;background:#e8eef9;color:#1a3a7a;padding:1px 6px;border-radius:99px;">sur '+doc.avoirOf+'</span>':'')+
         '</div>'+
         '<div style="font-weight:500;font-size:.88rem;">'+doc.cabName+'</div>'+
@@ -11216,7 +11328,7 @@ function renderBillDocs(){
           (doc.status==='brouillon'?'<button data-docid="'+doc.id+'" data-action="envoye" style="background:#1a4a7a;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;">📤 Envoyer</button>':'')+
           (doc.status==='envoye'?'<button data-docid="'+doc.id+'" data-action="paye" style="background:#2a6049;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;">✅ Payé</button>':'')+
           (doc.type==='facture'&&doc.status==='envoye'?'<button data-docid="'+doc.id+'" data-action="stripe-pay" style="background:'+(doc.stripeUrl?'#5a3472':'#1a4a7a')+';color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;" title="'+(doc.stripeUrl?'Lien déjà généré — cliquer pour copier à nouveau':'Générer un lien de paiement en ligne')+'">'+(doc.stripeUrl?'🔗 Copier lien':'🔗 Lien paiement')+'</button>':'')+
-          (isOverdue?'<button data-docid="'+doc.id+'" data-action="relance" style="background:#c8410a;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;">🔔 Relancer</button>':'')+
+          (isOverdue?'<button data-docid="'+doc.id+'" data-action="relance" style="background:#c8410a;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;" title="'+(reminder.alreadySent?'Relance déjà envoyée, renvoyer si nécessaire':'Envoyer '+reminder.label)+'">🔔 '+reminder.label+'</button>':'')+
           (locked?'<button data-docid="'+doc.id+'" data-action="avoir" style="background:none;border:1px solid #1a3a7a;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;color:#1a3a7a;">↩️ Avoir</button>':'')+
           (doc.type==='devis'&&doc.status!=='annule'?'<button data-docid="'+doc.id+'" data-action="convert" style="background:#8b4513;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;">🧾→Facture</button>':'')+
           (doc.status!=='brouillon'&&cab?'<button data-docid="'+doc.id+'" data-action="resync" style="background:none;border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;color:var(--ink-soft);" title="Renvoyer au portail dentiste">🔄</button>':'')+
@@ -11508,6 +11620,34 @@ function exportFacturesCSV(){
   setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);
   showToast(t('toast.csv_exported'),'#2a6049');
 }
+function exportFacturesComptaCSV(){
+  if(!guardPerm('action:billing_generate','⛔ Votre rôle ne permet pas d\'exporter la compta.'))return;
+  const labo=getLegalInfo();
+  const journal='VT';
+  const rows=[['Journal','Date','Pièce','Compte','Libellé','Débit','Crédit','Tiers','Référence','Type','Statut']];
+  const statusLabels={brouillon:'Brouillon',envoye:'Envoyé',paye:'Payé',annule:'Annulé'};
+  documents.filter(function(d){return d.type==='facture'||d.type==='avoir';}).forEach(function(d){
+    const date=d.date||'';
+    const piece=d.num||'';
+    const tiers=(d.cabName||'').slice(0,80);
+    const lib=(d.type==='avoir'?'Avoir ':'Facture ')+piece+' — '+tiers;
+    const amount=Math.abs(Number(d.total)||0);
+    const debit=d.type==='avoir'?'':String(amount).replace('.',',');
+    const credit=d.type==='avoir'?String(amount).replace('.',','):'';
+    const compteClient='411000';
+    const compteVente=d.type==='avoir'?'709000':'706000';
+    rows.push([journal,date,piece,compteClient,lib,debit,credit,tiers,piece,d.type||'',statusLabels[d.status]||d.status||'']);
+    rows.push([journal,date,piece,compteVente,lib,credit,debit,tiers,piece,d.type||'',statusLabels[d.status]||d.status||'']);
+  });
+  const csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(';');}).join('\r\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='labosync_compta_'+String(labo.siret||'export').replace(/\s/g,'')+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);
+  showToast('📊 Export comptable téléchargé','#2a6049');
+}
 
 /* ── EMAIL FACTURE (Resend via Netlify + repli client mail) ── */
 function invoiceEmailPlainBody(doc,labo,portalUrl){
@@ -11539,17 +11679,19 @@ async function sendInvoiceEmail(docId,opts){
   if(!email){showToast(t('toast.no_cab_email'),'#c0392b');return false;}
   const labo=getLegalInfo();
   const portalUrl=cab&&cab.portalId?'https://labosync.app/cabinet.html?id='+cab.portalId:'';
+  const reminderStage=opts.reminderStage||'';
+  const isReminder=!!reminderStage;
   const linesHtml=(doc.lines||[]).map(function(l){
     return '<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;">'+String(l.label||'')+'</td>'+
       '<td style="padding:6px 10px;text-align:right;border-bottom:1px solid #eee;">'+fmtEur((parseFloat(l.qty)||1)*(parseFloat(l.prix)||0))+'</td></tr>';
   }).join('');
   const htmlBody=`<div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;color:#1c1714;">
 <div style="background:#1c1410;color:#f5f0e8;padding:20px 24px;border-radius:10px 10px 0 0;">
-  <h1 style="margin:0;font-size:18px;">Nouvelle facture — ${String(labo.raisonSociale)}</h1>
+  <h1 style="margin:0;font-size:18px;">${isReminder?'Relance facture':'Nouvelle facture'} — ${String(labo.raisonSociale)}</h1>
 </div>
 <div style="background:#fff;border:1px solid #e5ddd2;border-top:none;padding:24px;border-radius:0 0 10px 10px;">
   <p>Bonjour,</p>
-  <p>Votre laboratoire <strong>${String(labo.raisonSociale)}</strong> vous envoie la facture <strong>${String(doc.num)}</strong> d'un montant de <strong>${fmtEur(doc.total)}</strong>.</p>
+  <p>${isReminder?'Nous nous permettons de vous relancer au sujet de la facture':'Votre laboratoire <strong>'+String(labo.raisonSociale)+'</strong> vous envoie la facture'} <strong>${String(doc.num)}</strong> d'un montant de <strong>${fmtEur(doc.total)}</strong>.</p>
   <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8f5f0;border-radius:8px;overflow:hidden;">
     <thead><tr style="background:#1c1714;color:#fff;"><th style="padding:8px 10px;text-align:left;font-size:12px;">Prestation</th><th style="padding:8px 10px;text-align:right;font-size:12px;">Montant</th></tr></thead>
     <tbody>${linesHtml}</tbody>
@@ -11567,6 +11709,7 @@ async function sendInvoiceEmail(docId,opts){
     }
     try{if(typeof genPDFDoc==='function')genPDFDoc(docId);}catch(ePdf){}
     openInvoiceMailtoFallback(doc,cab,labo);
+    if(isReminder)markInvoiceReminderSent(doc,reminderStage,'mailto');
     showToast(t('toast.email_mailto_fallback'),'#2a6049',7000);
     return false;
   }
@@ -11577,13 +11720,14 @@ async function sendInvoiceEmail(docId,opts){
       headers:_portalApiHeaders(),
       body:JSON.stringify({
         to:email,
-        subject:'Facture '+doc.num+' — '+String(labo.raisonSociale),
+        subject:(isReminder?'Relance facture ':'Facture ')+doc.num+' — '+String(labo.raisonSociale),
         html:htmlBody,
         fromName:String(labo.raisonSociale)
       })
     });
     const res=await r.json().catch(function(){return {};});
     if(r.ok&&res.ok){
+      if(isReminder)markInvoiceReminderSent(doc,reminderStage,'email');
       showToast(ti('toast.email_resend_ok',{email:email})||ti('toast.email_sent',{email:email}),'#2a6049');
       return true;
     }
@@ -11638,7 +11782,7 @@ document.getElementById('bill-docs-list').addEventListener('click',async functio
   if(action==='pdf'){genPDFDoc(id);}
   else if(action==='email'){sendInvoiceEmail(id);}
   else if(action==='avoir'){createAvoir(id);}
-  else if(action==='relance'){sendInvoiceEmail(id);}
+  else if(action==='relance'){sendInvoiceReminder(id);}
   else if(action==='paye'){
     if(doc.status!=='envoye'){showToast(t('toast.mark_sent_first'),'#c0392b');return;}
     var stripePaid=false;var stripePaidAt=null;
@@ -13778,6 +13922,32 @@ function reportAudit(payload){
     body: body
   }).catch(function(){});
 }
+function syncRoleFromUser(user){
+  try{
+    const meta=user&&user.user_metadata?user.user_metadata:{};
+    const r=meta.lab_role||meta.account_role;
+    if(r&&['admin','production','billing','support'].indexOf(r)>=0){
+      _userRole=r;
+      localStorage.setItem('lb_user_role',_userRole);
+    }
+  }catch(e){}
+}
+async function syncRoleFromServer(){
+  try{
+    const token=await ensureFreshAccessToken(false);
+    if(!token)return;
+    const r=await fetch('/.netlify/functions/lab-role',{
+      method:'POST',
+      headers:_portalApiHeaders(),
+      body:JSON.stringify({action:'get'})
+    });
+    const j=await r.json().catch(function(){return {};});
+    if(r.ok&&j.role){
+      _userRole=j.role;
+      localStorage.setItem('lb_user_role',_userRole);
+    }
+  }catch(e){}
+}
 function switchToAdminRole(showToastMsg){
   if(_userRole==='admin'){
     if(showToastMsg)showToast('Vous êtes déjà en mode admin.','#2a6049',2200);
@@ -13972,6 +14142,8 @@ async function completeLabBoot(session){
       showPaywall(access.reason);
       return;
     }
+    syncRoleFromUser(session.user);
+    await syncRoleFromServer();
     applyRoleUi();
     if(typeof applyWorkspaceUi==='function')applyWorkspaceUi();
     if(typeof resolveWorkspaceAfterBoot==='function')resolveWorkspaceAfterBoot();
@@ -15974,6 +16146,78 @@ document.addEventListener('visibilitychange',function(){
 /* ══════════════════════════════════════════
    §36 — JOB DETAIL PANEL
    ══════════════════════════════════════════ */
+function buildJobTimelineEvents(job,jobBdl){
+  const events=[];
+  const jobId=String(job.id);
+  const blNums=jobBdl.map(function(b){return b.num;}).filter(Boolean);
+  if(job.createdAt){
+    events.push({at:job.createdAt,icon:'📋',title:'Travail créé',detail:job.patient||''});
+  }
+  if(job.pendingResponse){
+    events.push({at:job.pendingSince||job.createdAt,icon:'⏸',title:'En attente de réponse cabinet',detail:(job.responseComment||'').slice(0,100)});
+  }
+  (job.tasks||[]).forEach(function(t){
+    const at=t.doneAt||t.dueDate;
+    if(!at)return;
+    const tech=getTech(t.tech);
+    const atIso=String(at).length===10?String(at)+'T12:00:00':at;
+    events.push({
+      at:atIso,
+      icon:t.done?'✅':'📅',
+      title:(t.done?'Étape terminée · ':'Étape · ')+String(t.label||''),
+      detail:tech?tech.label:''
+    });
+  });
+  jobBdl.forEach(function(b){
+    events.push({
+      at:(b.date||job.createdAt||'')+'T12:00:00',
+      icon:'📦',
+      title:'Bon de livraison '+String(b.num||''),
+      detail:b.invoiced?'Facturé':(b.total?Number(b.total).toFixed(2).replace('.',',')+' €':'En attente facturation')
+    });
+  });
+  documents.forEach(function(d){
+    var linked=String(d.jobId||'')===jobId;
+    if(!linked&&blNums.length&&(d.bdlRefs||[]).some(function(r){return blNums.indexOf(r)>=0;}))linked=true;
+    if(!linked)return;
+    const typeLbl=d.type==='devis'?'Devis':d.type==='avoir'?'Avoir':'Facture';
+    events.push({
+      at:d.createdAt||(d.date?d.date+'T18:00:00':null),
+      icon:d.type==='facture'?'🧾':d.type==='avoir'?'↩️':'📋',
+      title:typeLbl+' '+String(d.num||''),
+      detail:(d.status||'')+(d.total!=null?' · '+Number(d.total).toFixed(2).replace('.',',')+' €':'')
+    });
+    (d.reminders||[]).forEach(function(r){
+      if(!r||!r.at)return;
+      events.push({
+        at:r.at,
+        icon:'🔔',
+        title:'Relance · '+(r.stage||'manuelle'),
+        detail:r.source==='cron'?'Automatique (cron)':(r.source||'email')
+      });
+    });
+  });
+  return events.filter(function(e){return e.at;}).sort(function(a,b){return new Date(b.at)-new Date(a.at);});
+}
+function renderJobTimelineHtml(job,jobBdl){
+  const events=buildJobTimelineEvents(job,jobBdl);
+  if(!events.length)return '';
+  const fmtLine=function(d){
+    try{return new Date(d).toLocaleString('fr-FR',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}
+    catch(e){return '';}
+  };
+  return '<div style="margin-top:14px;margin-bottom:14px;">'+
+    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:8px;">Fil chronologique</div>'+
+    '<div style="border-left:2px solid var(--border);margin-left:10px;padding-left:16px;">'+
+    events.map(function(e){
+      return '<div style="position:relative;margin-bottom:14px;font-size:.8rem;line-height:1.4;">'+
+        '<span style="position:absolute;left:-26px;top:1px;font-size:.95rem;">'+e.icon+'</span>'+
+        '<div style="font-weight:600;">'+escH(e.title)+'</div>'+
+        '<div style="font-size:.68rem;color:var(--ink-soft);">'+fmtLine(e.at)+(e.detail?' · '+escH(e.detail):'')+'</div>'+
+        '</div>';
+    }).join('')+
+    '</div></div>';
+}
 function openJobDetail(jobId){
   const job=jobs.find(function(j){return j.id===jobId;})||archive.find(function(a){return a.id===jobId;});
   if(!job){showToast('Travail introuvable','#c0392b');return;}
@@ -16067,6 +16311,8 @@ function openJobDetail(jobId){
 
   const attachmentsHtml=_renderJobAttachmentsReadonly(job);
 
+  const timelineHtml=renderJobTimelineHtml(job,jobBdl);
+
   const bdlHtml=jobBdl.length
     ?'<div style="margin-top:14px;"><div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:6px;">Bons de livraison</div>'
       +jobBdl.map(function(b){
@@ -16120,6 +16366,7 @@ function openJobDetail(jobId){
       </div>
       ${job.note?'<div style="background:#fff8f5;border:1px solid #f0cfc0;border-radius:8px;padding:10px 12px;font-size:.82rem;margin-bottom:12px;"><span style="font-weight:600;">📝 Note :</span> '+escH(job.note)+'</div>':''}
       ${job.trackCode?'<div style="font-family:monospace;font-size:.72rem;color:var(--ink-soft);margin-bottom:10px;">Code : '+escH(job.trackCode)+'</div>':''}
+      ${timelineHtml}
       ${itemsHtml}
       ${caseHtml}
       ${attachmentsHtml}

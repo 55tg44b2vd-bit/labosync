@@ -4,6 +4,7 @@ const {
   signState,
   resolveConnectRedirectUri,
 } = require('./_labosync-auth');
+const { requireLabPerm } = require('./_labosync-rbac');
 
 exports.handler = async (event) => {
   const headers = buildCors(event);
@@ -24,6 +25,11 @@ exports.handler = async (event) => {
   const user = await verifySupabaseUser(event);
   if (!user) {
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Connexion requise.' }) };
+  }
+
+  const perm = requireLabPerm(user, 'action:billing_generate');
+  if (!perm.ok) {
+    return { statusCode: 403, headers, body: JSON.stringify({ error: perm.error, code: perm.code }) };
   }
 
   let body = {};
