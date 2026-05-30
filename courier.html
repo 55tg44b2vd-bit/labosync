@@ -183,10 +183,10 @@ body.compact-mode .mcard-sub,body.compact-mode .mcard-stop{font-size:.72rem;}
       <div class="mcard">
         <div style="font-weight:700;margin-bottom:10px;">Informations du coursier</div>
         <div class="field"><label>Nom affiché</label><input type="text" id="prof-name"/></div>
-        <div class="field"><label>Téléphone</label><input type="tel" id="prof-phone" placeholder="06 12 34 56 78"/></div>
+        <div class="field"><label>Téléphone WhatsApp</label><input type="tel" id="prof-phone" placeholder="+33 6 12 34 56 78 ou 06 12 34 56 78"/><div style="font-size:.68rem;color:var(--ink-soft);margin-top:4px;">Pour les numéros français, +33 06 sera corrigé en +33 6.</div></div>
         <div class="field"><label>Email de secours</label><input type="email" id="prof-recovery-email" placeholder="autre@email.fr"/></div>
         <div class="field"><label>Contact d'urgence</label><input type="text" id="prof-emergency-name" placeholder="Nom du contact"/></div>
-        <div class="field"><label>Téléphone urgence</label><input type="tel" id="prof-emergency-phone" placeholder="06 12 34 56 78"/></div>
+        <div class="field"><label>Téléphone urgence</label><input type="tel" id="prof-emergency-phone" placeholder="+33 6 12 34 56 78 ou 06 12 34 56 78"/></div>
         <button type="button" class="btn btn-primary" id="btn-save-prof">Enregistrer</button>
       </div>
       <div class="mcard" style="margin-top:12px;">
@@ -670,13 +670,28 @@ function setChecked(id,value){
   const el=document.getElementById(id);
   if(el)el.checked=!!value;
 }
+function normalizeFrenchPhoneForDisplay(phone){
+  const raw=String(phone||'').trim();
+  if(!raw)return '';
+  let compact=raw.replace(/[^\d+]/g,'');
+  if(compact.indexOf('00')===0)compact='+'+compact.slice(2);
+  if(compact.indexOf('+33')===0){
+    const rest=compact.slice(3).replace(/^0+/,'');
+    if(rest.length===9)return '+33 '+rest.replace(/(\d)(?=(\d{2})+$)/g,'$1 ').trim();
+    return '+33 '+rest;
+  }
+  const digits=compact.replace(/\D/g,'');
+  if(digits.length===10&&digits.charAt(0)==='0')return '+33 '+digits.slice(1).replace(/(\d)(?=(\d{2})+$)/g,'$1 ').trim();
+  if(digits.length===9&&/^[67]/.test(digits))return '+33 '+digits.replace(/(\d)(?=(\d{2})+$)/g,'$1 ').trim();
+  return raw;
+}
 function profilePayload(extra){
   return Object.assign({
     displayName:elVal('prof-name'),
-    phone:elVal('prof-phone'),
+    phone:normalizeFrenchPhoneForDisplay(elVal('prof-phone')),
     recoveryEmail:elVal('prof-recovery-email'),
     emergencyContactName:elVal('prof-emergency-name'),
-    emergencyContactPhone:elVal('prof-emergency-phone'),
+    emergencyContactPhone:normalizeFrenchPhoneForDisplay(elVal('prof-emergency-phone')),
     availabilityStatus:elVal('prof-availability-status')||'active',
     workingDays:elVal('prof-working-days'),
     workingHours:elVal('prof-working-hours'),
@@ -1039,6 +1054,10 @@ document.getElementById('btn-signout-all').onclick=async function(){
     this.textContent=prev;
   }
 };
+['prof-phone','prof-emergency-phone'].forEach(function(id){
+  const input=document.getElementById(id);
+  if(input)input.addEventListener('blur',function(){input.value=normalizeFrenchPhoneForDisplay(input.value);});
+});
 
 document.getElementById('btn-logout').onclick=function(){
   sb.auth.signOut().finally(function(){location.reload();});

@@ -509,6 +509,26 @@ function cleanText(val, max = 300) {
   return String(val || '').trim().slice(0, max);
 }
 
+function cleanPhone(val) {
+  const raw = cleanText(val, 40);
+  if (!raw) return '';
+  let compact = raw.replace(/[^\d+]/g, '');
+  if (compact.startsWith('00')) compact = '+' + compact.slice(2);
+  if (compact.startsWith('+33')) {
+    const rest = compact.slice(3).replace(/^0+/, '');
+    return rest.length === 9 ? `+33 ${rest.replace(/(\d)(?=(\d{2})+$)/g, '$1 ').trim()}` : `+33 ${rest}`;
+  }
+  const digits = compact.replace(/\D/g, '');
+  if (digits.length === 10 && digits.startsWith('0')) {
+    const rest = digits.slice(1);
+    return `+33 ${rest.replace(/(\d)(?=(\d{2})+$)/g, '$1 ').trim()}`;
+  }
+  if (digits.length === 9 && /^[67]/.test(digits)) {
+    return `+33 ${digits.replace(/(\d)(?=(\d{2})+$)/g, '$1 ').trim()}`;
+  }
+  return raw;
+}
+
 function cleanBool(val, fallback = false) {
   return typeof val === 'boolean' ? val : fallback;
 }
@@ -802,10 +822,10 @@ exports.handler = async (event) => {
       const row = await sbGet(profileRowId(user.id));
       const prof = row?.data || { stats: {} };
       prof.displayName = cleanText(body.displayName || prof.displayName || '', 120);
-      prof.phone = cleanText(body.phone, 40);
+      prof.phone = cleanPhone(body.phone);
       prof.recoveryEmail = cleanText(body.recoveryEmail, 160);
       prof.emergencyContactName = cleanText(body.emergencyContactName, 120);
-      prof.emergencyContactPhone = cleanText(body.emergencyContactPhone, 40);
+      prof.emergencyContactPhone = cleanPhone(body.emergencyContactPhone);
       prof.availabilityStatus = cleanSelect(body.availabilityStatus, ['active', 'paused', 'inactive'], 'active');
       prof.workingDays = cleanText(body.workingDays, 160);
       prof.workingHours = cleanText(body.workingHours, 120);
