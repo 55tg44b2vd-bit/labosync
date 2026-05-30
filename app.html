@@ -1650,7 +1650,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
         </label>
         <button type="button" class="btn btn-a" id="btn-billing-reminders-save">Enregistrer</button>
         <p id="billing-reminders-msg" style="font-size:.74rem;color:var(--ink-soft);margin-top:10px;min-height:16px;"></p>
-        <p style="font-size:.72rem;color:var(--ink-soft);margin-top:12px;">Les relances manuelles (bouton 🔔 sur chaque facture en retard) restent disponibles même si l’option est désactivée.</p>
+        <p style="font-size:.72rem;color:var(--ink-soft);margin-top:12px;">Les relances manuelles (bouton 🔔 sur chaque facture envoyée non payée) restent disponibles même si l’option est désactivée.</p>
       </div>
     </div>
 
@@ -11257,16 +11257,18 @@ function invoiceReminderInfo(doc,now){
   if(!doc||doc.type!=='facture'||doc.status!=='envoye'||!doc.date)return null;
   var due=new Date(doc.date+'T12:00:00');due.setDate(due.getDate()+30);
   var days=Math.floor(((now||new Date())-due)/864e5);
-  if(days<1)return null;
   var stages=[
     {key:'J+3',days:3,label:'Relance J+3'},
     {key:'J+7',days:7,label:'Relance J+7'},
     {key:'J+14',days:14,label:'Relance J+14'}
   ];
   var sent=(doc.reminders||[]).map(function(r){return r&&r.stage;});
+  if(days<3){
+    return {daysOverdue:Math.max(0,days),dueDate:due,stage:'manuelle',label:'Relancer',alreadySent:sent.indexOf('manuelle')>=0,isOverdue:days>=1};
+  }
   var available=stages.filter(function(s){return days>=s.days;});
   var next=available.find(function(s){return sent.indexOf(s.key)<0;})||available[available.length-1]||stages[0];
-  return {daysOverdue:days,dueDate:due,stage:next.key,label:next.label,alreadySent:sent.indexOf(next.key)>=0};
+  return {daysOverdue:days,dueDate:due,stage:next.key,label:next.label,alreadySent:sent.indexOf(next.key)>=0,isOverdue:days>=1};
 }
 function markInvoiceReminderSent(doc,stage,source){
   if(!doc)return;
@@ -11300,7 +11302,7 @@ function renderBillDocs(){
     const statusLabels={brouillon:t('status.brouillon'),envoye:t('status.envoye'),paye:t('status.paye'),annule:t('status.annule'),avoir:t('status.avoir')};
     const locked = doc.type==='facture' && (doc.status==='envoye'||doc.status==='paye');
     const reminder=invoiceReminderInfo(doc,now);
-    const isOverdue=!!reminder;
+    const isOverdue=!!(reminder&&reminder.isOverdue);
     const typeIcon=doc.type==='devis'?'📋 Devis':doc.type==='avoir'?'↩️ Avoir':'🧾 Facture';
     const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
     const hasEmail=!!(cab&&cab.email);
@@ -11328,7 +11330,7 @@ function renderBillDocs(){
           (doc.status==='brouillon'?'<button data-docid="'+doc.id+'" data-action="envoye" style="background:#1a4a7a;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;">📤 Envoyer</button>':'')+
           (doc.status==='envoye'?'<button data-docid="'+doc.id+'" data-action="paye" style="background:#2a6049;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;">✅ Payé</button>':'')+
           (doc.type==='facture'&&doc.status==='envoye'?'<button data-docid="'+doc.id+'" data-action="stripe-pay" style="background:'+(doc.stripeUrl?'#5a3472':'#1a4a7a')+';color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;" title="'+(doc.stripeUrl?'Lien déjà généré — cliquer pour copier à nouveau':'Générer un lien de paiement en ligne')+'">'+(doc.stripeUrl?'🔗 Copier lien':'🔗 Lien paiement')+'</button>':'')+
-          (isOverdue?'<button data-docid="'+doc.id+'" data-action="relance" style="background:#c8410a;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;" title="'+(reminder.alreadySent?'Relance déjà envoyée, renvoyer si nécessaire':'Envoyer '+reminder.label)+'">🔔 '+reminder.label+'</button>':'')+
+          (reminder?'<button data-docid="'+doc.id+'" data-action="relance" style="background:#c8410a;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;" title="'+(reminder.alreadySent?'Relance déjà envoyée, renvoyer si nécessaire':'Envoyer '+reminder.label)+'">🔔 '+reminder.label+'</button>':'')+
           (locked?'<button data-docid="'+doc.id+'" data-action="avoir" style="background:none;border:1px solid #1a3a7a;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;color:#1a3a7a;">↩️ Avoir</button>':'')+
           (doc.type==='devis'&&doc.status!=='annule'?'<button data-docid="'+doc.id+'" data-action="convert" style="background:#8b4513;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;">🧾→Facture</button>':'')+
           (doc.status!=='brouillon'&&cab?'<button data-docid="'+doc.id+'" data-action="resync" style="background:none;border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-family:monospace;font-size:.63rem;cursor:pointer;color:var(--ink-soft);" title="Renvoyer au portail dentiste">🔄</button>':'')+
@@ -13651,12 +13653,14 @@ async function fmGenerate(){
   scheduleSave();
   document.getElementById('facture-modal').remove();
   showToast('✅ Facture '+invoice.num+' créée — '+checkedBls.length+' bon(s)','#5a3472');
+  renderToInvoice();renderBillDocs();updateBillStats();
+  if(typeof renderLivraisons==='function')renderLivraisons();
   document.querySelectorAll('.mode-btn').forEach(x=>x.classList.toggle('on',x.dataset.mode==='fact'));
   document.querySelectorAll('.pane').forEach(function(p){p.classList.remove('on');});
   document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('on');});
   document.getElementById('pane-facturation').classList.add('on');
-  document.querySelector('#tabs-fact .tab[data-pane="facturation"]').classList.add('on');
-  renderToInvoice();renderBillDocs();updateBillStats();
+  var factTab=document.querySelector('.tab[data-pane="facturation"]');
+  if(factTab)factTab.classList.add('on');
   // Sync portail en arrière-plan (ne bloque plus l'interface)
   publishPortal(cab).catch(function(e){console.warn('Portal sync failed:',e);});
 }
