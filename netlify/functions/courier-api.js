@@ -524,6 +524,43 @@ function cleanNonNegativeNumber(val) {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 10) / 10 : null;
 }
 
+function publicCourierProfile(prof) {
+  const p = prof || {};
+  return {
+    displayName: p.displayName || '',
+    phone: p.phone || '',
+    recoveryEmail: p.recoveryEmail || '',
+    emergencyContactName: p.emergencyContactName || '',
+    emergencyContactPhone: p.emergencyContactPhone || '',
+    availabilityStatus: p.availabilityStatus || 'active',
+    workingDays: p.workingDays || '',
+    workingHours: p.workingHours || '',
+    vacationUntil: p.vacationUntil || '',
+    homeAddress: p.homeAddress || '',
+    serviceZones: p.serviceZones || '',
+    radiusKm: typeof p.radiusKm === 'number' && p.radiusKm >= 0 ? p.radiusKm : null,
+    acceptPickup: p.acceptPickup !== false,
+    acceptDelivery: p.acceptDelivery !== false,
+    acceptMultiStop: p.acceptMultiStop !== false,
+    missionNotes: p.missionNotes || '',
+    preferredNavApp: p.preferredNavApp || 'google_maps',
+    billingCompany: p.billingCompany || '',
+    billingSiret: p.billingSiret || '',
+    billingAddress: p.billingAddress || '',
+    billingIban: p.billingIban || '',
+    billingPaymentNote: p.billingPaymentNote || '',
+    billingRatePerCourse:
+      typeof p.billingRatePerCourse === 'number' && p.billingRatePerCourse >= 0 ? p.billingRatePerCourse : null,
+    billingRatePerExtraStop:
+      typeof p.billingRatePerExtraStop === 'number' && p.billingRatePerExtraStop >= 0 ? p.billingRatePerExtraStop : null,
+    docPermit: !!p.docPermit,
+    docInsurance: !!p.docInsurance,
+    docVehicleRegistration: !!p.docVehicleRegistration,
+    docIdentity: !!p.docIdentity,
+    docNotes: p.docNotes || '',
+  };
+}
+
 function readCourierBillingRates(prof) {
   const base =
     typeof prof?.billingRatePerCourse === 'number' && prof.billingRatePerCourse >= 0
@@ -815,7 +852,19 @@ exports.handler = async (event) => {
         return { statusCode: 403, headers, body: JSON.stringify({ error: 'Compte laboratoire requis' }) };
       }
       const links = await getLabLinks(user.id);
-      return { statusCode: 200, headers, body: JSON.stringify({ couriers: links }) };
+      const couriers = await Promise.all(
+        links.map(async (link) => {
+          const profRow = await sbGet(profileRowId(link.courierUserId));
+          const profile = publicCourierProfile(profRow?.data || {});
+          return {
+            ...link,
+            displayName: profile.displayName || link.displayName,
+            phone: profile.phone || link.phone || '',
+            profile,
+          };
+        })
+      );
+      return { statusCode: 200, headers, body: JSON.stringify({ couriers }) };
     }
 
     if (action === 'listLinkedLabs') {

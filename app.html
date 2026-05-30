@@ -16198,6 +16198,90 @@ function courierStatusLabel(st){
   return{offered:'⏳ En attente',accepted:'✓ Acceptée',en_route:'🚗 En route',completed:'✅ Terminée',declined:'✗ Refusée',cancelled:'⊘ Annulée'}[st]||st;
 }
 
+function courierProfileStatusLabel(st){
+  return{active:'Disponible',paused:'En pause',inactive:'Indisponible'}[st]||'Disponible';
+}
+function courierProfileNavLabel(nav){
+  return{google_maps:'Google Maps',waze:'Waze',apple_maps:'Plans Apple',other:'Autre'}[nav]||'Google Maps';
+}
+function courierPhoneDigits(phone){
+  return String(phone||'').replace(/[^\d+]/g,'').replace(/^\+/,'');
+}
+function courierField(label,value){
+  if(value===undefined||value===null||String(value).trim()==='')return '';
+  return '<div style="font-size:.72rem;color:var(--ink-soft);padding:2px 0;"><b style="color:var(--ink);">'+escH(label)+' :</b> '+escH(value)+'</div>';
+}
+function courierBoolLabel(v){return v?'Oui':'Non';}
+function courierProfileHtml(c){
+  const p=c.profile||{};
+  const missionPrefs=[
+    'Récupérations: '+courierBoolLabel(p.acceptPickup!==false),
+    'Livraisons: '+courierBoolLabel(p.acceptDelivery!==false),
+    'Multi-arrêts: '+courierBoolLabel(p.acceptMultiStop!==false)
+  ].join(' · ');
+  const billingRate=p.billingRatePerCourse!=null
+    ? String(p.billingRatePerCourse)+' €'+(p.billingRatePerExtraStop?' + '+p.billingRatePerExtraStop+' €/arrêt supp.':'')
+    : '';
+  return '<details style="margin-top:8px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 10px;">'+
+    '<summary style="cursor:pointer;font-size:.74rem;font-weight:700;color:var(--accent);">Voir les infos coursier</summary>'+
+    '<div style="margin-top:8px;display:grid;gap:8px;">'+
+      '<div><div style="font-size:.68rem;font-weight:800;color:var(--ink-soft);text-transform:uppercase;margin-bottom:3px;">Informations</div>'+
+        courierField('Téléphone',p.phone||c.phone)+
+        courierField('Email secours',p.recoveryEmail)+
+        courierField('Contact urgence',[p.emergencyContactName,p.emergencyContactPhone].filter(Boolean).join(' · '))+
+      '</div>'+
+      '<div><div style="font-size:.68rem;font-weight:800;color:var(--ink-soft);text-transform:uppercase;margin-bottom:3px;">Disponibilité</div>'+
+        courierField('Statut',courierProfileStatusLabel(p.availabilityStatus))+
+        courierField('Jours',p.workingDays)+
+        courierField('Horaires',p.workingHours)+
+        courierField('Absent jusqu au',p.vacationUntil)+
+      '</div>'+
+      '<div><div style="font-size:.68rem;font-weight:800;color:var(--ink-soft);text-transform:uppercase;margin-bottom:3px;">Zone et missions</div>'+
+        courierField('Départ',p.homeAddress)+
+        courierField('Secteurs',p.serviceZones)+
+        courierField('Rayon',p.radiusKm!=null?p.radiusKm+' km':'')+
+        courierField('Préférences',missionPrefs)+
+        courierField('GPS',courierProfileNavLabel(p.preferredNavApp))+
+        courierField('Notes labo',p.missionNotes)+
+      '</div>'+
+      '<div><div style="font-size:.68rem;font-weight:800;color:var(--ink-soft);text-transform:uppercase;margin-bottom:3px;">Facturation</div>'+
+        courierField('Société',p.billingCompany)+
+        courierField('SIRET',p.billingSiret)+
+        courierField('Adresse',p.billingAddress)+
+        courierField('IBAN / RIB',p.billingIban)+
+        courierField('Tarif',billingRate)+
+        courierField('Note paiement',p.billingPaymentNote)+
+      '</div>'+
+    '</div></details>';
+}
+function courierMissionWhatsAppText(courier,payload,mission){
+  const stops=(payload.stops&&payload.stops.length?payload.stops:[payload]).filter(Boolean);
+  const labName=localStorage.getItem('lb_name')||'Votre laboratoire';
+  const lines=['Bonjour '+((courier&&courier.displayName)||'')+',', '', labName+' vous envoie une nouvelle mission coursier sur Labosync.'];
+  stops.forEach(function(s,i){
+    lines.push('');
+    lines.push((stops.length>1?(i+1)+'. ':'')+(s.type==='delivery'?'Livraison':'Récupération')+' - '+(s.cabName||'Cabinet'));
+    if(s.cabAddress)lines.push('Adresse : '+s.cabAddress);
+    if(s.cabPhone)lines.push('Téléphone : '+s.cabPhone);
+  });
+  if(payload.notes)lines.push('', 'Note : '+payload.notes);
+  lines.push('', 'Ouvrez Labosync Coursier pour accepter la mission : '+(location.origin||'https://labosync.app')+'/courier');
+  if(mission&&mission.id)lines.push('Réf. mission : '+mission.id);
+  return lines.join('\n');
+}
+function notifyCourierByWhatsApp(courier,payload,mission){
+  const phone=(courier&&((courier.profile&&courier.profile.phone)||courier.phone))||'';
+  const digits=courierPhoneDigits(phone);
+  const text=courierMissionWhatsAppText(courier,payload,mission);
+  if(!digits){
+    showToast('Mission envoyée. Ajoutez le téléphone du coursier pour ouvrir WhatsApp automatiquement.','#d97706',6000);
+    return;
+  }
+  try{window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(text),'_blank','noopener');}
+  catch(e){window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');}
+  showToast('WhatsApp ouvert : validez l\'envoi au coursier.','#25d366',6500);
+}
+
 function updateCourierNavBadge(missions){
   const list=missions||_courierMissionsSummary||[];
   const pending=list.filter(function(m){return m.status==='offered';}).length;
@@ -16481,11 +16565,13 @@ async function sendCourierMissionRequest(payload,ui){
     if(!payload.stops||!payload.stops.length){
       if(!payload.cabName)throw new Error('Ajoutez au moins un arrêt avec un dentiste');
     }
-    await courierApi('createMission',payload);
+    const res=await courierApi('createMission',payload);
     const n=payload.stops?payload.stops.length:(payload.cabName?1:0);
     showToast('Demande envoyée au coursier !'+(n>1?' ('+n+' arrêts)':''),'#2a6049',3500);
     refreshCourierMissionsSummary();
     if(msgEl){msgEl.style.color='#2a6049';msgEl.textContent='Demande envoyée.';}
+    const courier=_courierLinks.find(function(c){return c.courierUserId===payload.courierUserId;});
+    notifyCourierByWhatsApp(courier,payload,res&&res.mission);
     if(ui&&ui.onSuccess)ui.onSuccess();
   }catch(e){
     if(msgEl){msgEl.style.color='#c0392b';msgEl.textContent=e.message;}
@@ -16592,9 +16678,16 @@ async function renderCourierLinks(){
     const j=await courierApi('listLinkedCouriers');
     _courierLinks=j.couriers||[];
     el.innerHTML=_courierLinks.length?_courierLinks.map(function(c){
-      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--bg);">'+
-        '<div><div style="font-weight:600;font-size:.84rem;">'+escH(c.displayName)+'</div><div style="font-size:.72rem;color:var(--ink-soft);">'+escH(c.email)+'</div></div>'+
-        '<button type="button" class="btn btn-b" style="font-size:.72rem;padding:4px 10px;" onclick="unlinkCourier(\''+c.courierUserId+'\')">Retirer</button></div>';
+      const p=c.profile||{};
+      return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--bg);">'+
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">'+
+          '<div style="min-width:0;flex:1;"><div style="font-weight:600;font-size:.84rem;">'+escH(c.displayName)+'</div>'+
+            '<div style="font-size:.72rem;color:var(--ink-soft);">'+escH(c.email)+(p.phone?' · '+escH(p.phone):'')+'</div>'+
+            '<div style="font-size:.7rem;color:var(--ink-soft);margin-top:3px;">'+courierProfileStatusLabel(p.availabilityStatus)+' · '+(p.serviceZones?escH(p.serviceZones).slice(0,90):'Zone non renseignée')+'</div></div>'+
+          '<button type="button" class="btn btn-b" style="font-size:.72rem;padding:4px 10px;width:auto;" onclick="unlinkCourier(\''+c.courierUserId+'\')">Retirer</button>'+
+        '</div>'+
+        courierProfileHtml(c)+
+      '</div>';
     }).join(''):'<div style="font-size:.78rem;color:var(--ink-soft);">Aucun coursier rattaché.</div>';
     syncLabCourierBillingSelectors();
     loadLabCourierBilling().catch(function(){});
