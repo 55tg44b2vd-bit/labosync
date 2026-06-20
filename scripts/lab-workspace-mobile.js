@@ -108,8 +108,11 @@
   }
 
   function getResolvedMobileWorkspace() {
-    if (canMobAdmin()) return 'admin';
+    // Sur mobile on atterrit par défaut dans l'ATELIER (sans mot de passe) quand il existe :
+    // un technicien travaille sans voir BL/Factures. La GESTION s'ouvre ensuite via le bouton
+    // « Espace » + le code PIN. Sans Atelier configuré, on retombe sur Gestion (protégée par PIN).
     if (canMobProg()) return 'prog';
+    if (canMobAdmin()) return 'admin';
     return 'admin';
   }
 
@@ -138,7 +141,12 @@
 
   function updateMobileTopbar(ws) {
     var sw = document.getElementById('btn-mob-workspace-switch');
-    if (sw) sw.style.display = mobileNeedsHub() && ws !== 'hub' ? '' : 'none';
+    if (sw) {
+      var bothSpaces = canMobAdmin() && canMobProg();
+      sw.style.display = bothSpaces && ws !== 'hub' ? 'inline-flex' : 'none';
+      sw.textContent = ws === 'admin' ? '← Atelier' : '🔒 Gestion';
+      sw.setAttribute('aria-label', ws === 'admin' ? 'Revenir à l\'Atelier' : 'Ouvrir la Gestion (code requis)');
+    }
     var brand = document.querySelector('.topbar-brand');
     var badge = document.getElementById('mob-workspace-badge');
     if (badge) {
@@ -381,7 +389,8 @@
     var totalNb = items.reduce(function (s, it) {
       return s + (it.nb || 1);
     }, 0);
-    var lbl = totalNb > 1 ? patient + ' (' + totalNb + ' éléments)' : patient;
+    var barePatient = String(patient || '').replace(/(\s*\(\d+\s+éléments\))+$/g, '').trim();
+    var lbl = totalNb > 1 ? barePatient + ' (' + totalNb + ' éléments)' : barePatient;
     var job = {
       id: String(Date.now()),
       patient: lbl,
@@ -393,8 +402,12 @@
       note: note,
       requestedDeliveryDate: delivery,
       deliveryDate: delivery,
-      labDeliveryDate: '',
-      labDeliverySlot: '12',
+      labDeliveryDate: opts.labDeliveryDate || '',
+      labDeliverySlot: opts.labDeliverySlot || '12',
+      patientSex: opts.sexe || '',
+      patientAge: opts.age || '',
+      teeth: Array.isArray(opts.teeth) ? opts.teeth : [],
+      links: Array.isArray(opts.links) ? opts.links : [],
       cabinet: cab,
       createdAt: new Date().toISOString(),
       trackCode: typeof global.genTrackCode === 'function' ? global.genTrackCode() : '',
@@ -425,7 +438,7 @@
       });
     }
     if (cab) localStorage.setItem('lb_last_cab', cab);
-    return true;
+    return job.id;
   }
 
   function programQueueItemMobile(qId) {
@@ -570,7 +583,9 @@
     var sw = document.getElementById('btn-mob-workspace-switch');
     if (sw)
       sw.addEventListener('click', function () {
-        if (mobileNeedsHub()) showMobileHub();
+        var ws = typeof global.getWorkspace === 'function' ? global.getWorkspace() : 'prog';
+        if (ws === 'admin') enterMobileWorkspace('prog', { skipPin: true }); // retour Atelier (libre)
+        else enterMobileWorkspace('admin');                                  // vers Gestion (code PIN)
       });
     var pinOk = document.getElementById('mob-admin-pin-ok');
     var pinCancel = document.getElementById('mob-admin-pin-cancel');
@@ -578,7 +593,8 @@
     if (pinCancel)
       pinCancel.addEventListener('click', function () {
         hideMobilePinSheet();
-        if (canMobProg() && !canMobAdmin()) enterMobileWorkspace('prog', { skipPin: true });
+        // Annuler le code → on retourne dans l'Atelier (espace sans mot de passe), jamais bloqué.
+        if (canMobProg()) enterMobileWorkspace('prog', { skipPin: true });
         else mobToast('Code requis pour l’accès Gestion.', 'var(--orange)');
       });
     var pinForgot = document.getElementById('mob-pin-forgot');

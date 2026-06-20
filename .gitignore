@@ -21,3 +21,22 @@ Thumbs.db
 # Fichiers temporaires / backup local
 *.bak
 *~
+
+# Artefacts de tests navigateur (Playwright MCP)
+.playwright-mcp/
+
+# Dossier de déploiement généré (npm run build:deploy)
+deploy/
+
+# Outils agent / config locale
+.claude/
+.mcp.json
+
+# Copie de dépôt accidentelle (ne jamais committer)
+.git - Copie/
+
+# Captures d'écran de QA / previews
+*.png
+
+# Scripts temporaires
+scripts/_tmp-*.js

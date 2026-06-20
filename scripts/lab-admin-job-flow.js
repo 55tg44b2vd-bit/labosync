@@ -121,7 +121,7 @@
     };
   }
 
-  function commitAdminJob(pending, delivery) {
+  function commitAdminJob(pending, delivery, autoProgram) {
     var job = pending.job;
     if (typeof global.applyDeliveryFieldsToObject === 'function') {
       global.applyDeliveryFieldsToObject(job, delivery);
@@ -167,6 +167,12 @@
       }
     }
 
+    // Programmation automatique immédiate (1 geste) : génère les étapes (rétro-planifiées sur
+    // l'échéance) avant d'afficher la fiche, pour que le travail ne reste pas « à programmer ».
+    if (autoProgram && progOn && typeof global.programJobAuto === 'function') {
+      try { global.programJobAuto(job.id); } catch (e) { /* on garde le travail même si la prog échoue */ }
+    }
+
     if (typeof global.render === 'function') global.render();
     showLabSheetForJob(job);
     if (typeof global.cloudSave === 'function') global.cloudSave();
@@ -184,8 +190,10 @@
       var sug = global._suggestLabDateFromRequested(req);
       if (sug) return sug;
     }
-    if (typeof global.fmtISO === 'function') return global.fmtISO(new Date());
-    var t = new Date();
+    // Pas de date demandée → proposer 2 jours ouvrés (plutôt qu'aujourd'hui, peu réaliste).
+    var base = typeof global.addWD === 'function' ? global.addWD(new Date(), 2) : new Date();
+    if (typeof global.fmtISO === 'function') return global.fmtISO(base);
+    var t = base;
     return (
       t.getFullYear() +
       '-' +
@@ -211,6 +219,8 @@
     dEl.value = suggestFinishDate(pending);
     if (sEl) sEl.value = '12';
     m.style.display = 'flex';
+    // Refléter la préférence de planification (au plus tôt / pour l'échéance) sur le toggle.
+    if (typeof global._syncPlanModeButtons === 'function') global._syncPlanModeButtons();
     setTimeout(function () {
       dEl.focus();
     }, 80);
@@ -268,9 +278,11 @@
           labDeliverySlot: sEl ? sEl.value || '12' : '12',
           requestedDeliveryDate: _pendingAdminJob.job.requestedDeliveryDate || '',
         };
+        var autoEl = document.getElementById('admin-finish-autoprog');
+        var autoProgram = autoEl ? autoEl.checked : false;
         var p = _pendingAdminJob;
         hideFinishModal();
-        commitAdminJob(p, delivery);
+        commitAdminJob(p, delivery, autoProgram);
       };
     }
     if (cancel) {

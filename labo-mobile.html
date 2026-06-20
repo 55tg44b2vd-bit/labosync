@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="Labosync"/>
@@ -544,7 +545,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
         <div id="home-jobs"></div>
       </div>
 
-      <div class="mcard">
+      <div class="mcard" id="home-card-pending">
         <div class="mcard-header">
           <div class="mcard-title">⚡ À facturer</div>
           <button type="button" class="mcard-link" onclick="showView('docs');setTimeout(function(){var t=document.querySelector('.docs-tab[data-dt=bl]');if(t)t.click();},50);">Voir tout →</button>
@@ -552,7 +553,7 @@ input,select,textarea{font-size:16px;font-family:inherit;}
         <div id="home-pending"></div>
       </div>
 
-      <div class="mcard">
+      <div class="mcard" id="home-card-recentdocs">
         <div class="mcard-header">
           <div class="mcard-title">📄 Dernières factures</div>
         </div>
@@ -715,6 +716,23 @@ let currentUser=null;
 let _token='';
 let _serverUpdatedAt=null;
 
+// Le mécanisme de code PIN « Gestion » (lab-workspace.js → fetchLabAccess) récupère le token
+// via ensureFreshAccessToken/_cachedAccessToken. Le mobile n'utilisait que _token → la vérif
+// du PIN échouait silencieusement et la Gestion s'ouvrait SANS code. On expose donc le token.
+window._cachedAccessToken=_token;
+window.ensureFreshAccessToken=async function(){
+  try{
+    var res=await sbClient.auth.getSession();
+    var s=res&&res.data&&res.data.session;
+    if(s&&s.access_token){ _token=s.access_token; window._cachedAccessToken=_token; return _token; }
+  }catch(e){}
+  window._cachedAccessToken=_token||'';
+  return _token||'';
+};
+// Cache du code PIN « Gestion » (data.adminAccess) pour le réinjecter à chaque sauvegarde
+// mobile (sinon l'upsert qui remplace la colonne data l'effacerait).
+let _serverAdminAccessMob=null;
+
 function reportClientError(payload){
   var body=JSON.stringify(Object.assign({
     app:'mobile',
@@ -735,7 +753,9 @@ function _debugAuditLogMobile(hypothesisId,message,data){
   // debug instrumentation removed
 }
 window.addEventListener('error',function(ev){
-  reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:ev&&ev.error&&ev.error.stack?ev.error.stack:''});
+  var stack=ev&&ev.error&&ev.error.stack?ev.error.stack:'';
+  if(!stack&&ev&&(ev.filename||ev.lineno))stack='at '+(ev.filename||'')+':'+(ev.lineno||0)+':'+(ev.colno||0);
+  reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:stack});
 });
 window.addEventListener('unhandledrejection',function(ev){
   var r=ev&&ev.reason;
@@ -746,6 +766,16 @@ let _userRole=localStorage.getItem('lb_user_role')||'admin';
 const _ROLE_PERMS={admin:['*'],production:['workspace:prog'],billing:['workspace:admin'],support:['workspace:admin']};
 function hasPerm(key){const p=_ROLE_PERMS[_userRole]||[];return p.includes('*')||p.includes(key);}
 function canAccessWorkspace(ws){if(hasPerm('*'))return true;if(ws==='admin')return hasPerm('workspace:admin');if(ws==='prog')return hasPerm('workspace:prog');return false;}
+// Récupère le rôle RÉEL du compte depuis le serveur (sinon défaut 'admin' → un technicien
+// verrait BL/Factures sur mobile). À appeler au boot avant d'appliquer la navigation.
+async function syncRoleFromServerMobile(){
+  try{
+    if(!_token)return;
+    var r=await fetch('/.netlify/functions/lab-role',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},body:JSON.stringify({action:'get'})});
+    var j=await r.json().catch(function(){return {};});
+    if(r.ok&&j.role){_userRole=j.role;try{localStorage.setItem('lb_user_role',_userRole);}catch(e){}}
+  }catch(e){}
+}
 let jobs=[], archive=[], cabinets=[], bdl=[], documents=[], tarifs=[];
 let waiting=[], queue=[], conges=[], absences=[];
 let TECHS={}, customTypes=[], syns=[], scanHist=[], fourns=[], bdc=[];
@@ -1176,6 +1206,7 @@ async function initMobileApp(){
     console.warn('loadData',eLoad);
     toast('Connexion lente — réessayez dans un instant','#d97706',5000);
   }
+  try{ await syncRoleFromServerMobile(); }catch(eRole){}
   if(typeof resolveMobileWorkspaceAfterBoot==='function')resolveMobileWorkspaceAfterBoot();
   try{lbMobHandleOpenDeepLink();}catch(eDl){}
   startPoll();
@@ -1438,6 +1469,7 @@ async function _fetchMobileCloudPayload(){
 function _mergeRemoteBeforeMobileSave(remote){
   var p=remote&&remote.data?remote.data:null;
   if(!p)return;
+  if(p.adminAccess)_serverAdminAccessMob=p.adminAccess; // préserver le code PIN Gestion
   jobs=_mergeMobileRecords(jobs,p.jobs||[]);
   queue=_mergeMobileRecords(queue,p.queue||[]);
   archive=_mergeMobileRecords(archive,p.archive||[]);
@@ -1558,6 +1590,12 @@ async function saveData(){
         ce_num:localStorage.getItem('lb_legal_ce_num')||'',
       }
     };
+    // Préserver le code PIN Gestion (data.adminAccess) que l'upsert effacerait.
+    try{
+      const aq=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+currentUser.id+'&select=adminAccess:data->adminAccess',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_token}});
+      if(aq.ok){const ar=await aq.json();_serverAdminAccessMob=(ar&&ar[0]&&ar[0].adminAccess)?ar[0].adminAccess:null;}
+    }catch(e){console.warn('préservation adminAccess mobile échouée, repli cache',e);}
+    if(_serverAdminAccessMob)payload.adminAccess=_serverAdminAccessMob;
     const r=await fetch(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
       headers:{
@@ -1649,21 +1687,30 @@ function renderAll(){
 }
 
 /* ── STATS / HUB ACCUEIL ── */
+// En espace ATELIER, on masque toute la facturation de l'accueil (tuile €, cartes
+// « À facturer » / « Dernières factures », bouton BL) : un technicien ne voit pas l'argent.
+function _mobHideBilling(){ return (typeof getWorkspace==='function' && getWorkspace()==='prog'); }
 function renderStats(){
   var el=document.getElementById('stats-grid');if(!el)return;
   var pending=bdl.filter(function(b){return!b.invoiced;});
   var pendingTotal=pending.reduce(function(s,b){return s+(b.total||0);},0);
+  // « En attente de règlement » = factures envoyées non encore payées (même calcul que le desktop,
+  // cf. updateBillStats). Avant, la tuile sommait les BL non facturés (doublon avec « BL à facturer »).
+  var unpaidInvTotal=documents.filter(function(d){return d.type==='facture'&&d.status==='envoye';})
+    .reduce(function(s,d){return s+(d.total||0);},0);
   var todayISO=fmtISO(new Date());
   var activeJobs=jobs.filter(function(j){return!bdl.find(function(b){return b.jobId===j.id;});}).length;
   var livrDue=jobs.filter(function(j){
     return !bdl.find(function(b){return b.jobId===j.id;})&&isDueForDeliveryNote(j,todayISO);
   }).length;
-  el.innerHTML=
+  var tiles=
     '<button type="button" class="hub-tile hub-tile--blue" onclick="showView(\'travaux\')">'+
       '<span class="hub-tile-icon" aria-hidden="true">🦷</span>'+
       '<span class="hub-tile-val">'+activeJobs+'</span>'+
       '<span class="hub-tile-lbl">Travaux en cours</span>'+
-    '</button>'+
+    '</button>';
+  if(!_mobHideBilling()){
+    tiles+=
     '<button type="button" class="hub-tile hub-tile--green" onclick="showView(\'livraisons\')">'+
       '<span class="hub-tile-icon" aria-hidden="true">📦</span>'+
       '<span class="hub-tile-val">'+livrDue+'</span>'+
@@ -1676,13 +1723,27 @@ function renderStats(){
     '</button>'+
     '<button type="button" class="hub-tile hub-tile--purple" onclick="showView(\'messages\')">'+
       '<span class="hub-tile-icon" aria-hidden="true">💳</span>'+
-      '<span class="hub-tile-val" style="font-size:1.05rem;">'+fmtEur(pendingTotal)+'</span>'+
+      '<span class="hub-tile-val" style="font-size:1.05rem;">'+fmtEur(unpaidInvTotal)+'</span>'+
       '<span class="hub-tile-lbl">En attente de règlement</span>'+
     '</button>';
+  } else {
+    // En atelier : une 2e tuile utile, non financière (file à programmer).
+    var toProg=jobs.filter(function(j){return (!j.tasks||!j.tasks.length)&&j.needsProg;}).length+((typeof queue!=='undefined'&&queue)?queue.length:0);
+    tiles+=
+    '<button type="button" class="hub-tile hub-tile--green" onclick="showView(\'prog\')">'+
+      '<span class="hub-tile-icon" aria-hidden="true">🗓️</span>'+
+      '<span class="hub-tile-val">'+toProg+'</span>'+
+      '<span class="hub-tile-lbl">À programmer</span>'+
+    '</button>';
+  }
+  el.innerHTML=tiles;
 }
 
 /* ── HOME PENDING ── */
 function renderHomePending(){
+  var card=document.getElementById('home-card-pending');
+  if(_mobHideBilling()){ if(card)card.style.display='none'; return; }
+  if(card)card.style.display='';
   var el=document.getElementById('home-pending');
   var byCab={};
   bdl.filter(function(b){return!b.invoiced;}).forEach(function(b){
@@ -1705,6 +1766,9 @@ function renderHomePending(){
 
 /* ── HOME RECENT DOCS ── */
 function renderHomeRecentDocs(){
+  var card=document.getElementById('home-card-recentdocs');
+  if(_mobHideBilling()){ if(card)card.style.display='none'; return; }
+  if(card)card.style.display='';
   var el=document.getElementById('home-recent-docs');
   var recent=documents.filter(function(d){return d.type==='facture';}).slice(0,5);
   if(!recent.length){el.innerHTML='<div class="empty"><div class="empty-icon">💰</div>Aucune facture</div>';return;}
@@ -1747,7 +1811,7 @@ function renderGreeting(){
   var today=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
   var activeJobs=jobs.filter(function(j){return!bdl.find(function(b){return b.jobId===j.id;});}).length;
   var pendingBL=bdl.filter(function(b){return!b.invoiced;}).length;
-  var sub=activeJobs+' travail'+(activeJobs>1?'s':'')+' en cours';
+  var sub=activeJobs+' '+(activeJobs>1?'travaux':'travail')+' en cours';
   if(pendingBL)sub+=' · '+pendingBL+' BL à facturer';
   el.innerHTML=
     '<div class="home-hero">'+
@@ -1782,7 +1846,7 @@ function renderHomeUrgent(){
         '<div style="font-weight:600;font-size:.84rem;">'+esc(j.patient||'')+'</div>'+
         '<div style="font-size:.68rem;color:var(--ink-soft);margin-top:2px;">'+badge+' '+esc(getJobTypeLabel(j))+(cab?' · '+esc(cab.name):'')+(j.deliveryDate?' · 📅 '+fmtDate(j.deliveryDate):'')+'</div>'+
       '</div>'+
-      '<button onclick="openBLSheet(\''+esc(j.id)+'\')" style="background:'+(complete?'var(--green)':'var(--accent)')+';color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:.7rem;font-weight:600;cursor:pointer;min-height:32px;white-space:nowrap;">📋 BL</button>'+
+      (_mobHideBilling()?'':'<button onclick="openBLSheet(\''+esc(j.id)+'\')" style="background:'+(complete?'var(--green)':'var(--accent)')+';color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:.7rem;font-weight:600;cursor:pointer;min-height:32px;white-space:nowrap;">📋 BL</button>')+
     '</div>';
   }).join('');
 }
@@ -2219,6 +2283,7 @@ function acceptOrderMobile(portalId,caseId,stepId){
     '<div class="form-row"><label>📅 Date livraison</label><input type="date" id="afm-delivery" value="'+esc(_acceptFormMobile.deliveryDate)+'" oninput="_acceptFormMobile.deliveryDate=this.value" style="font-size:16px;"/></div>'+
     '<div class="form-check" style="margin:6px 0 14px;"><input type="checkbox" id="afm-urgent" onchange="_acceptFormMobile.urgent=this.checked"/><label for="afm-urgent">🔴 Urgent</label></div>'+
 
+    '<div id="afm-ai-panel" style="margin-bottom:8px;"></div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
       '<label style="font-size:.74rem;font-weight:600;color:var(--ink-soft);">Types de travaux *</label>'+
       '<button type="button" onclick="addAcceptItemMobile()" style="background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:5px 10px;font-size:.74rem;font-weight:600;cursor:pointer;min-height:30px;">+ Ajouter</button>'+
@@ -2235,6 +2300,42 @@ function acceptOrderMobile(portalId,caseId,stepId){
   '</div>';
   document.body.appendChild(overlay);
   renderAcceptItemsMobile();
+  // L'IA propose les types depuis la demande du cabinet (à confirmer).
+  if(typeof _aiSuggestTypesMobile==='function')_aiSuggestTypesMobile(c,step);
+}
+
+async function _aiSuggestTypesMobile(c,step){
+  try{
+    _acceptFormMobile._aiStatus='loading';_renderAfmAiPanel();
+    var types=getAllJobTypes(),valid={};types.forEach(function(t){valid[t.id]=t;});
+    var typesList=types.map(function(t){return t.id+' | '+t.label;}).join('\n');
+    var shade=(step&&step.shadeValue)||c.shadeValue||'';
+    var req=[c.finalGoal||'',(step&&step.description)||'',(step&&step.notes)||'','Dents: '+((c.teeth||[]).join(', ')||'?'),(shade?'Teinte: '+shade:'')].filter(Boolean).join('\n');
+    var prompt='TYPES DISPONIBLES (id | libellé):\n'+typesList+'\n\nDEMANDE DU CABINET:\n'+req+'\n\nAssocie la demande aux types DISPONIBLES (concentre-toi sur les prothèses à fabriquer, pas l\'étape de production). Règles : type clair → "high" ; probable → "medium" ; aucun type correspondant → "unmatched" (NE l\'invente PAS). N\'utilise que des id existants. JSON pur, sans markdown : {"items":[{"type":"<id>","nb":1,"confidence":"high|medium","reason":"court"}],"unmatched":["<terme>"]}';
+    var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:700,system:'Tu associes la demande d\'un cabinet dentaire aux types de travaux configurés dans un laboratoire. Tu n\'inventes jamais d\'id. Réponds UNIQUEMENT en JSON valide.',messages:[{role:'user',content:prompt}]})});
+    var d=await resp.json();
+    if(!d||!d.content||!d.content[0])throw new Error('réponse IA invalide');
+    var raw=(d.content[0].text||'{}').replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+    var out=JSON.parse(raw);
+    var items=[],unmatched=(out.unmatched||[]).filter(Boolean);
+    (out.items||[]).forEach(function(it){if(it&&it.type&&valid[it.type])items.push({type:it.type,nb:Math.max(1,parseInt(it.nb)||1),conf:(it.confidence==='high'?'ok':'medium'),reason:it.reason||''});else if(it)unmatched.push(it.label||it.type||'élément');});
+    unmatched.forEach(function(){items.push({type:'',nb:1,conf:'none'});});
+    if(items.length)_acceptFormMobile.items=items;
+    _acceptFormMobile._aiUnmatched=unmatched;_acceptFormMobile._aiStatus='ok';
+    renderAcceptItemsMobile();
+  }catch(e){_acceptFormMobile._aiStatus='error';_renderAfmAiPanel();}
+}
+function _renderAfmAiPanel(){
+  var el=document.getElementById('afm-ai-panel');if(!el)return;
+  var st=_acceptFormMobile._aiStatus;
+  if(st==='loading'){el.innerHTML='<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:8px 10px;font-size:.78rem;color:#6b21a8;">🤖 L\'IA lit la demande du cabinet…</div>';return;}
+  if(st==='error'){el.innerHTML='<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;font-size:.76rem;color:#9a3412;">⚠️ IA indisponible — choisissez les types manuellement.</div>';return;}
+  if(st!=='ok'){el.innerHTML='';return;}
+  var unm=_acceptFormMobile._aiUnmatched||[];
+  var html='<div style="background:#ede9fe;border:1px solid #c4b5fd;border-radius:8px;padding:8px 10px;"><div style="font-size:.78rem;color:#6b21a8;font-weight:600;">🤖 Travail proposé par l\'IA — contrôle nécessaire.</div>';
+  if(unm.length)html+='<div style="font-size:.74rem;color:#9a3412;margin-top:4px;">⚠️ Non reconnu : <strong>'+unm.map(esc).join(', ')+'</strong> → complétez les lignes « à choisir ».</div>';
+  html+='</div>';
+  el.innerHTML=html;
 }
 
 function addAcceptItemMobile(){
@@ -2255,12 +2356,17 @@ function renderAcceptItemsMobile(){
   el.innerHTML=_acceptFormMobile.items.map(function(item,i){
     var tarif=_findTarifMobile(item.type);
     var prixTotal=(tarif?tarif.prix:0)*(item.nb||1);
-    return '<div style="display:flex;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px;">'+
-      '<select onchange="_acceptFormMobile.items['+i+'].type=this.value;renderAcceptItemsMobile()" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:5px;padding:6px;font-size:16px;background:#fff;">'+
-        types.map(function(t){return '<option value="'+esc(t.id)+'"'+(t.id===item.type?' selected':'')+'>'+esc(t.label)+'</option>';}).join('')+
+    var none=!item.type, medium=item.conf==='medium';
+    var bdr=(none||medium)?'#f59e0b':'var(--border)', bg=(none||medium)?'#fffbeb':'var(--surface)';
+    var ph=none?'<option value="" selected>— à choisir —</option>':'';
+    var badge=none?'<span title="Type non reconnu — choisissez-le" style="font-size:.62rem;color:#b45309;background:#fef3c7;border:1px solid #fde68a;border-radius:5px;padding:1px 5px;white-space:nowrap;flex-shrink:0;">⚠️</span>':(medium?'<span title="'+esc(item.reason||'Proposé par l\'IA — à vérifier')+'" style="font-size:.62rem;color:#b45309;background:#fef3c7;border:1px solid #fde68a;border-radius:5px;padding:1px 5px;white-space:nowrap;flex-shrink:0;">🟠</span>':'');
+    return '<div style="display:flex;gap:6px;align-items:center;background:'+bg+';border:1px solid '+bdr+';border-radius:7px;padding:6px;">'+
+      '<select onchange="_acceptFormMobile.items['+i+'].type=this.value;_acceptFormMobile.items['+i+'].conf=\'ok\';renderAcceptItemsMobile()" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:5px;padding:6px;font-size:16px;background:#fff;">'+
+        ph+types.map(function(t){return '<option value="'+esc(t.id)+'"'+(t.id===item.type?' selected':'')+'>'+esc(t.label)+'</option>';}).join('')+
       '</select>'+
-      '<input type="number" min="1" max="50" value="'+(item.nb||1)+'" onchange="_acceptFormMobile.items['+i+'].nb=parseInt(this.value)||1;renderAcceptItemsMobile()" style="width:50px;border:1px solid var(--border);border-radius:5px;padding:6px;font-size:16px;text-align:center;"/>'+
-      '<div style="width:74px;text-align:right;font-size:.74rem;color:'+(tarif?'var(--accent)':'var(--ink-soft)')+';font-family:monospace;">'+(tarif?prixTotal.toFixed(2)+'€':'—')+'</div>'+
+      badge+
+      '<input type="number" min="1" max="50" value="'+(item.nb||1)+'" onchange="_acceptFormMobile.items['+i+'].nb=parseInt(this.value)||1;renderAcceptItemsMobile()" style="width:48px;border:1px solid var(--border);border-radius:5px;padding:6px;font-size:16px;text-align:center;"/>'+
+      '<div style="width:64px;text-align:right;font-size:.74rem;color:'+(tarif?'var(--accent)':'var(--ink-soft)')+';font-family:monospace;">'+(tarif?prixTotal.toFixed(2)+'€':'—')+'</div>'+
       (_acceptFormMobile.items.length>1?'<button onclick="removeAcceptItemMobile('+i+')" style="background:none;border:none;color:var(--red);font-size:1.1rem;cursor:pointer;padding:4px 6px;min-height:32px;">×</button>':'')+
     '</div>';
   }).join('');
@@ -2270,6 +2376,7 @@ function renderAcceptItemsMobile(){
     var missing=_acceptFormMobile.items.some(function(it){return !_findTarifMobile(it.type);});
     summary.innerHTML='<strong style="color:var(--accent);">Total estimé : '+sum.toFixed(2)+' €</strong>'+(missing?' <span style="color:#c2410c;">⚠️ Tarif manquant</span>':'');
   }
+  if(typeof _renderAfmAiPanel==='function')_renderAfmAiPanel();
 }
 
 var _acceptingInProgressMobile=false;
@@ -2968,7 +3075,7 @@ function renderHomeReady(){
         '<div style="font-weight:600;font-size:.84rem;">'+esc(j.patient||'')+'</div>'+
         '<div style="font-size:.68rem;color:var(--ink-soft);margin-top:1px;">'+esc(getJobTypeLabel(j))+(cab?' · '+esc(cab.name):'')+'</div>'+
       '</div>'+
-      '<button onclick="openBLSheet(\''+esc(j.id)+'\')" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:.7rem;font-weight:600;cursor:pointer;min-height:32px;white-space:nowrap;">📋 BL</button>'+
+      (_mobHideBilling()?'':'<button onclick="openBLSheet(\''+esc(j.id)+'\')" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:.7rem;font-weight:600;cursor:pointer;min-height:32px;white-space:nowrap;">📋 BL</button>')+
     '</div>';
   }).join('');
 }
@@ -2996,7 +3103,7 @@ function renderHomeDueToday(){
         '<div style="font-weight:600;font-size:.84rem;">'+esc(j.patient||'')+'</div>'+
         '<div style="font-size:.68rem;color:var(--ink-soft);margin-top:1px;">'+esc(getJobTypeLabel(j))+(cab?' · '+esc(cab.name):'')+' · '+pct+'%</div>'+
       '</div>'+
-      '<button onclick="openBLSheet(\''+esc(j.id)+'\')" style="background:'+(complete?'var(--green)':'var(--accent)')+';color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:.7rem;font-weight:600;cursor:pointer;min-height:32px;white-space:nowrap;">📋 BL</button>'+
+      (_mobHideBilling()?'':'<button onclick="openBLSheet(\''+esc(j.id)+'\')" style="background:'+(complete?'var(--green)':'var(--accent)')+';color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:.7rem;font-weight:600;cursor:pointer;min-height:32px;white-space:nowrap;">📋 BL</button>')+
     '</div>';
   }).join('');
 }
@@ -3798,7 +3905,7 @@ function renderJobList(){
       '</div>'
       :'';
     var cardMod=pendingResp?' job-card--pending':(j.urgent?' job-card--urgent':(hasMissing?' job-card--missing':''));
-    return '<article class="job-card'+cardMod+'" data-jid="'+esc(j.id)+'">'+
+    return '<article class="job-card'+cardMod+'" data-jid="'+esc(j.id)+'" onclick="if(!event.target.closest(\'button\'))openJobDetailMobile(\''+esc(j.id)+'\')" style="cursor:pointer;">'+
       '<div class="job-card__head">'+
         '<div class="job-card__avatar" style="background:'+cabColor+';">'+esc(cabInitial)+'</div>'+
         '<div class="job-card__info">'+
@@ -3818,6 +3925,211 @@ function renderJobList(){
       (total>0?'<div class="job-card__progress"><div class="job-card__progress-fill" style="width:'+pct+'%;background:'+(pct>=100?'var(--green)':'var(--accent)')+';"></div></div>':'')+
     '</article>';
   }).join('');
+}
+
+/* ══ SCAN D'UNE FICHE PAPIER (caméra) → IA + PHOTO CONSERVÉE DANS LE TRAVAIL ══
+   La photo est stockée dans une ligne dédiée labo_data id="jobphoto_<jobId>"
+   (chargée à la demande) → ne gonfle pas le bloc synchronisé. Le travail ne
+   garde qu'une petite référence job.scanPhotoRef. Accessible depuis la fiche. */
+var _mobScanPhoto=null; // { dataUrl, base64, mime } de la dernière photo capturée
+function _mobCompressImage(file){
+  return new Promise(function(resolve,reject){
+    var rd=new FileReader();
+    rd.onload=function(){
+      var img=new Image();
+      img.onload=function(){
+        try{var max=1500,w=img.width,h=img.height;if(w>max||h>max){var s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}var c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);var url=c.toDataURL('image/jpeg',0.7);resolve({dataUrl:url,base64:url.split(',')[1],mime:'image/jpeg'});}catch(e){reject(e);}
+      };
+      img.onerror=function(){reject(new Error('Image illisible'));};
+      img.src=rd.result;
+    };
+    rd.onerror=function(){reject(new Error('Lecture échouée'));};
+    rd.readAsDataURL(file);
+  });
+}
+async function _mobSaveJobPhoto(jobId){
+  if(!_mobScanPhoto||!currentUser||!_token||!jobId)return null;
+  var ref='jobphoto_'+jobId,now=new Date().toISOString();
+  var data={img:_mobScanPhoto.dataUrl,mime:_mobScanPhoto.mime,labUserId:currentUser.id,jobId:String(jobId),createdAt:now};
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/labo_data',{method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+_token,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({id:ref,data:data,updated_at:now})});
+    return (r.ok||r.status===201||r.status===204)?ref:null;
+  }catch(e){console.warn('saveJobPhoto',e);return null;}
+}
+async function _mobLoadJobPhoto(ref){
+  if(!ref||!_token)return null;
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+encodeURIComponent(ref)+'&select=data',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_token}});
+    if(!r.ok)return null;var rows=await r.json();return rows&&rows[0]&&rows[0].data&&rows[0].data.img?rows[0].data.img:null;
+  }catch(e){return null;}
+}
+async function _mobViewJobPhoto(ref){
+  toast('Chargement de la photo…','var(--ink)');
+  var img=await _mobLoadJobPhoto(ref);
+  if(!img){toast('Photo introuvable','var(--red)');return;}
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:10px;';
+  ov.innerHTML='<img src="'+img+'" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5);"/>';
+  ov.onclick=function(){ov.remove();};
+  document.body.appendChild(ov);
+}
+function _mobScanPanel(html){var el=document.getElementById('qj-scan-panel');if(el)el.innerHTML=html||'';}
+function _mobOpenScanPicker(){var f=document.getElementById('qj-scan-file');if(f)f.click();}
+async function _mobHandleScan(file){
+  if(!file)return;
+  if(!/^image\//i.test(file.type)){_mobScanPanel('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 11px;font-size:.8rem;color:#9a3412;">⚠️ Prenez une photo (image).</div>');return;}
+  _mobScanPanel('<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:9px 11px;font-size:.82rem;color:#6b21a8;">🔍 L\'IA lit la fiche…</div>');
+  try{
+    var im=await _mobCompressImage(file);
+    _mobScanPhoto={dataUrl:im.dataUrl,base64:im.base64,mime:im.mime}; // conservée pour l'attacher au travail
+    var o=null;
+    try{ o=await _mobAiExtractScan(im.base64,im.mime); }catch(eai){ _mobScanPanel('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 11px;font-size:.8rem;color:#9a3412;">📎 Photo jointe au travail. IA indisponible ('+esc(eai.message||'erreur')+') — remplissez à la main.</div>'); return; }
+    _mobApplyScan(o);
+  }catch(e){ _mobScanPanel('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 11px;font-size:.8rem;color:#9a3412;">⚠️ Échec ('+esc(e.message||'erreur')+').</div>'); }
+}
+async function _mobAiExtractScan(base64,mime){
+  var types=getAllJobTypes();
+  var typesList=types.map(function(t){return t.id+' | '+t.label;}).join('\n');
+  var cabList=(typeof cabinets!=='undefined'?cabinets:[]).map(function(c){return c.id+' | '+c.name;}).join('\n')||'(aucun cabinet)';
+  var instr='Analyse cette FICHE DE TRAVAIL de laboratoire dentaire (photo) et extrais les infos pour pré-remplir un formulaire.\nTYPES DISPONIBLES (id | libellé):\n'+typesList+'\nCABINETS (id | nom):\n'+cabList+'\n'+
+    'Extrais : patient (anonyme ; initiales/code si nom complet, RGPD), nb d\'éléments, type principal (id EXISTANT), extraTypes (ids existants), teinte, date demandée (YYYY-MM-DD|null), cabinet (id EXISTANT correspondant au nom|null), note. '+
+    'NOTATION DENTAIRE FDI (IMPÉRATIVE pour compter les éléments) : « de X à Y » suit l\'ARCADE, pas l\'ordre numérique. Arcade haute : 18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28 ; arcade basse : 48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38. Un « bridge de X à Y » couvre toutes les dents entre X et Y dans cet ordre (en traversant la ligne médiane si besoin). EXEMPLE : « bridge de 13 à 23 » = 13,12,11,21,22,23 = 6 éléments (PAS 11). '+
+    'Sois un VRAI SUPPORT : "missing" = infos importantes absentes/illisibles ; "contradictions" = incohérences. N\'invente JAMAIS d\'id (sinon null + dans missing). '+
+    'JSON pur sans markdown : {"patient":"","sexe":null,"age":null,"nb":1,"type":null,"extraTypes":[],"teeth":[],"links":[],"teinte":"","date":null,"cabinet":null,"note":"","missing":[],"contradictions":[],"confidence":"high|medium|low"} (sexe="M"/"F"/null ; age=nombre ou null ; teeth=dents FDI selon la règle d\'arcade ; links=paires solidarisées "a-b")';
+  var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},body:JSON.stringify({
+    model:'claude-sonnet-4-6',max_tokens:1200,
+    system:'Tu extrais des données d\'une fiche de laboratoire dentaire scannée et tu détectes manques/incohérences. Réponds UNIQUEMENT en JSON valide, sans markdown.',
+    messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mime,data:base64}},{type:'text',text:instr}]}]
+  })});
+  var d=await resp.json();
+  if(!d||!d.content||!d.content[0])throw new Error(d&&d.error&&d.error.message?d.error.message:'réponse invalide');
+  var raw=(d.content[0].text||'{}').replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+  return JSON.parse(raw);
+}
+function _mobApplyScan(o){
+  if(!o||typeof o!=='object'){_mobScanPanel('');return;}
+  var types=getAllJobTypes(),valid={};types.forEach(function(t){valid[t.id]=t;});
+  var setV=function(id,v){var el=document.getElementById(id);if(el&&v!=null&&v!=='')el.value=v;};
+  setV('qj-patient',o.patient);
+  var sx=String(o.sexe||'');if(/^m/i.test(sx)||/homme/i.test(sx))setV('qj-sex','M');else if(/^f/i.test(sx)||/femme/i.test(sx))setV('qj-sex','F');
+  if(o.age!=null&&o.age!=='')setV('qj-age',parseInt(o.age)||'');
+  var noteParts=[];if(o.teinte)noteParts.push('Teinte '+o.teinte);if(o.note)noteParts.push(o.note);
+  if(noteParts.length)setV('qj-note',noteParts.join(' · '));
+  if(o.date&&/^\d{4}-\d{2}-\d{2}$/.test(o.date))setV('qj-delivery',o.date);
+  if(o.cabinet&&(typeof cabinets!=='undefined')&&cabinets.some(function(c){return c.id===o.cabinet;}))setV('qj-cab',o.cabinet);
+  var newItems=[];
+  if(o.type&&valid[o.type])newItems.push({type:o.type,nb:Math.max(1,parseInt(o.nb)||1)});
+  (o.extraTypes||[]).forEach(function(t){if(valid[t]&&t!==o.type)newItems.push({type:t,nb:1});});
+  if(newItems.length){_qjItems=newItems;if(typeof window._qjRenderItems==='function')window._qjRenderItems();}
+  if((o.teeth&&o.teeth.length)||(o.links&&o.links.length)){if(typeof _mobSetTeeth==='function')_mobSetTeeth(o.teeth||[],o.links||[]);}
+  var missing=(o.missing||[]).filter(Boolean),contras=(o.contradictions||[]).filter(Boolean);
+  var typeUnknown=o.type&&!valid[o.type];
+  var conf=o.confidence==='low'?' (confiance faible)':(o.confidence==='medium'?' (à vérifier)':'');
+  var html='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 11px;">'+
+    '<div style="font-size:.82rem;font-weight:600;color:#166534;margin-bottom:5px;">✅ Fiche lue — vérifiez avant d\'ajouter.'+esc(conf)+' 📎 Photo conservée.</div>';
+  if(typeUnknown)html+='<div style="font-size:.78rem;color:#9a3412;margin-bottom:3px;">⚠️ Type lu non reconnu — choisissez-le.</div>';
+  if(missing.length)html+='<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:7px 9px;margin-top:5px;"><div style="font-size:.74rem;font-weight:700;color:#9a3412;">❓ Manquant</div>'+missing.map(function(x){return '<div style="font-size:.76rem;color:#9a3412;">• '+esc(x)+'</div>';}).join('')+'</div>';
+  if(contras.length)html+='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:7px 9px;margin-top:5px;"><div style="font-size:.74rem;font-weight:700;color:#b91c1c;">⚠️ Contradictions</div>'+contras.map(function(x){return '<div style="font-size:.76rem;color:#b91c1c;">• '+esc(x)+'</div>';}).join('')+'</div>';
+  html+='</div>';
+  _mobScanPanel(html);
+}
+
+/* ══ SÉLECTEUR DE DENTS (FDI) MOBILE — parité avec le desktop ══
+   Dents tactiles + solidarisation (bridge) entre dents consécutives.
+   Liens stockés "min-max" (tiret) comme le desktop (_groupConnectedTeeth). */
+var _mobTeethSel={}, _mobTeethLinks={};
+var MOB_ARCH_UP=[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
+var MOB_ARCH_LO=[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
+function _mobResetTeeth(){_mobTeethSel={};_mobTeethLinks={};}
+function _mobToggleTooth(n){if(_mobTeethSel[n])delete _mobTeethSel[n];else _mobTeethSel[n]=true;_mobRenderTeeth();}
+function _mobToggleLink(a,b){var k=Math.min(a,b)+'-'+Math.max(a,b);if(_mobTeethLinks[k])delete _mobTeethLinks[k];else _mobTeethLinks[k]=true;_mobRenderTeeth();}
+function _mobReadTeeth(){return {teeth:Object.keys(_mobTeethSel).filter(function(k){return _mobTeethSel[k];}).map(Number),links:Object.keys(_mobTeethLinks).filter(function(k){return _mobTeethLinks[k];})};}
+function _mobSetTeeth(teeth,links){_mobResetTeeth();(teeth||[]).forEach(function(n){n=parseInt(n);if(n>=11&&n<=48)_mobTeethSel[n]=true;});(links||[]).forEach(function(k){if(typeof k==='string'&&k.indexOf('-')>0)_mobTeethLinks[k]=true;});_mobRenderTeeth();}
+function _mobRenderTeeth(){
+  var el=document.getElementById('qj-teeth-chart');if(!el)return;
+  function tooth(n){var on=_mobTeethSel[n];return '<button type="button" onclick="_mobToggleTooth('+n+')" style="flex:0 0 auto;width:30px;height:38px;border-radius:6px;border:1.5px solid '+(on?'#2563eb':'#cbd5e1')+';background:'+(on?'#2563eb':'#fff')+';color:'+(on?'#fff':'#475569')+';font-size:.68rem;font-weight:600;cursor:pointer;padding:0;">'+n+'</button>';}
+  function link(a,b){var k=Math.min(a,b)+'-'+Math.max(a,b);var on=_mobTeethLinks[k];var both=_mobTeethSel[a]&&_mobTeethSel[b];return '<button type="button" onclick="_mobToggleLink('+a+','+b+')" title="Solidariser '+a+'-'+b+'" style="flex:0 0 auto;width:13px;height:38px;border:none;background:none;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;"><span style="width:9px;height:'+(on?'9px':'4px')+';border-radius:99px;background:'+(on?'#16a34a':(both?'#94a3b8':'#e2e8f0'))+';"></span></button>';}
+  function arch(list){var h='';for(var i=0;i<list.length;i++){h+=tooth(list[i]);if(i<list.length-1)h+=link(list[i],list[i+1]);}return '<div style="display:flex;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:3px 0;">'+h+'</div>';}
+  var sel=Object.keys(_mobTeethSel).filter(function(k){return _mobTeethSel[k];}).map(Number).sort(function(a,b){return a-b;});
+  el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span style="font-size:.72rem;color:var(--ink-soft);">🦷 Dents (FDI) · point entre dents = bridge</span>'+(sel.length?'<button type="button" onclick="_mobSetTeeth([],[])" style="background:none;border:none;color:var(--ink-soft);font-size:.7rem;text-decoration:underline;cursor:pointer;">Effacer</button>':'')+'</div>'+
+    arch(MOB_ARCH_UP)+arch(MOB_ARCH_LO)+
+    '<div style="font-size:.7rem;color:'+(sel.length?'var(--accent)':'var(--ink-soft)')+';margin-top:3px;font-family:monospace;">'+(sel.length?sel.join(', '):'Aucune dent')+'</div>';
+}
+
+/* ── FICHE DE CONSULTATION D'UN TRAVAIL (mobile, lecture seule) ──────────────
+   But (Tom) : sur téléphone on CONSULTE — à qui appartient le travail, où il en
+   est, et sa programmation (étapes → technicien → date). On programme sur PC. */
+function openJobDetailMobile(id){
+  var j=jobs.find(function(x){return String(x.id)===String(id);});if(!j)return;
+  var cab=j.cabinet?cabinets.find(function(c){return c.id===j.cabinet;}):null;
+  var tasks=(j.tasks||[]);
+  var total=tasks.length, done=tasks.filter(function(t){return!!t.done;}).length;
+  var pct=total?Math.round(done/total*100):0;
+  var firstPending=-1; for(var i=0;i<tasks.length;i++){if(!tasks[i].done){firstPending=i;break;}}
+  var wd=['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
+  function techName(k){return (TECHS&&TECHS[k]&&TECHS[k].label)||k||'—';}
+  function techColor(k){return (TECHS&&TECHS[k]&&TECHS[k].color)||'#94a3b8';}
+  function dlong(iso){if(!iso)return '—';var d=new Date(iso);if(isNaN(d.getTime()))return '—';return wd[d.getDay()]+' '+d.getDate()+'/'+(d.getMonth()+1);}
+  var bl=(typeof bdl!=='undefined')?bdl.find(function(b){return b.jobId===j.id;}):null;
+  var statusTxt,statusBg,statusFg;
+  if(total===0){statusTxt='À programmer (sur ordinateur)';statusBg='#eef2ff';statusFg='#3730a3';}
+  else if(pct>=100){statusTxt='Terminé';statusBg='#d1fae5';statusFg='#065f46';}
+  else if(firstPending>=0){statusTxt='En cours · prochaine étape : '+tasks[firstPending].label;statusBg='#dbeafe';statusFg='#1d4ed8';}
+  else {statusTxt='En cours';statusBg='#dbeafe';statusFg='#1d4ed8';}
+  var isLate=j.deliveryDate&&new Date(j.deliveryDate)<new Date()&&pct<100;
+  var stepsHtml = total? tasks.map(function(t,i){
+    var cur=(i===firstPending);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">'+
+      '<div style="width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;background:'+(t.done?'var(--green)':(cur?'#dbeafe':'var(--bg)'))+';color:'+(t.done?'#fff':(cur?'#1d4ed8':'#94a3b8'))+';border:1.5px solid '+(t.done?'var(--green)':(cur?'#1d4ed8':'var(--border)'))+';">'+(t.done?'✓':(i+1))+'</div>'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-size:.86rem;font-weight:'+(cur?'700':'500')+';color:#1e293b;">'+esc(t.label)+(cur?' <span style="font-size:.6rem;color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:99px;vertical-align:middle;">EN COURS</span>':'')+'</div>'+
+        '<div style="font-size:.73rem;color:var(--ink-soft);margin-top:1px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+techColor(t.tech)+';margin-right:5px;vertical-align:middle;"></span>'+esc(techName(t.tech))+' · '+dlong(t.dueDate)+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('') : '<div style="font-size:.82rem;color:var(--ink-soft);font-style:italic;padding:10px 0;">Pas encore programmé. La programmation se fait depuis l\'ordinateur.</div>';
+  function row(lbl,val){return val?'<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);"><span style="font-size:.78rem;color:var(--ink-soft);">'+lbl+'</span><span style="font-size:.82rem;color:#1e293b;font-weight:500;text-align:right;">'+val+'</span></div>':'';}
+  var teeth=(j.teeth||[]).join(', ');
+  var ov=document.createElement('div');
+  ov.id='jobdetail-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5200;display:flex;align-items:flex-end;justify-content:center;';
+  ov.innerHTML=
+    '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding:18px 18px calc(20px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch;">'+
+      '<div style="width:36px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 14px;"></div>'+
+      '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:6px;">'+
+        '<div style="width:40px;height:40px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1rem;background:'+((cab&&cab.color)||'#94a3b8')+';">'+esc(cab?cab.name.charAt(0).toUpperCase():'—')+'</div>'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:1.15rem;font-weight:700;color:#1e293b;">'+esc(j.patient||'')+(j.urgent?' <span style="font-size:.62rem;color:#dc2626;background:#fee2e2;padding:2px 7px;border-radius:99px;vertical-align:middle;">URGENT</span>':'')+'</div>'+
+          '<div style="font-size:.85rem;color:var(--ink-soft);">'+esc(getJobTypeLabel(j))+'</div>'+
+        '</div>'+
+        '<button onclick="document.getElementById(\'jobdetail-overlay\').remove()" style="background:none;border:none;font-size:1.6rem;line-height:1;color:var(--ink-soft);cursor:pointer;">×</button>'+
+      '</div>'+
+      '<div style="background:'+statusBg+';color:'+statusFg+';border-radius:9px;padding:9px 12px;font-size:.82rem;font-weight:600;margin:8px 0 14px;">'+esc(statusTxt)+(total?(' · '+done+'/'+total+' étape'+(total>1?'s':'')+' faite'+(done>1?'s':'')):'')+'</div>'+
+      // Photo de la fiche scannée (si jointe)
+      (j.scanPhotoRef?'<button onclick="_mobViewJobPhoto(\''+esc(j.scanPhotoRef)+'\')" style="width:100%;background:#ede9fe;color:#6b21a8;border:1px solid #c4b5fd;border-radius:9px;padding:10px;font-size:.84rem;font-weight:600;cursor:pointer;margin-bottom:14px;min-height:42px;">📷 Voir la fiche scannée</button>':'')+
+      // Propriétaire / cabinet
+      '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;margin-bottom:4px;">Cabinet</div>'+
+      '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;">'+
+        '<div style="font-size:.9rem;font-weight:600;color:#1e293b;">'+esc(cab?cab.name:'Aucun cabinet')+'</div>'+
+        (cab&&cab.phone?'<a href="tel:'+esc(cab.phone)+'" style="font-size:.82rem;color:var(--accent);text-decoration:none;">📞 '+esc(cab.phone)+'</a>':'')+
+      '</div>'+
+      // Programmation
+      '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;margin-bottom:2px;">🗓️ Programmation</div>'+
+      '<div style="margin-bottom:14px;">'+stepsHtml+'</div>'+
+      // Infos clés
+      '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;margin-bottom:2px;">Détails</div>'+
+      '<div style="margin-bottom:8px;">'+
+        row('Patient', [(j.patientSex==='M'?'♂ Homme':(j.patientSex==='F'?'♀ Femme':'')),(j.patientAge?esc(j.patientAge)+' ans':'')].filter(Boolean).join(' · '))+
+        row('Code de suivi', j.trackCode?'<span style="font-family:monospace;">'+esc(j.trackCode)+'</span>':'')+
+        row('Dents', teeth?'<span style="font-family:monospace;">'+esc(teeth)+'</span>':'')+
+        row('Livraison souhaitée', j.deliveryDate?((isLate?'<span style="color:#dc2626;">⚠️ ':'')+fmtDate(j.deliveryDate)+(isLate?'</span>':'')):'')+
+        row('Date labo', j.labDeliveryDate?fmtDate(j.labDeliveryDate):'')+
+        row('Bon de livraison', bl?('✅ '+esc(bl.num||'émis')):'—')+
+      '</div>'+
+      (j.note?'<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;margin:8px 0 4px;">Note</div><div style="background:#fef9c3;border-left:3px solid #facc15;border-radius:0 6px 6px 0;padding:10px 12px;font-size:.83rem;color:#1e293b;white-space:pre-wrap;line-height:1.5;">'+esc(j.note)+'</div>':'')+
+      '<div style="font-size:.72rem;color:var(--ink-soft);text-align:center;margin-top:16px;">Pour modifier la programmation, utilisez l\'ordinateur.</div>'+
+    '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
 }
 
 /* ── MESSAGES LIST ── */
@@ -4525,17 +4837,30 @@ function openQuickJobSheet(){
   overlay.innerHTML=
     '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;padding:20px 18px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch;">'+
       '<div style="width:36px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 14px;"></div>'+
-      '<div style="font-weight:700;font-size:1.05rem;margin-bottom:14px;">➕ Nouveau travail</div>'+
+      '<div style="font-weight:700;font-size:1.05rem;margin-bottom:12px;">➕ Nouveau travail</div>'+
+      '<button type="button" onclick="_mobOpenScanPicker()" style="width:100%;background:#ede9fe;color:#6b21a8;border:1px solid #c4b5fd;border-radius:10px;padding:11px;font-size:.86rem;font-weight:600;cursor:pointer;margin-bottom:8px;min-height:44px;">📷 Scanner la fiche papier (IA)</button>'+
+      '<input type="file" id="qj-scan-file" accept="image/*" capture="environment" style="display:none;" onchange="_mobHandleScan(this.files&&this.files[0]);this.value=\'\';"/>'+
+      '<div id="qj-scan-panel" style="margin-bottom:10px;"></div>'+
       '<div class="form-row"><label>Code patient</label><input type="text" id="qj-patient" placeholder="DUP-MAR-001" autocomplete="off" style="font-size:16px;"/></div>'+
+      '<div class="form-grid">'+
+        '<div class="form-row"><label>Sexe</label><select id="qj-sex" style="font-size:16px;"><option value="">—</option><option value="M">Homme</option><option value="F">Femme</option></select></div>'+
+        '<div class="form-row"><label>Âge</label><input type="number" id="qj-age" min="0" max="120" placeholder="ans" style="font-size:16px;"/></div>'+
+      '</div>'+
       '<div class="form-row"><label>Types de travaux</label>'+
         '<div id="qj-items-list"></div>'+
         '<button type="button" id="qj-add-item" style="margin-top:6px;background:var(--accent-soft);color:var(--accent);border:1.5px dashed var(--accent);border-radius:8px;padding:8px 12px;font-size:.8rem;font-weight:600;cursor:pointer;width:100%;min-height:40px;">+ Ajouter un type</button>'+
       '</div>'+
+      '<div id="qj-teeth-chart" style="margin-bottom:10px;"></div>'+
       '<div class="form-grid">'+
         '<div class="form-row"><label>Cabinet</label><select id="qj-cab" style="font-size:16px;"><option value="">— Aucun —</option>'+cabinets.map(function(c){return '<option value="'+c.id+'"'+(c.id===lastCab?' selected':'')+'>'+esc(c.name)+'</option>';}).join('')+'</select></div>'+
-        '<div class="form-row"><label>Date de livraison</label><input type="date" id="qj-delivery" style="font-size:16px;"/></div>'+
+        '<div class="form-row"><label>📅 Date demandée (cabinet)</label><input type="date" id="qj-delivery" style="font-size:16px;"/></div>'+
       '</div>'+
+      (localStorage.getItem('lb_prog_actif')==='1'?('<div class="form-grid">'+
+        '<div class="form-row"><label>📦 Date labo (coursier)</label><input type="date" id="qj-lab-delivery" style="font-size:16px;"/></div>'+
+        '<div class="form-row"><label>🚚 Créneau</label><select id="qj-slot" style="font-size:16px;"><option value="9">9h</option><option value="12" selected>12h</option><option value="18">18h</option></select></div>'+
+      '</div>'):'')+
       '<div class="form-row"><label>Note</label><textarea id="qj-note" placeholder="Notes, instructions..." rows="2" style="font-size:16px;"></textarea></div>'+
+      '<div class="form-check" style="margin:0 0 8px;"><input type="checkbox" id="qj-urgent"/><label for="qj-urgent">🔴 Travail urgent</label></div>'+
       '<div class="form-check" style="margin:0 0 8px;"><input type="checkbox" id="qj-missing" onchange="toggleMissingPanel(\'qj\')"/><label for="qj-missing">❓ Infos manquantes (appel praticien)</label></div>'+
       '<div id="qj-missing-wrap" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:10px;">'+
         '<div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#c2410c;margin-bottom:8px;">Que manque-t-il ?</div>'+
@@ -4550,6 +4875,9 @@ function openQuickJobSheet(){
     '</div>';
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+  _mobScanPhoto=null; // nouvelle fiche → on repart sans photo
+  _mobResetTeeth();_mobRenderTeeth(); // schéma dentaire vierge
+  window._qjRenderItems=function(){renderQjItems();}; // permet à l'IA de re-rendre les types détectés
 
   function renderQjItems(){
     var el=document.getElementById('qj-items-list');
@@ -4576,7 +4904,12 @@ function openQuickJobSheet(){
     var cab=document.getElementById('qj-cab').value;
     var delivery=document.getElementById('qj-delivery').value;
     var note=document.getElementById('qj-note').value.trim();
-    var urgent=false;
+    var urgent=(document.getElementById('qj-urgent')||{}).checked||false;
+    var sexe=(document.getElementById('qj-sex')||{}).value||'';
+    var age=((document.getElementById('qj-age')||{}).value||'').trim();
+    var labDelivery=(document.getElementById('qj-lab-delivery')||{}).value||'';
+    var slot=(document.getElementById('qj-slot')||{}).value||'12';
+    var teethD=(typeof _mobReadTeeth==='function')?_mobReadTeeth():{teeth:[],links:[]};
     var missingItems=_readMissingFromForm('qj');
     var items=_qjItems.filter(function(it){return it.type;}).map(function(it){return{type:it.type,nb:parseInt(it.nb)||1};});
     if(!items.length){toast('Ajoutez au moins un type','var(--red)');return;}
@@ -4584,7 +4917,13 @@ function openQuickJobSheet(){
     var lbl=totalNb>1?patient+' ('+totalNb+' éléments)':patient;
     var ws=typeof getWorkspace==='function'?getWorkspace():'admin';
     if(ws==='admin'&&typeof addMobileAdminJob==='function'){
-      if(!addMobileAdminJob({patient:lbl,items:items,cabinet:cab,deliveryDate:delivery,note:note,urgent:urgent,missingItems:missingItems}))return;
+      var _newJobId=addMobileAdminJob({patient:patient,items:items,cabinet:cab,deliveryDate:delivery,note:note,urgent:urgent,missingItems:missingItems,sexe:sexe,age:age,labDeliveryDate:labDelivery,labDeliverySlot:slot,teeth:teethD.teeth,links:teethD.links});
+      if(!_newJobId)return;
+      // Attacher la photo scannée au travail (ligne dédiée jobphoto_<id> + référence légère).
+      if(_mobScanPhoto){
+        try{var _ref=await _mobSaveJobPhoto(_newJobId);if(_ref){var _nj=jobs.find(function(j){return String(j.id)===String(_newJobId);});if(_nj)_nj.scanPhotoRef=_ref;}}catch(eP){console.warn('attach photo',eP);}
+        _mobScanPhoto=null;
+      }
       overlay.remove();
       toast(missingItems.length?'✅ Travail enregistré — question à envoyer dans Messages':'✅ Travail enregistré','var(--green)');
       await saveData();

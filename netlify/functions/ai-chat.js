@@ -60,6 +60,10 @@ exports.handler = async function (event) {
 
   const messages = Array.isArray(body.messages) ? body.messages.slice(-30) : [];
   const maxTokens = Math.min(parseInt(body.max_tokens, 10) || 1024, 4096);
+  // Modèle : haiku par défaut (chat), mais un appelant peut demander un modèle plus
+  // puissant (ex. optimisation de programmation) parmi une liste blanche.
+  const ALLOWED_MODELS = new Set(['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8']);
+  const model = ALLOWED_MODELS.has(body.model) ? body.model : 'claude-haiku-4-5-20251001';
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -70,7 +74,7 @@ exports.handler = async function (event) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: model,
         max_tokens: maxTokens,
         system: String(body.system || '').slice(0, 12000),
         messages,

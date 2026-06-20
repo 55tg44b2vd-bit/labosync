@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="Mon labo"/>
@@ -162,11 +163,13 @@ header{background:var(--surface);border-bottom:1px solid var(--border);box-shado
   .stat-card{padding:12px 14px;}
   .stat-val{font-size:1.3rem;}
   .stat-lbl{font-size:.64rem;}
-  .header-inner{gap:8px;padding:0 12px;}
+  header{padding:0 10px;}
+  .header-inner{gap:8px;padding:0;}
   .brand{font-size:.95rem;}
   .brand-pill{font-size:.6rem;padding:2px 6px;}
   .cab-name-header{display:none;}
   .btn-logout{padding:6px 10px;font-size:.7rem;}
+  .btn-refresh{padding:6px 10px;font-size:.7rem;}
   /* Tabs: horizontal scroll */
   .tabs{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;padding:3px;gap:2px;}
   .tab{padding:8px 14px;font-size:.78rem;white-space:nowrap;flex-shrink:0;min-height:44px;display:flex;align-items:center;}
@@ -436,7 +439,10 @@ async function _savePortalOrders(list){
   }
 }
 window.addEventListener('error',function(ev){
-  reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:ev&&ev.error&&ev.error.stack?ev.error.stack:''});
+  var stack=ev&&ev.error&&ev.error.stack?ev.error.stack:'';
+  // Les SyntaxError de script n'ont pas d'ev.error : on garde au moins fichier:ligne:colonne pour pouvoir localiser.
+  if(!stack&&ev&&(ev.filename||ev.lineno))stack='at '+(ev.filename||'')+':'+(ev.lineno||0)+':'+(ev.colno||0);
+  reportClientError({level:'error',message:ev&&ev.message?ev.message:'window.error',stack:stack});
 });
 window.addEventListener('unhandledrejection',function(ev){
   const r=ev&&ev.reason;
@@ -875,7 +881,7 @@ async function refreshPortalDataOnce(force){
 
 function startPortalDataPoll(){
   if(window._portalDataPollHandle) clearInterval(window._portalDataPollHandle);
-  window._portalDataPollHandle = setInterval(function(){ refreshPortalDataOnce(false); }, 10000);
+  window._portalDataPollHandle = setInterval(function(){ if(document.hidden)return; refreshPortalDataOnce(false); }, 10000);
 }
 
 function facStripePayment(fac){ return fac && fac.stripePayment ? fac.stripePayment : null; }
@@ -1315,7 +1321,7 @@ function _stepContent(){
       '<label style="font-size:.78rem;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Que demandez-vous au labo cette fois-ci ? *</label>'+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">'+
         ['PEI / stéréo','Châssis métallique','Montage','Finition','Essai esthétique','Couronne unitaire'].map(function(lbl){
-          return '<button type="button" onclick="_insertDemandTemplate('+JSON.stringify(lbl)+')" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:5px 11px;font-size:.72rem;font-weight:600;color:#475569;cursor:pointer;">'+esc(lbl)+'</button>';
+          return '<button type="button" onclick="_insertDemandTemplate('+esc(JSON.stringify(lbl))+')" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:5px 11px;font-size:.72rem;font-weight:600;color:#475569;cursor:pointer;">'+esc(lbl)+'</button>';
         }).join('')+
       '</div>'+
       '<textarea id="of-firststep-desc" placeholder="Ex: PEI · Châssis métallique avec bourrelets d\'occlusion · Montage des dents · Finition…" oninput="_orderForm.firstStep.description=this.value;_saveDraft();" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.92rem;outline:none;min-height:80px;resize:vertical;">'+esc(_orderForm.firstStep.description)+'</textarea>'+
@@ -1404,7 +1410,7 @@ function renderToothChart(){
       if(i===8)html+='<div style="width:18px;flex-shrink:0;"></div>';
       // Bord arrondi : début/fin de chaque demi-arcade
       const radius=(i===0||i===8)?'7px 2px 2px 7px':(i===7||i===arr.length-1)?'2px 7px 7px 2px':'2px';
-      html+='<button type="button" onclick="toggleTooth('+num+')" style="width:36px;height:42px;border:1.5px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'var(--surface)')+';color:'+(sel?'#fff':'var(--ink)')+';font-family:monospace;font-size:.76rem;font-weight:'+(sel?700:500)+';cursor:pointer;border-radius:'+radius+';margin:0 1px;flex-shrink:0;">'+num+'</button>';
+      html+='<button type="button" onclick="toggleTooth('+num+')" aria-pressed="'+(sel?'true':'false')+'" aria-label="Dent '+num+(sel?' — sélectionnée':'')+'" style="width:36px;height:42px;border:1.5px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'var(--surface)')+';color:'+(sel?'#fff':'var(--ink)')+';font-family:monospace;font-size:.76rem;font-weight:'+(sel?700:500)+';cursor:pointer;border-radius:'+radius+';margin:0 1px;flex-shrink:0;">'+num+'</button>';
       // Solidarisation possible y compris sur la ligne médiane (11-21 et 41-31)
       if(i<arr.length-1){
         const a=num,b=arr[i+1];
@@ -1414,9 +1420,9 @@ function renderToothChart(){
         const midMargin=mid?'margin:0 6px;':'margin:0 3px;';
         if(lk){
           // Bridge visuel : barre verte arrondie qui relie les 2 dents
-          html+='<button type="button" onclick="toggleLink('+a+','+b+')" title="Solidarisation '+a+'-'+b+' (cliquez pour retirer)" style="width:'+(mid?28:22)+'px;height:8px;border:none;background:linear-gradient(180deg,#10b981,#059669);border-radius:4px;cursor:pointer;flex-shrink:0;box-shadow:0 1px 2px rgba(16,185,129,.4);'+(mid?'margin:0 3px;':'margin:0 -1px;')+'"></button>';
+          html+='<button type="button" onclick="toggleLink('+a+','+b+')" aria-pressed="true" aria-label="Solidarisation '+a+'-'+b+' — active, cliquez pour retirer" title="Solidarisation '+a+'-'+b+' (cliquez pour retirer)" style="width:'+(mid?28:22)+'px;height:8px;border:none;background:linear-gradient(180deg,#10b981,#059669);border-radius:4px;cursor:pointer;flex-shrink:0;box-shadow:0 1px 2px rgba(16,185,129,.4);'+(mid?'margin:0 3px;':'margin:0 -1px;')+'"></button>';
         } else {
-          html+='<button type="button" onclick="toggleLink('+a+','+b+')" title="Cliquez pour solidariser '+a+'-'+b+'" style="width:11px;height:11px;border:1.5px solid #cbd5e1;background:#fff;border-radius:50%;cursor:pointer;flex-shrink:0;'+midMargin+'padding:0;"></button>';
+          html+='<button type="button" onclick="toggleLink('+a+','+b+')" aria-pressed="false" aria-label="Solidariser '+a+'-'+b+'" title="Cliquez pour solidariser '+a+'-'+b+'" style="width:11px;height:11px;border:1.5px solid #cbd5e1;background:#fff;border-radius:50%;cursor:pointer;flex-shrink:0;'+midMargin+'padding:0;"></button>';
         }
       }
     });
@@ -2004,9 +2010,9 @@ function viewBLOrder(blId){
 }
 
 function _renderFicheBlockCabHTML(s,idx){
-  const stepStatusLbl={pending:'Envoyée au labo',accepted:'Prise en charge',in_progress:'En cours de fabrication',delivered:'Livrée',rejected:'Refusée'};
-  const stepStatusBg={pending:'#fef3c7',accepted:'#dbeafe',in_progress:'#dbeafe',delivered:'#d1fae5',rejected:'#fce7e7'};
-  const stepStatusFg={pending:'#a16207',accepted:'#1d4ed8',in_progress:'#1d4ed8',delivered:'#047857',rejected:'#991b1b'};
+  const stepStatusLbl={pending:'Envoyée au labo',accepted:'Prise en charge',in_progress:'En cours de fabrication',delivered:'Livrée',rejected:'Refusée',cancelled:'Annulé par le labo'};
+  const stepStatusBg={pending:'#fef3c7',accepted:'#dbeafe',in_progress:'#dbeafe',delivered:'#d1fae5',rejected:'#fce7e7',cancelled:'#fce7e7'};
+  const stepStatusFg={pending:'#a16207',accepted:'#1d4ed8',in_progress:'#1d4ed8',delivered:'#047857',rejected:'#991b1b',cancelled:'#991b1b'};
   const dateStr=s.requestedAt?new Date(s.requestedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'—';
   const lbl=stepStatusLbl[s.status]||s.status;
   const bg=stepStatusBg[s.status]||'#f1f5f9';
@@ -2025,10 +2031,11 @@ function _renderFicheBlockCabHTML(s,idx){
       (s.deliveryDate?'<div><strong>📅 Livraison :</strong> '+new Date(s.deliveryDate+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})+'</div>':'')+
     '</div>':'')+
     (s.notes?'<div style="margin-bottom:6px;font-size:.82rem;"><strong>📝 Notes :</strong><div style="background:#fff7ed;border:1px solid #fed7aa;padding:8px 10px;border-radius:5px;margin-top:3px;white-space:pre-wrap;">'+esc(s.notes)+'</div></div>':'')+
-    ((s.acceptedAt||s.deliveredAt||s.rejectedAt||s.questionsAsked)?'<div style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--border);font-size:.72rem;color:var(--ink-soft);display:flex;flex-wrap:wrap;gap:10px;">'+
+    ((s.acceptedAt||s.deliveredAt||s.rejectedAt||s.cancelledAt||s.questionsAsked)?'<div style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--border);font-size:.72rem;color:var(--ink-soft);display:flex;flex-wrap:wrap;gap:10px;">'+
       (s.acceptedAt?'<span>✓ Acceptée par le labo le '+new Date(s.acceptedAt).toLocaleDateString('fr-FR')+'</span>':'')+
       (s.deliveredAt?'<span>✓ Livrée le '+new Date(s.deliveredAt).toLocaleDateString('fr-FR')+'</span>':'')+
       (s.rejectedAt?'<span style="color:#c0392b;">✗ Refusée le '+new Date(s.rejectedAt).toLocaleDateString('fr-FR')+(s.rejectionReason?' — '+esc(s.rejectionReason):'')+'</span>':'')+
+      (s.cancelledAt?'<span style="color:#991b1b;">❌ Annulé par le labo le '+new Date(s.cancelledAt).toLocaleDateString('fr-FR')+(s.cancelReason?' — '+esc(s.cancelReason):'')+'</span>':'')+
       (s.questionsAsked?'<span style="color:#c2410c;">❓ Le labo a demandé des précisions'+(s.questionsAskedAt?' le '+new Date(s.questionsAskedAt).toLocaleDateString('fr-FR'):'')+'</span>':'')+
     '</div>':'')+
   '</div>';
@@ -2052,9 +2059,9 @@ async function renderOrdersList(useCache){
   if(!list){
     el.innerHTML='<div style="text-align:center;padding:30px;color:var(--ink-soft);font-size:.82rem;">Chargement…</div>';
     try{
-      const sb=supabase.createClient(SB_URL,SB_ANON);
-      const{data:rows}=await sb.from('labo_data').select('data').eq('id','orders_'+sessionPortalId);
-      list=(rows&&rows[0]&&rows[0].data&&rows[0].data.list)?rows[0].data.list:[];
+      // Passe par la fonction Netlify authentifiée (comme _savePortalOrders et le côté labo).
+      // La lecture Supabase directe en clé anonyme renvoyait [] (RLS / mauvaise clé de ligne).
+      list=await _fetchPortalOrders();
       list.forEach(_migrateOrderToCase);
       _portalOrdersCache=list;
     }catch(e){el.innerHTML='<div class="empty-state">Erreur de chargement : '+esc(e.message)+'</div>';return;}
@@ -2800,6 +2807,7 @@ function chatHoverItem(el, ddId){
 function startPortalChatPoll(){
   if(_portalChatInterval) return;
   _portalChatInterval = setInterval(function(){
+    if(document.hidden) return;
     const tab = document.querySelector('[data-ptab="messages"].on');
     if(tab) loadPortalChat(false);
   }, 8000);
@@ -2808,6 +2816,7 @@ function startPortalChatPoll(){
 // Check for new labo messages while on other tabs
 var _cabChatNotifyAt={};
 function checkPortalChatNotif(){
+  if(document.hidden) return;
   if(!sessionPortalId) return;
   fetch('/.netlify/functions/portal?type=chat&portalId='+encodeURIComponent(sessionPortalId),{headers:_portalCabHeaders()})
     .then(function(r){return r.ok?r.json():[];})

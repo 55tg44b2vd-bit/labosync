@@ -66,14 +66,27 @@ exports.handler = async (event) => {
 
   // Récupérer ou créer le Customer Stripe via Supabase
   let customerId = '';
+  let existingTrialEndsAt = '';
   if (SERVICE_KEY) {
     try {
       const r = await fetch(`${SB_URL}/rest/v1/labo_data?id=eq.sub_${userId}&select=data`, {
         headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}` },
       });
       const rows = await r.json();
-      if (rows[0] && rows[0].data && rows[0].data.stripeCustomerId) customerId = rows[0].data.stripeCustomerId;
+      if (rows[0] && rows[0].data) {
+        if (rows[0].data.stripeCustomerId) customerId = rows[0].data.stripeCustomerId;
+        if (rows[0].data.trialEndsAt) existingTrialEndsAt = rows[0].data.trialEndsAt;
+      }
     } catch (e) { /* silencieux */ }
+  }
+
+  // Aligner l'essai Stripe sur l'essai applicatif déjà entamé : on n'accorde dans Stripe
+  // que les jours d'essai RESTANTS (au plus TRIAL_DAYS), pas un nouvel essai complet.
+  // Sans ça, l'utilisateur cumulait 14 j d'essai app + 14 j d'essai Stripe (~28 j).
+  let trialDaysForStripe = TRIAL_DAYS;
+  if (existingTrialEndsAt) {
+    const remainingDays = Math.ceil((new Date(existingTrialEndsAt).getTime() - Date.now()) / 86400000);
+    trialDaysForStripe = Math.max(0, Math.min(TRIAL_DAYS, remainingDays));
   }
 
   if (!customerId) {
@@ -95,13 +108,12 @@ exports.handler = async (event) => {
     customerId = customer.id;
   }
 
-  // Créer la Checkout Session en mode subscription avec 14 jours d'essai
+  // Créer la Checkout Session en mode subscription. L'essai est limité aux jours restants.
   const params = new URLSearchParams({
     'mode': 'subscription',
     'customer': customerId,
     'line_items[0][price]': priceId,
     'line_items[0][quantity]': '1',
-    'subscription_data[trial_period_days]': String(TRIAL_DAYS),
     'subscription_data[metadata][userId]': userId,
     'subscription_data[metadata][email]': email,
     'success_url': successUrl,
@@ -110,6 +122,10 @@ exports.handler = async (event) => {
     'metadata[userId]': userId,
     'metadata[plan]': plan,
   });
+  // Stripe exige trial_period_days >= 1 ; si l'essai initial est terminé, on facture immédiatement.
+  if (trialDaysForStripe >= 1) {
+    params.set('subscription_data[trial_period_days]', String(trialDaysForStripe));
+  }
 
   let stripeResp;
   try {

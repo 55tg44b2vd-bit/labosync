@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Labo">
@@ -159,7 +160,7 @@ tr:hover td{background:#f8fafc;}
 .syn-del{background:none;border:none;cursor:pointer;color:#c0a090;font-size:.82rem;}
 .syn-del:hover{color:#c0392b;}
 /* stats */
-.kgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;}
+.kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:16px;margin-bottom:24px;}
 .kcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px 24px;box-shadow:var(--shadow);transition:box-shadow .2s,transform .2s;}
 .kcard:hover{box-shadow:var(--shadow-lg);transform:translateY(-1px);}
 .kval{font-family:'Inter',sans-serif;font-size:2rem;font-weight:800;color:var(--accent);margin-bottom:4px;line-height:1;}
@@ -790,10 +791,17 @@ body.has-sidebar #drawer{transform:translateX(0);}
   <div id="saisie-work-pane">
   <div class="card" id="saisie-new-job-card">
     <h2 data-i18n="job.card.title">📝 Nouveau travail</h2>
-    <p id="saisie-card-sub" style="font-size:.76rem;color:var(--ink-soft);margin-bottom:14px;" data-i18n="job.card.sub">Entrez les informations du travail à réaliser.</p>
+    <p id="saisie-card-sub" style="font-size:.76rem;color:var(--ink-soft);margin-bottom:10px;" data-i18n="job.card.sub">Entrez les informations du travail à réaliser.</p>
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <button type="button" id="btn-scan-import" onclick="_openScanImport()" style="background:#ede9fe;color:#6b21a8;border:1px solid #c4b5fd;border-radius:8px;padding:9px 16px;font-size:.85rem;font-weight:600;cursor:pointer;">📷 Importer une fiche scannée (IA)</button>
+      <input type="file" id="scan-import-file" accept="image/*,application/pdf" style="display:none;" onchange="_handleScanFile(this.files&&this.files[0]);this.value='';"/>
+      <span style="font-size:.74rem;color:var(--ink-soft);">Photo ou PDF d'une fiche papier → l'IA lit et remplit le formulaire.</span>
+    </div>
+    <div id="saisie-scan-panel" style="margin-bottom:14px;"></div>
     <div class="frow">
       <div class="fl"><label data-i18n="form.patient">Code patient <button type="button" onclick="openPatientCodeGenerator('saisie-ip')" title="Générer un code à partir d'un nom (le nom n'est ni sauvegardé ni envoyé)" style="background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;padding:1px 7px;font-size:.7rem;cursor:pointer;color:#475569;font-weight:500;margin-left:4px;">🪄 Générer</button><span style="font-weight:400;color:#94a3b8;font-size:.7rem;margin-left:6px;">— anonyme uniquement (RGPD)</span></label><input type="text" id="saisie-ip" data-i18n-ph="form.ph.patient" placeholder="DUP-MAR-001"/></div>
       <div class="fl" style="min-width:140px;"><label>Sexe patient</label><div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap;"><label class="chk" style="margin:0;padding:6px 10px;"><input type="checkbox" id="saisie-isex-m" onchange="if(this.checked){var f=document.getElementById('saisie-isex-f');if(f)f.checked=false;}"/> Homme</label><label class="chk" style="margin:0;padding:6px 10px;"><input type="checkbox" id="saisie-isex-f" onchange="if(this.checked){var m=document.getElementById('saisie-isex-m');if(m)m.checked=false;}"/> Femme</label></div></div>
+      <div class="fl" style="min-width:80px;"><label>Âge</label><input type="number" id="saisie-iage" min="0" max="120" placeholder="ans" style="width:84px;"/></div>
       <div class="fl" style="flex:1;min-width:220px;"><label data-i18n="form.type">Type</label>
         <select id="saisie-it" style="width:100%;min-width:220px;max-width:100%;">
           <optgroup label="Couronnes">
@@ -1006,6 +1014,11 @@ body.has-sidebar #drawer{transform:translateX(0);}
   <div class="kgrid" id="s-kpi"></div>
   <!-- KPIs ligne 2 : ce mois -->
   <div class="kgrid" id="s-kpi2" style="margin-bottom:20px;"></div>
+  <!-- Argent : tendance CA + top cabinets -->
+  <div class="sgrid" style="margin-bottom:16px;">
+    <div class="card" style="margin:0;"><h2>💶 CA des 6 derniers mois (BL)</h2><div id="s-ca-trend"></div></div>
+    <div class="card" style="margin:0;"><h2>🏆 Top cabinets ce mois (CA)</h2><div id="s-ca-cabs"></div></div>
+  </div>
   <!-- Camemberts + barres -->
   <div class="sgrid" style="margin-bottom:16px;">
     <div class="card" style="margin:0;">
@@ -1152,8 +1165,13 @@ body.has-sidebar #drawer{transform:translateX(0);}
   </div>
 
   <!-- Travaux terminés sans bon -->
-  <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+  <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
     <div class="stitle" style="margin:0;"><span data-i18n="stitle.livr.all">Tous les travaux</span> <span class="sbadge" id="livr-todo-cnt">0</span></div>
+    <select id="livr-filter-mode" onchange="renderLivraisons()" title="Filtrer les travaux à livrer" style="font-family:monospace;font-size:.76rem;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+      <option value="due">À livrer (échus + aujourd'hui)</option>
+      <option value="week">Cette semaine</option>
+      <option value="all">Tous</option>
+    </select>
   </div>
   <div id="livr-todo-list" style="margin-bottom:24px;"></div>
 
@@ -1485,6 +1503,14 @@ body.has-sidebar #drawer{transform:translateX(0);}
               </datalist>
             </div>
           </div>
+          <div class="fl" style="margin-bottom:14px;">
+            <label>Phase de fabrication <span class="help-tip" data-help-title="Phase de fabrication" data-help="Sert quand un travail combine plusieurs types. Les types de la MÊME phase se font en parallèle (mêmes jours) ; une phase plus élevée démarre après la fin de la précédente. Ex. : mettez l'inlay-core (pilier) en phase 1 et la couronne en phase 2 pour que le pilier soit fait avant. Une armature et une couronne en même phase = en parallèle.">?</span></label>
+            <select id="ct-phase" style="width:100%;">
+              <option value="1">1 · Préparation / pilier (ex. inlay-core)</option>
+              <option value="2" selected>2 · Réalisation (par défaut — en parallèle)</option>
+              <option value="3">3 · Finition</option>
+            </select>
+          </div>
           <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;gap:10px;">
             <div style="font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);">Planning atelier (optionnel)</div>
             <div style="font-size:.7rem;color:var(--ink-soft);font-style:italic;">Ajoutez des étapes uniquement si vous planifiez les travaux par technicien</div>
@@ -1527,6 +1553,24 @@ body.has-sidebar #drawer{transform:translateX(0);}
             <button onclick="addAbsence()" style="background:#1a4a7a;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-family:monospace;font-size:.8rem;cursor:pointer;">+ Ajouter</button>
           </div>
           <div id="abs-list"></div>
+        </div>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+          <div style="font-size:.72rem;font-weight:500;margin-bottom:6px;">Jours récurrents hors laboratoire</div>
+          <div style="font-size:.7rem;color:var(--ink-soft);line-height:1.4;margin-bottom:8px;">Exemple : apprenti à l'école le jeudi et vendredi. Ces jours sont exclus du mode automatique, mais le technicien reste sélectionnable en manuel.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center;">
+            <select id="offday-tech-sel" style="font-family:monospace;font-size:.8rem;padding:7px 12px;border:1.5px solid var(--border);border-radius:7px;background:var(--bg);color:var(--ink);outline:none;">
+              <option value="">— Technicien —</option>
+            </select>
+            <select id="offday-day-sel" style="font-family:monospace;font-size:.8rem;padding:7px 12px;border:1.5px solid var(--border);border-radius:7px;background:var(--bg);color:var(--ink);outline:none;">
+              <option value="1">Lundi</option>
+              <option value="2">Mardi</option>
+              <option value="3">Mercredi</option>
+              <option value="4">Jeudi</option>
+              <option value="5">Vendredi</option>
+            </select>
+            <button onclick="addTechOffDay()" style="background:#1a4a7a;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-family:monospace;font-size:.8rem;cursor:pointer;">+ Ajouter</button>
+          </div>
+          <div id="offdays-list"></div>
         </div>
       </div>
     </div>
@@ -1887,7 +1931,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
 
 
 <!-- Modal échéance saisie admin -->
-<div id="admin-finish-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3600;align-items:center;justify-content:center;padding:16px;"><div style="background:#fff;border-radius:14px;width:100%;max-width:420px;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.2);"><h3 style="font-size:1.1rem;font-weight:700;margin:0 0 8px;">Échéance atelier</h3><p style="font-size:.82rem;color:#64748b;margin:0 0 16px;line-height:1.45;">Quand ce travail doit-il être terminé ? Une fiche labo avec code-barres sera générée pour la boîte.</p><div class="fl" style="margin-bottom:12px;"><label>Date limite</label><input type="date" id="admin-finish-date" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:1rem;"/></div><div class="fl" style="margin-bottom:18px;"><label>Heure limite</label><select id="admin-finish-slot" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:1rem;"><option value="9">Finir avant 9h</option><option value="12" selected>Finir avant 12h</option><option value="18">Finir avant 18h</option></select></div><div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;"><button type="button" class="btn btn-b" id="admin-finish-cancel">Annuler</button><button type="button" class="btn btn-a" id="admin-finish-ok">Valider et générer la fiche</button></div></div></div>
+<div id="admin-finish-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3600;align-items:center;justify-content:center;padding:16px;"><div style="background:#fff;border-radius:14px;width:100%;max-width:420px;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.2);"><h3 style="font-size:1.1rem;font-weight:700;margin:0 0 8px;">Échéance atelier</h3><p style="font-size:.82rem;color:#64748b;margin:0 0 16px;line-height:1.45;">Quand ce travail doit-il être terminé ? Une fiche labo avec code-barres sera générée pour la boîte.</p><div class="fl" style="margin-bottom:12px;"><label>Date limite</label><input type="date" id="admin-finish-date" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:1rem;"/></div><div class="fl" style="margin-bottom:18px;"><label>Heure limite</label><select id="admin-finish-slot" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:1rem;"><option value="9">Finir avant 9h</option><option value="12" selected>Finir avant 12h</option><option value="18">Finir avant 18h</option></select></div><label style="display:flex;align-items:center;gap:8px;font-size:.84rem;color:#1d4ed8;cursor:pointer;margin:0 0 18px;font-weight:600;"><input type="checkbox" id="admin-finish-autoprog" checked style="width:16px;height:16px;cursor:pointer;"/>⚡ Programmer automatiquement les étapes</label><div id="admin-finish-planmode" style="margin:0 0 18px;"><div style="font-size:.82rem;font-weight:600;color:#1e293b;margin-bottom:6px;">Planifier les étapes <span title="« Au plus tôt » : étapes dès maintenant pour prendre de l'avance. « Pour l'échéance » : rétro-planning, finir juste à temps." style="cursor:help;color:#94a3b8;font-weight:400;">ⓘ</span></div><div style="display:inline-flex;border-radius:8px;overflow:hidden;"><button type="button" class="plan-mode-btn" data-plan-mode="earliest" onclick="setPlanMode('earliest')" style="border:1.5px solid #cbd5e1;padding:7px 14px;font-size:.85rem;cursor:pointer;background:#fff;color:#475569;font-weight:500;">Au plus tôt</button><button type="button" class="plan-mode-btn" data-plan-mode="deadline" onclick="setPlanMode('deadline')" style="border:1.5px solid #cbd5e1;padding:7px 14px;font-size:.85rem;cursor:pointer;background:#fff;color:#475569;font-weight:500;">Pour l'échéance</button></div></div><div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;"><button type="button" class="btn btn-b" id="admin-finish-cancel">Annuler</button><button type="button" class="btn btn-a" id="admin-finish-ok">Valider</button></div></div></div>
 <div id="courier-dispatch-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3500;align-items:center;justify-content:center;padding:16px;">
   <div style="background:var(--surface);border-radius:14px;width:100%;max-width:440px;padding:22px;box-shadow:0 12px 40px rgba(0,0,0,.2);">
     <h3 id="cd-title" style="font-family:serif;font-size:1.1rem;margin-bottom:12px;">Mission coursier</h3>
@@ -1929,10 +1973,10 @@ body.has-sidebar #drawer{transform:translateX(0);}
       <button onclick="applyTaskComment()" style="background:var(--ink);color:#fff;border:none;border-radius:7px;padding:8px 14px;font-family:'DM Mono',monospace;font-size:.78rem;cursor:pointer;">✓</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
-      <button onclick="shiftJob(-1)" style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px;font-family:'DM Mono',monospace;font-size:.74rem;cursor:pointer;">⬅️ Reculer 1 jour</button>
-      <button onclick="shiftJob(1)" style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px;font-family:'DM Mono',monospace;font-size:.74rem;cursor:pointer;">➡️ Avancer 1 jour</button>
-      <button onclick="shiftJob(-7)" style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px;font-family:'DM Mono',monospace;font-size:.74rem;cursor:pointer;">⬅️ Reculer 1 sem.</button>
-      <button onclick="shiftJob(7)" style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px;font-family:'DM Mono',monospace;font-size:.74rem;cursor:pointer;">➡️ Avancer 1 sem.</button>
+      <button onclick="shiftJob(-1)" style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px;font-family:'DM Mono',monospace;font-size:.74rem;cursor:pointer;">⏪ Plus tôt (−1 j)</button>
+      <button onclick="shiftJob(1)" style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px;font-family:'DM Mono',monospace;font-size:.74rem;cursor:pointer;">⏩ Plus tard (+1 j)</button>
+      <button onclick="shiftJob(-7)" style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px;font-family:'DM Mono',monospace;font-size:.74rem;cursor:pointer;">⏪ Plus tôt (−1 sem.)</button>
+      <button onclick="shiftJob(7)" style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px;font-family:'DM Mono',monospace;font-size:.74rem;cursor:pointer;">⏩ Plus tard (+1 sem.)</button>
     </div>
     <button id="btn-tm-delete" style="width:100%;background:#fdecea;border:1.5px solid #e74c3c;border-radius:8px;padding:11px;font-family:'DM Mono',monospace;font-size:.82rem;cursor:pointer;color:#c0392b;font-weight:500;margin-bottom:8px;">🗑️ Supprimer cette étape</button>
     <button id="btn-tm-close" style="width:100%;background:none;border:1px solid var(--border);border-radius:8px;padding:11px;font-family:'DM Mono',monospace;font-size:.82rem;cursor:pointer;color:var(--ink-soft);">Fermer</button>
@@ -2106,7 +2150,7 @@ const TRANSLATIONS = {
     'dash.greeting':'Bonjour',
     'dash.today':'Aujourd\'hui',
     'dash.jobs_today':'travaux aujourd\'hui',
-    'dash.pending':'à programmer',
+    'dash.pending':'cette semaine',
     'dash.late':'en retard',
     // Common
     'common.save':'Enregistrer',
@@ -2479,7 +2523,7 @@ const TRANSLATIONS = {
     'dash.greeting':'Hello',
     'dash.today':'Today',
     'dash.jobs_today':'jobs today',
-    'dash.pending':'to schedule',
+    'dash.pending':'this week',
     'dash.late':'overdue',
     // Common
     'common.save':'Save',
@@ -2921,6 +2965,11 @@ function goSettings(){
     showToast('⛔ Vous n’avez pas accès aux paramètres.','#c0392b',3400);
     return;
   }
+  // Si on est encore sur le hub (aucun espace ouvert), l'overlay du hub masque les panes :
+  // ouvrir d'abord l'espace Gestion, sinon Réglages « ne s'ouvre pas » (renvoie visuellement à l'accueil).
+  if(typeof getWorkspace==='function'&&getWorkspace()==='hub'&&typeof enterWorkspace==='function'){
+    try{enterWorkspace('admin',{skipPin:true});}catch(e){}
+  }
   const tab=document.querySelector('.tab[data-pane="parametres"]');
   if(tab){tab.click();return;}
   document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on');});
@@ -3050,15 +3099,17 @@ function refreshTechSelects(){
   const histTech=document.getElementById('hist-tech');if(histTech){histTech.innerHTML='<option value="">Tous</option>'+techOpts;}
   const absSel=document.getElementById('abs-tech-sel');
   if(absSel){absSel.innerHTML='<option value="">— Technicien —</option>'+techOpts;}
+  const offSel=document.getElementById('offday-tech-sel');
+  if(offSel){offSel.innerHTML='<option value="">— Technicien —</option>'+techOpts;}
 }
 const TYPE_LABELS={
-  inlay_only:'Inlay core',crown_only:'Couronne zircone',inlay_then_crown:'Inlay + Couronne',
+  inlay_only:'Inlay core',crown_only:'Couronne zircone',crown_ccm:'Couronne céramo-métallique',crown_emax:'Couronne E.max',inlay_then_crown:'Inlay + Couronne',
   inlay_composite:'Inlay composite',facettes:'Facettes',cle_schefield:'Clé de Schofield',
   cire_occlusion:"Cire d'occlusion",armature_zircon:'Armature zircon',
   armature_metal:'Armature métallique',inlay_emax:'Inlay/Onlay Emax',
   wax_up:'Wax up',guide_chir:'Guide chirurgical',impression_modele:'Impression de modèle',
   inlay_armature:'Inlay core + Armature',bridge_zircone:'Bridge zircone',
-  bridge_metal:'Bridge métal',provisoire:'Provisoire',
+  bridge_metal:'Bridge métal',provisoire:'Provisoire',retouche:'Retouche / Ajustement',
 };
 
 // Retourne le label complet du travail — affiche tous les types si multi-type
@@ -3069,6 +3120,12 @@ function getJobTypeLabel(job){
   return TYPE_LABELS[job.type]||job.type;
 }
 
+function formatJobPatientLabel(job){
+  var p=String((job&&job.patient)||'').replace(/(\s*\(\d+\s+éléments\))+$/g,'').trim();
+  var nb=job&&job.nb||1;
+  return nb>1?p+' ('+nb+' éléments)':p;
+}
+
 /* ══════════════════════════════════════════
    §2 — TYPES DE TRAVAUX
    ══════════════════════════════════════════ */
@@ -3076,6 +3133,8 @@ function getJobTypeLabel(job){
 const DEFAULT_CUSTOM_TYPES=[
   {id:'inlay_only',     label:'Inlay core seul',        category:'Couronnes',            steps:[{label:'Inlay core',tech:'auto',dayOffset:1}]},
   {id:'crown_only',     label:'Couronne zircone seule', category:'Couronnes',            steps:[{label:'Modélisation couronne zircone',tech:'auto',dayOffset:1},{label:'Glaçage couronne zircone',tech:'auto',dayOffset:2}]},
+  {id:'crown_ccm',      label:'Couronne céramo-métallique',category:'Couronnes',         steps:[{label:'Chape métallique (CCM)',tech:'auto',dayOffset:1},{label:'Montage cosmétique CCM',tech:'auto',dayOffset:2},{label:'Glaçage CCM',tech:'auto',dayOffset:3}]},
+  {id:'crown_emax',     label:'Couronne E.max',         category:'Composite & Céramique',steps:[{label:'Modélisation E.max',tech:'auto',dayOffset:1},{label:'Maquillage / glaçage E.max',tech:'auto',dayOffset:2}]},
   {id:'inlay_then_crown',label:'Inlay core + Couronne', category:'Couronnes',            steps:[{label:'Inlay core',tech:'auto',dayOffset:1},{label:'Modélisation couronne zircone',tech:'auto',dayOffset:2},{label:'Glaçage couronne zircone',tech:'auto',dayOffset:3}]},
   {id:'inlay_composite',label:'Inlay composite',        category:'Composite & Céramique',steps:[{label:'Inlay composite',tech:'auto',dayOffset:1}]},
   {id:'inlay_emax',     label:'Inlay / Onlay Emax',     category:'Composite & Céramique',steps:[{label:'Inlay/Onlay Emax',tech:'auto',dayOffset:1}]},
@@ -3091,6 +3150,7 @@ const DEFAULT_CUSTOM_TYPES=[
   {id:'provisoire',     label:'Provisoire',             category:'Autre',                steps:[{label:'Provisoire',tech:'auto',dayOffset:1}]},
   {id:'guide_chir',     label:'Guide chirurgical',      category:'Chirurgie & Modèles',  steps:[{label:'Guide chirurgical',tech:'auto',dayOffset:1}]},
   {id:'impression_modele',label:'Impression de modèle', category:'Chirurgie & Modèles',  steps:[{label:'Impression de modèle',tech:'auto',dayOffset:1}]},
+  {id:'retouche',       label:'Retouche / Ajustement',  category:'Retouches & SAV',      steps:[{label:'Retouche / ajustement',tech:'auto',dayOffset:1}]},
 ];
 // Clone les types par défaut (deep copy — évite les mutations de DEFAULT_CUSTOM_TYPES)
 function cloneDefaultTypes(){return DEFAULT_CUSTOM_TYPES.map(function(t){return {id:t.id,label:t.label,category:t.category,steps:t.steps.map(function(s){return {label:s.label,tech:s.tech,dayOffset:s.dayOffset};})};});}
@@ -3098,11 +3158,55 @@ function cloneDefaultTypes(){return DEFAULT_CUSTOM_TYPES.map(function(t){return 
 let customTypes=JSON.parse(localStorage.getItem('lb_custom_types')||'[]');
 function saveCustomTypes(){localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));scheduleSave();}
 
+/* ── Phases de fabrication (séquencement multi-types) ──────────────────────────
+   Quand un travail combine plusieurs types, chacun a une « phase ». Les types de
+   la MÊME phase se font EN PARALLÈLE (mêmes jours), les phases se SUIVENT (la phase
+   n+1 démarre après la fin de la phase n). Permet à la fois le parallèle (design
+   armature ∥ design couronne, même phase) et la dépendance (pilier/inlay-core en
+   phase 1, avant la couronne). Configurable par type dans l'éditeur de workflow.
+   Défaut : 1 = Préparation / pilier, 2 = Réalisation (par défaut), 3 = Finition. */
+const PHASE_LABELS={1:'1 · Préparation / pilier',2:'2 · Réalisation',3:'3 · Finition'};
+const DEFAULT_TYPE_PHASE={
+  // Phase 1 — préparation / fondation (doit précéder la superstructure)
+  inlay_only:1, inlay_armature:1, impression_modele:1, wax_up:1, cire_occlusion:1, cle_schefield:1, guide_chir:1,
+  // Phase 3 — finition / retouche (après la réalisation)
+  retouche:3
+  // Tout le reste (couronnes, armatures, bridges, facettes…) = phase 2 par défaut → en parallèle entre eux.
+};
+function _typePhase(typeId){
+  var ct=(typeof customTypes!=='undefined'&&customTypes)?customTypes.find(function(c){return c.id===typeId;}):null;
+  if(ct&&ct.phase)return parseInt(ct.phase)||2;
+  return (DEFAULT_TYPE_PHASE[typeId]!=null)?DEFAULT_TYPE_PHASE[typeId]:2;
+}
+
 // Première visite ou migration : injecter les types par défaut
 if(!localStorage.getItem('lb_types_seeded')){
   if(!customTypes.length)customTypes=cloneDefaultTypes();
   localStorage.setItem('lb_types_seeded','1');
   saveCustomTypes();
+}
+
+// Migration douce : ajoute le type « Retouche / Ajustement » aux comptes DÉJÀ initialisés
+// (le seed ci-dessus ne tourne qu'une fois). Flag dédié → on ne le réinjecte pas s'il est
+// supprimé volontairement par l'utilisateur.
+if(!localStorage.getItem('lb_retouche_seeded')){
+  if(Array.isArray(customTypes)&&!customTypes.some(function(c){return c.id==='retouche';})){
+    customTypes.push({id:'retouche',label:'Retouche / Ajustement',category:'Retouches & SAV',steps:[{label:'Retouche / ajustement',tech:'auto',dayOffset:1}]});
+    saveCustomTypes();
+  }
+  localStorage.setItem('lb_retouche_seeded','1');
+}
+
+// Migration douce : ajoute « Couronne céramo-métallique » et « Couronne E.max » aux comptes
+// déjà initialisés (demandes courantes absentes des défauts d'origine). Flag dédié → pas de
+// réinjection si l'utilisateur les supprime volontairement.
+if(!localStorage.getItem('lb_crowns_seeded')){
+  if(Array.isArray(customTypes)){
+    if(!customTypes.some(function(c){return c.id==='crown_ccm';}))customTypes.push({id:'crown_ccm',label:'Couronne céramo-métallique',category:'Couronnes',steps:[{label:'Chape métallique (CCM)',tech:'auto',dayOffset:1},{label:'Montage cosmétique CCM',tech:'auto',dayOffset:2},{label:'Glaçage CCM',tech:'auto',dayOffset:3}]});
+    if(!customTypes.some(function(c){return c.id==='crown_emax';}))customTypes.push({id:'crown_emax',label:'Couronne E.max',category:'Composite & Céramique',steps:[{label:'Modélisation E.max',tech:'auto',dayOffset:1},{label:'Maquillage / glaçage E.max',tech:'auto',dayOffset:2}]});
+    saveCustomTypes();
+  }
+  localStorage.setItem('lb_crowns_seeded','1');
 }
 
 // Synchronise les types dans TYPE_LABELS pour que TYPE_LABELS[x]||x fonctionne partout
@@ -3158,7 +3262,7 @@ function refreshTypeSelects(){
     if(prev&&sel.querySelector('option[value="'+prev+'"]'))sel.value=prev;
   });
 }
-const EMP_TYPES=['crown_only','inlay_composite','facettes','armature_zircon','armature_metal','inlay_emax','wax_up','bridge_zircone','bridge_metal'];
+const EMP_TYPES=['crown_only','crown_ccm','crown_emax','inlay_composite','facettes','armature_zircon','armature_metal','inlay_emax','wax_up','bridge_zircone','bridge_metal'];
 const MFR=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const DFR=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
 
@@ -3238,7 +3342,7 @@ function saveJobs(){
   syncWindowLabData();
   scheduleSave();
 }
-let _saveTimer=null;
+var _saveTimer=null; // var (et non let) : hoisté, car saveCustomTypes() peut être appelé au seed initial (1re visite) avant cette ligne — évite une TDZ qui cassait l'init et le bouton de connexion.
 // Debounce 2s avant d'appeler cloudSave (évite les sauvegardes en rafale)
 function scheduleSave(){
   clearTimeout(_saveTimer);
@@ -3266,6 +3370,11 @@ function migrateJobDelivery(j){
   if(!j.labDeliverySlot)j.labDeliverySlot='12';
   j.deliveryDate=j.labDeliveryDate||j.deliveryDate||'';
   if(!j.attachments)j.attachments=[];
+  // Assainit un ancien label patient au suffixe « (N éléments) » dupliqué (bug historique).
+  // Idempotent : réduit toute série de suffixes à un seul.
+  if(typeof j.patient==='string'&&/(\(\d+\s+éléments\))\s*\1?/.test(j.patient)){
+    j.patient=j.patient.replace(/(\s*\(\d+\s+éléments\))(\s*\(\d+\s+éléments\))+/g,'$1').trim();
+  }
 }
 function migrateAllJobsDelivery(){jobs.forEach(migrateJobDelivery);if(typeof queue!=='undefined'&&queue)queue.forEach(migrateJobDelivery);}
 function _jobLabDeliveryDate(j){migrateJobDelivery(j);return j.labDeliveryDate||'';}
@@ -3297,6 +3406,14 @@ function _suggestLabDateFromRequested(iso){
   var d=new Date(requested.getTime());
   d.setDate(d.getDate()-1);
   d=_lastLabOpenDayOnOrBefore(d);
+  // Ne jamais proposer un enlèvement coursier dans le passé : si J-1 est déjà passé
+  // (échéance très proche), proposer le prochain jour ouvré labo >= aujourd'hui.
+  var today=new Date();today.setHours(0,0,0,0);
+  if(d.getTime()<today.getTime()){
+    var cur=new Date(today.getTime()),guard=0;
+    while(!_isLabOpenDay(cur)&&guard<400){cur.setDate(cur.getDate()+1);guard++;}
+    d=cur;
+  }
   return fmtISO(d);
 }
 function _deliveryDeadline(j){
@@ -3967,6 +4084,51 @@ jobs.forEach(migrateJobDelivery);
    §4 — DATE & UTILS
    ══════════════════════════════════════════ */
 function addWD(d,n){const r=new Date(d);let a=0;while(a<n){r.setDate(r.getDate()+1);if(r.getDay()!==0&&r.getDay()!==6)a++;}return r;}
+// Recule de n jours ouvrés (inverse d'addWD)
+function subWD(d,n){const r=new Date(d);let a=0;while(a<n){r.setDate(r.getDate()-1);if(r.getDay()!==0&&r.getDay()!==6)a++;}return r;}
+// Nombre de jours ouvrés entre deux dates (from < to)
+function countWD(from,to){const a=new Date(from);a.setHours(0,0,0,0);const b=new Date(to);b.setHours(0,0,0,0);let n=0;while(a<b){a.setDate(a.getDate()+1);if(a.getDay()!==0&&a.getDay()!==6)n++;}return n;}
+// Construit les étapes planifiées. Si une échéance (deadlineISO) est fournie et laisse la place,
+// on RÉTRO-PLANIFIE pour que la dernière étape tombe au plus tard sur l'échéance (jamais avant
+// aujourd'hui). Sinon, planification « au plus tôt » à partir d'aujourd'hui (comportement initial).
+function _buildScheduledTasks(items,emp,deadlineISO){
+  function buildAt(base){
+    if(items.length===1)return buildTasks(items[0].type,emp,null,base);
+    // Multi-types : on respecte les phases de fabrication (parallèle/enchaînement) via le
+    // décalage en jours ouvrés (wd) calculé par buildMergedStepList, au lieu d'1 étape/jour.
+    const steps=buildMergedStepList(items,emp);
+    return steps.map(function(s){return{label:s.label,tech:s.tech,dueDate:addWD(base,s.wd||1).toISOString(),done:false,sameTechAsLabel:s.sameTechAsLabel};});
+  }
+  const today=new Date();today.setHours(0,0,0,0);
+  let tasks=buildAt(today);
+  if(!tasks.length)return tasks;
+  if(deadlineISO){
+    const deadline=new Date(String(deadlineISO).slice(0,10)+'T00:00:00');
+    if(!isNaN(deadline)&&deadline>today){
+      let maxDue=today;
+      tasks.forEach(function(t){const d=new Date(t.dueDate);d.setHours(0,0,0,0);if(d>maxDue)maxDue=d;});
+      const spanWD=countWD(today,maxDue);
+      const retroBase=subWD(deadline,spanWD);retroBase.setHours(0,0,0,0);
+      if(retroBase>today)tasks=buildAt(retroBase);
+    }
+  }
+  return tasks;
+}
+/* ── Mode de planification : « au plus tôt » (défaut) vs « pour l'échéance » (rétro-planning) ──
+   Préférence mémorisée par appareil. Le rétro-planning (caler les étapes pour finir juste à
+   l'échéance) reste un choix explicite du technicien, jamais imposé par défaut. */
+function _planMode(){try{return localStorage.getItem('lb_plan_mode')==='deadline'?'deadline':'earliest';}catch(e){return 'earliest';}}
+function setPlanMode(m){m=(m==='deadline'?'deadline':'earliest');try{localStorage.setItem('lb_plan_mode',m);}catch(e){}if(typeof _syncPlanModeButtons==='function')_syncPlanModeButtons();if(document.getElementById('af-schedule-wrap')&&typeof _recomputeAcceptSchedule==='function')_recomputeAcceptSchedule();}
+function _syncPlanModeButtons(){var cur=_planMode();document.querySelectorAll('.plan-mode-btn').forEach(function(b){var on=b.getAttribute('data-plan-mode')===cur;b.setAttribute('aria-pressed',on?'true':'false');b.style.background=on?'#2563eb':'#fff';b.style.color=on?'#fff':'#475569';b.style.fontWeight=on?'700':'500';});}
+// Échéance transmise au planificateur : seulement en mode « pour l'échéance » (sinon au plus tôt).
+function _planDeadline(deadlineISO){return _planMode()==='deadline'?(deadlineISO||''):'';}
+function planModeToggleHtml(){
+  function btn(mode,label){var on=_planMode()===mode;return '<button type="button" class="plan-mode-btn" data-plan-mode="'+mode+'" aria-pressed="'+(on?'true':'false')+'" onclick="setPlanMode(\''+mode+'\')" style="border:1.5px solid #cbd5e1;padding:7px 14px;font-size:.85rem;cursor:pointer;background:'+(on?'#2563eb':'#fff')+';color:'+(on?'#fff':'#475569')+';font-weight:'+(on?'700':'500')+';">'+label+'</button>';}
+  return '<div style="margin-bottom:16px;">'
+    +'<label style="font-size:.92rem;font-weight:600;color:#1e293b;display:block;margin-bottom:6px;">Planifier les étapes <span title="« Au plus tôt » : étapes planifiées dès maintenant pour prendre de l\'avance. « Pour l\'échéance » : rétro-planning, les étapes se calent pour finir juste à temps." style="cursor:help;color:#94a3b8;font-weight:400;">ⓘ</span></label>'
+    +'<div style="display:inline-flex;border-radius:8px;overflow:hidden;">'+btn('earliest','Au plus tôt')+btn('deadline',"Pour l'échéance")+'</div>'
+    +'</div>';
+}
 function sameDay(a,b){return new Date(a).toDateString()===new Date(b).toDateString();}
 function fmtL(d){return new Date(d).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}
 function fmtS(d){return new Date(d).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});}
@@ -4031,8 +4193,9 @@ function pick(pool,day,forced){
   const allValid=Object.keys(TECHS||{});
   const effectivePool=validInPool.length?validInPool:allValid;
   if(!effectivePool.length)return forced||'auto';
-  const avail=effectivePool.filter(function(t){return !isTechAbsent(t,new Date(day));});
-  const active=avail.length?avail:effectivePool;
+  const avail=effectivePool.filter(function(t){return !isTechUnavailableForAuto(t,new Date(day));});
+  if(!avail.length)return forced||'auto';
+  const active=avail;
   const ds=new Date(day).toDateString();
   const c={};active.forEach(function(t){c[t]=0;});
   jobs.forEach(function(j){(j.tasks||[]).forEach(function(t){if(active.indexOf(t.tech)>=0&&new Date(t.dueDate).toDateString()===ds)c[t.tech]=(c[t.tech]||0)+1;});});
@@ -4089,6 +4252,8 @@ function buildTasks(type,emp,forced,startDate){
         techKey=TECHS[step.tech]?step.tech:(allTechKeys.length?pick(allTechKeys,d,forced):'auto');
       }
       push(step.label,techKey,d);
+      // Porter le lien « même technicien que » sur la tâche (survit au merge / aux optimisations).
+      if(step.sameAs!==null&&step.sameAs!==undefined&&tasks[step.sameAs]){tasks[tasks.length-1].sameTechAsLabel=tasks[step.sameAs].label;}
     });
     return tasks;
   }
@@ -4165,6 +4330,7 @@ function buildTasks(type,emp,forced,startDate){
           techKey=step.tech;
         }
         push(step.label||'Étape',techKey,d);
+        if(step.sameAs!==null&&step.sameAs!==undefined&&tasks[step.sameAs]){tasks[tasks.length-1].sameTechAsLabel=tasks[step.sameAs].label;}
       });
     }
   }
@@ -4235,7 +4401,13 @@ function confirmDeleteJob(id,opts){
   if(!job){showToast('Travail introuvable','#c0392b');return false;}
   const label=job.patient||job.trackCode||id;
   if(!confirm('Supprimer définitivement le travail "'+label+'" ?\n\nCette suppression sera synchronisée et ne reviendra pas depuis le cloud.'))return false;
+  // Si ce travail provient d'une fiche cabinet, prévenir le praticien : l'étape du cas
+  // passe à « Annulé par le labo » côté portail (les autres étapes/fiches du cas restent).
+  var _cancelOrd={portalId:job.orderPortalId,caseId:job.orderId,stepId:job.orderStepId};
   delJob(id);
+  if(_cancelOrd.portalId&&_cancelOrd.caseId&&_cancelOrd.stepId&&typeof _markStepCancelled==='function'){
+    _markStepCancelled(_cancelOrd.portalId,_cancelOrd.caseId,_cancelOrd.stepId,'Travail annulé par le laboratoire');
+  }
   const sr=document.getElementById('search-results');if(sr)sr.style.display='none';
   const gs=document.getElementById('global-search');if(gs)gs.value='';
   if(opts.closeDetail){
@@ -4578,7 +4750,7 @@ function renderDashboard(){
           '</div>';
         }).join('');
         return '<div style="padding:8px 0;border-top:1px solid var(--border-soft);">'+
-          '<div style="font-size:.82rem;color:var(--ink);margin-bottom:2px;"><strong>'+escH(j.patient||'')+'</strong> · <span style="color:var(--ink-soft);">'+escH(typeLbl)+'</span></div>'+
+          '<div style="font-size:.82rem;color:var(--ink);margin-bottom:2px;"><strong>'+escH(formatJobPatientLabel(j))+'</strong> · <span style="color:var(--ink-soft);">'+escH(typeLbl)+'</span></div>'+
           subItems+
         '</div>';
       }).join('');
@@ -4753,7 +4925,12 @@ function _renderPendingStepsHTML(allPendingSteps){
       // Bandeau "cas" en haut
       '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:.74rem;color:#1e40af;">'+
         '📋 Étape '+(stepIdx+1)+(totalSteps>1?' / '+totalSteps:'')+' du cas : <strong>'+escH2(c.finalGoal||'(sans objectif)')+'</strong>'+
-        (!isFirstStep?' · '+stepIdx+' étape'+(stepIdx>1?'s':'')+' déjà livrée'+(stepIdx>1?'s':''):'')+
+        (function(){
+          // Compter les étapes RÉELLEMENT livrées avant celle-ci (statut 'delivered'),
+          // au lieu de supposer que toute étape antérieure est livrée d'après sa position.
+          var deliveredBefore=(c.steps||[]).slice(0,stepIdx).filter(function(ps){return ps&&ps.status==='delivered';}).length;
+          return deliveredBefore>0?' · '+deliveredBefore+' étape'+(deliveredBefore>1?'s':'')+' déjà livrée'+(deliveredBefore>1?'s':''):'';
+        })()+
       '</div>'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">'+
         '<div style="flex:1;min-width:0;">'+
@@ -5170,8 +5347,126 @@ function _readSaisieTeethFields(){
   return {teeth:[],links:[]};
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   IMPORT D'UNE FICHE SCANNÉE → EXTRACTION & REMPLISSAGE PAR L'IA (vision)
+   + support : détecte les infos manquantes et les contradictions de la fiche.
+   ══════════════════════════════════════════════════════════════════════════ */
+function _openScanImport(){var f=document.getElementById('scan-import-file');if(f)f.click();}
+function _scanPanel(html){var el=document.getElementById('saisie-scan-panel');if(el)el.innerHTML=html||'';}
+function _fileToCompressedImage(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(){
+      var img=new Image();
+      img.onload=function(){
+        try{
+          var max=1600,w=img.width,h=img.height;
+          if(w>max||h>max){var s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}
+          var c=document.createElement('canvas');c.width=w;c.height=h;
+          c.getContext('2d').drawImage(img,0,0,w,h);
+          var url=c.toDataURL('image/jpeg',0.85);
+          resolve({data:url.split(',')[1],media:'image/jpeg'});
+        }catch(e){reject(e);}
+      };
+      img.onerror=function(){reject(new Error('Image illisible'));};
+      img.src=reader.result;
+    };
+    reader.onerror=function(){reject(new Error('Lecture du fichier échouée'));};
+    reader.readAsDataURL(file);
+  });
+}
+function _fileToBase64(file){
+  return new Promise(function(resolve,reject){
+    var r=new FileReader();
+    r.onload=function(){resolve(String(r.result).split(',')[1]);};
+    r.onerror=function(){reject(new Error('Lecture échouée'));};
+    r.readAsDataURL(file);
+  });
+}
+async function _handleScanFile(file){
+  if(!file)return;
+  _scanPanel('<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px 12px;font-size:.84rem;color:#6b21a8;">🔍 L\'IA analyse la fiche…</div>');
+  try{
+    var src,isPdf=/pdf/i.test(file.type)||/\.pdf$/i.test(file.name||'');
+    if(isPdf){
+      if(file.size>4*1024*1024){_scanPanel('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#9a3412;">⚠️ PDF trop lourd (max ~4 Mo). Prenez plutôt une photo de la fiche.</div>');return;}
+      src={data:await _fileToBase64(file),media:'application/pdf',kind:'document'};
+    }else if(/^image\//i.test(file.type)){
+      var im=await _fileToCompressedImage(file);src={data:im.data,media:im.media,kind:'image'};
+    }else{_scanPanel('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#9a3412;">⚠️ Format non supporté. Utilisez une photo (JPG/PNG) ou un PDF.</div>');return;}
+    var out=await _aiExtractFromScan(src);
+    _applyScanToForm(out);
+  }catch(e){
+    _scanPanel('<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#9a3412;">⚠️ Échec de l\'analyse ('+escH2(e.message||'erreur')+'). Remplissez le formulaire manuellement.</div>');
+  }
+}
+async function _aiExtractFromScan(src){
+  var types=_getAllJobTypeOptions();
+  var typesList=types.map(function(t){return t.id+' | '+t.label;}).join('\n');
+  var cabList=(typeof cabinets!=='undefined'?cabinets:[]).map(function(c){return c.id+' | '+c.name;}).join('\n')||'(aucun cabinet)';
+  var contentBlock=src.kind==='document'
+    ? {type:'document',source:{type:'base64',media_type:src.media,data:src.data}}
+    : {type:'image',source:{type:'base64',media_type:src.media,data:src.data}};
+  var instructions='Analyse cette FICHE DE TRAVAIL de laboratoire dentaire (scan/photo) et extrais les informations pour pré-remplir un formulaire.\n'+
+    'TYPES DISPONIBLES (id | libellé) :\n'+typesList+'\n\nCABINETS (id | nom) :\n'+cabList+'\n\n'+
+    'Extrais : code patient (anonyme — si un NOM complet figure, propose plutôt des initiales/un code, jamais le nom complet, RGPD), sexe ("M"/"F"/null), nb d\'éléments, type principal (un id EXISTANT), types supplémentaires (ids existants), dents en notation FDI (tableau de nombres 11-48), solidarisations (paires [a,b]), teinte, date demandée ("YYYY-MM-DD" ou null), cabinet (id EXISTANT correspondant au nom lu sinon null), note/instructions.\n'+
+    'RÈGLE NOTATION DENTAIRE FDI (IMPÉRATIVE) : chaque dent = 2 chiffres ; 1er chiffre = quadrant (1 haut-droite, 2 haut-gauche, 3 bas-gauche, 4 bas-droite), 2e = position depuis la ligne médiane (1 incisive centrale → 8 dent de sagesse). L\'ORDRE le long de l\'arcade N\'EST PAS l\'ordre numérique. Arcade SUPÉRIEURE dans l\'ordre : 18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28. Arcade INFÉRIEURE : 48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38. Un « bridge de X à Y » = TOUTES les dents entre X et Y EN SUIVANT CET ORDRE D\'ARCADE (en traversant la ligne médiane si besoin), JAMAIS une plage numérique. EXEMPLE : « bridge de 13 à 23 » = 13,12,11,21,22,23 → 6 éléments (et NON 13..23 = 11). nb d\'éléments d\'un bridge = nombre de dents ainsi énumérées ; solidarisations = chaque paire de dents CONSÉCUTIVES dans cet ordre.\n'+
+    'Sois un VRAI SUPPORT : dans "missing", liste les infos importantes ABSENTES ou illisibles ; dans "contradictions", les incohérences (ex. type bridge mais une seule dent ; teinte notée deux fois différemment ; dent hors de la zone du type ; nb d\'éléments ≠ nombre de dents).\n'+
+    'N\'invente JAMAIS d\'id de type ou de cabinet : sans correspondance sûre, mets null et signale-le dans "missing".\n'+
+    'Réponds en JSON pur, sans markdown : {"patient":"","sexe":null,"age":null,"nb":1,"type":null,"extraTypes":[],"teeth":[],"links":[],"teinte":"","date":null,"cabinet":null,"note":"","missing":[],"contradictions":[],"confidence":"high|medium|low"} (age = nombre d\'années ou null)';
+  var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:_aiApiHeaders(),body:JSON.stringify({
+    model:'claude-sonnet-4-6',max_tokens:1500,
+    system:'Tu extrais des données structurées d\'une fiche de laboratoire dentaire scannée et tu détectes les manques et incohérences pour assister la personne qui saisit. Réponds UNIQUEMENT en JSON valide, sans markdown.',
+    messages:[{role:'user',content:[contentBlock,{type:'text',text:instructions}]}]
+  })});
+  var data=await resp.json();
+  if(!data||!data.content||!data.content[0])throw new Error(data&&data.error&&data.error.message?data.error.message:'réponse IA invalide');
+  var raw=(data.content[0].text||'{}').replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+  return JSON.parse(raw);
+}
+function _applyScanToForm(o){
+  if(!o||typeof o!=='object'){_scanPanel('<div style="font-size:.82rem;color:#9a3412;">⚠️ Réponse vide.</div>');return;}
+  var types=_getAllJobTypeOptions(),validType={};types.forEach(function(t){validType[t.id]=t;});
+  var setVal=function(id,v){var el=document.getElementById(id);if(el&&v!=null&&v!=='')el.value=v;};
+  setVal('saisie-ip',o.patient);
+  var m=document.getElementById('saisie-isex-m'),f=document.getElementById('saisie-isex-f');
+  var sx=String(o.sexe||'');
+  if(m&&f){m.checked=(sx==='M'||sx==='m'||/homme/i.test(sx));f.checked=(sx==='F'||sx==='f'||/femme/i.test(sx));}
+  if(o.age!=null&&o.age!==''){var ageEl=document.getElementById('saisie-iage');if(ageEl)ageEl.value=parseInt(o.age)||'';}
+  var typeKnown=o.type&&validType[o.type];
+  if(typeKnown){var sel=document.getElementById('saisie-it');if(sel)sel.value=o.type;}
+  if(o.nb){var nb=document.getElementById('saisie-inb');if(nb)nb.value=Math.max(1,parseInt(o.nb)||1);}
+  try{
+    if(typeof initSaisieTeethSection==='function')initSaisieTeethSection();
+    var teeth=(o.teeth||[]).map(Number).filter(function(n){return n>=11&&n<=48;});
+    var links=(o.links||[]).filter(function(p){return Array.isArray(p)&&p.length===2;});
+    if(typeof _initLabTeethPick==='function')_initLabTeethPick(teeth,links,'saisie-tooth-chart','saisie-tooth-summary');
+    // Sécurité bridge : le nombre d'éléments = nombre de dents de la travée (évite le faux comptage type « 13 à 23 = 11 »).
+    if(typeKnown&&/bridge/.test(o.type)&&teeth.length>=2){var nbB=document.getElementById('saisie-inb');if(nbB)nbB.value=teeth.length;}
+  }catch(e){console.warn('teeth fill',e);}
+  var noteParts=[];if(o.teinte)noteParts.push('Teinte '+o.teinte);if(o.note)noteParts.push(o.note);
+  if(noteParts.length)setVal('saisie-inote',noteParts.join(' · '));
+  if(o.date&&/^\d{4}-\d{2}-\d{2}$/.test(o.date)){setVal('saisie-ireq-delivery',o.date);if(typeof onSaisieRequestedDateChange==='function')onSaisieRequestedDateChange();}
+  if(o.cabinet&&(typeof cabinets!=='undefined')&&cabinets.some(function(c){return c.id===o.cabinet;})){var cab=document.getElementById('saisie-icab');if(cab)cab.value=o.cabinet;}
+  // ── Panneau de support ──
+  var missing=(o.missing||[]).filter(Boolean);
+  var contras=(o.contradictions||[]).filter(Boolean);
+  var extraTypes=(o.extraTypes||[]).filter(function(t){return t&&validType[t]&&t!==o.type;}).map(function(t){return validType[t].label;});
+  var typeUnknown=o.type&&!validType[o.type];
+  var conf=o.confidence==='low'?' <span style="color:#b45309;">(confiance faible — vérifiez tout)</span>':(o.confidence==='medium'?' <span style="color:#b45309;">(à vérifier)</span>':'');
+  var html='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">'+
+    '<div style="font-size:.84rem;font-weight:600;color:#166534;margin-bottom:6px;">✅ Fiche analysée par l\'IA — vérifiez et ajustez avant d\'ajouter.'+conf+'</div>';
+  if(extraTypes.length)html+='<div style="font-size:.8rem;color:#1e293b;margin-bottom:4px;">🧩 Types supplémentaires détectés : <strong>'+extraTypes.map(escH2).join(', ')+'</strong> — ajoutez-les via « + Autre type ».</div>';
+  if(typeUnknown)html+='<div style="font-size:.8rem;color:#9a3412;margin-bottom:4px;">⚠️ Type lu non reconnu — choisissez-le manuellement.</div>';
+  if(missing.length)html+='<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 10px;margin-top:6px;"><div style="font-size:.78rem;font-weight:700;color:#9a3412;margin-bottom:3px;">❓ Informations manquantes</div>'+missing.map(function(x){return '<div style="font-size:.78rem;color:#9a3412;">• '+escH2(x)+'</div>';}).join('')+'</div>';
+  if(contras.length)html+='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 10px;margin-top:6px;"><div style="font-size:.78rem;font-weight:700;color:#b91c1c;margin-bottom:3px;">⚠️ Contradictions à vérifier</div>'+contras.map(function(x){return '<div style="font-size:.78rem;color:#b91c1c;">• '+escH2(x)+'</div>';}).join('')+'</div>';
+  if(!missing.length&&!contras.length&&!typeUnknown)html+='<div style="font-size:.78rem;color:#166534;">Aucun manque ni contradiction détecté. 👍</div>';
+  html+='</div>';
+  _scanPanel(html);
+}
+
 // État éphémère du formulaire d'acceptation (côté droit de la modale)
-let _acceptForm={portalId:null,caseId:null,stepId:null,patient:'',requestedDeliveryDate:'',labDeliveryDate:'',labDeliverySlot:'12',deliveryDate:'',urgent:false,items:[],note:''};
+let _acceptForm={portalId:null,caseId:null,stepId:null,patient:'',requestedDeliveryDate:'',labDeliveryDate:'',labDeliverySlot:'12',deliveryDate:'',urgent:false,items:[],note:'',plannedTasks:null,scheduleEdited:false};
 
 /* ── FICHE STYLE PAPIER ──────────────────────────────────────
    Présentation épurée d'une étape comme sur une vraie feuille :
@@ -5232,7 +5527,8 @@ function viewOrder(portalId,caseId,stepId){
     deliveryDate:_suggestLabDateFromRequested(step.deliveryDate||'')||step.deliveryDate||'',
     urgent:false,
     items:[],
-    note:_buildAutoNoteFromCaseStep(c,step)
+    note:_buildAutoNoteFromCaseStep(c,step),
+    plannedTasks:null,scheduleEdited:false,_typesAutoTried:false
   };
   _viewOrderState={portalId:portalId,caseId:caseId,stepId:step.id,viewStep:1};
 
@@ -5334,20 +5630,27 @@ function _renderViewOrderStep2(overlay,c,cab,step){
         '</div>'+
         '<div style="display:grid;grid-template-columns:'+(progOn?'1fr 1fr':'1fr')+';gap:14px;margin-bottom:16px;">'+
           '<div><label style="font-size:.92rem;font-weight:600;color:#1e293b;display:block;margin-bottom:6px;">Date labo (enlèvement coursier)</label>'+
-            '<input type="date" id="af-lab-delivery" value="'+escH2(_acceptForm.labDeliveryDate)+'" oninput="_acceptForm.labDeliveryDate=this.value;_acceptForm.deliveryDate=this.value" style="width:100%;border:1.5px solid #cbd5e1;border-radius:8px;padding:11px 13px;font-size:1rem;outline:none;"/></div>'+
+            '<input type="date" id="af-lab-delivery" value="'+escH2(_acceptForm.labDeliveryDate)+'" oninput="_acceptForm.labDeliveryDate=this.value;_acceptForm.deliveryDate=this.value;if(typeof _recomputeAcceptSchedule===\'function\')_recomputeAcceptSchedule()" style="width:100%;border:1.5px solid #cbd5e1;border-radius:8px;padding:11px 13px;font-size:1rem;outline:none;"/></div>'+
           (progOn?
           '<div><label style="font-size:.92rem;font-weight:600;color:#1e293b;display:block;margin-bottom:6px;">Créneau coursier</label>'+
             '<select id="af-delivery-slot" onchange="_acceptForm.labDeliverySlot=this.value" style="width:100%;border:1.5px solid #cbd5e1;border-radius:8px;padding:11px 13px;font-size:1rem;">'+_deliverySlotOptionsHtml(_acceptForm.labDeliverySlot)+'</select></div>':'')+
         '</div>'+
+        (progOn?planModeToggleHtml():'')+
         '<label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:.96rem;margin-bottom:20px;color:#dc2626;font-weight:600;"><input type="checkbox" id="af-urgent"'+(_acceptForm.urgent?' checked':'')+' onchange="_acceptForm.urgent=this.checked"/>Travail urgent</label>'+
         '<div style="margin-bottom:20px;">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap;">'+
             '<label style="font-size:.92rem;font-weight:600;color:#1e293b;">Types de travaux</label>'+
-            '<button type="button" onclick="addAcceptItem()" style="background:#dbeafe;color:#1d4ed8;border:1px solid #3b82f6;border-radius:6px;padding:6px 14px;font-size:.86rem;font-weight:600;cursor:pointer;">+ Ajouter une ligne</button>'+
+            '<div style="display:flex;gap:6px;">'+
+              '<button type="button" onclick="_autoFillTypesFromRequest(true)" title="Laisser l\'IA déduire les types depuis la demande du cabinet" style="background:#ede9fe;color:#6b21a8;border:1px solid #c4b5fd;border-radius:6px;padding:6px 12px;font-size:.82rem;font-weight:600;cursor:pointer;">✨ Détecter depuis la demande</button>'+
+              '<button type="button" onclick="addAcceptItem()" style="background:#dbeafe;color:#1d4ed8;border:1px solid #3b82f6;border-radius:6px;padding:6px 14px;font-size:.86rem;font-weight:600;cursor:pointer;">+ Ajouter une ligne</button>'+
+            '</div>'+
           '</div>'+
+          '<div id="af-types-alert"></div>'+
           '<div id="af-items-list" style="display:flex;flex-direction:column;gap:8px;"></div>'+
           '<div id="af-price-summary" style="margin-top:10px;font-size:.92rem;color:#475569;"></div>'+
         '</div>'+
+        // Aperçu éditable de la programmation (uniquement si le planning atelier est actif)
+        (progOn?'<div id="af-schedule-wrap" style="margin-bottom:20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;"></div>':'')+
         '<div style="margin-bottom:16px;">'+
           '<label style="font-size:.92rem;font-weight:600;color:#1e293b;display:block;margin-bottom:6px;">Note pour la fiche du travail</label>'+
           '<textarea id="af-note" oninput="_acceptForm.note=this.value" style="width:100%;border:1.5px solid #cbd5e1;border-radius:8px;padding:11px 13px;font-size:.94rem;outline:none;min-height:140px;resize:vertical;font-family:Inter,sans-serif;line-height:1.5;">'+escH2(_acceptForm.note)+'</textarea>'+
@@ -5361,8 +5664,11 @@ function _renderViewOrderStep2(overlay,c,cab,step){
     '</div>';
 
   // Initialiser le formulaire
-  if(!_acceptForm.items.length)addAcceptItem(true);
-  else renderAcceptItems();
+  if(!_acceptForm.items.length){
+    addAcceptItem(true);
+    // Auto-détection IA des types depuis la demande du cabinet (non bloquant ; 1 seule fois).
+    if(!_acceptForm._typesAutoTried&&typeof _autoFillTypesFromRequest==='function')_autoFillTypesFromRequest(false);
+  } else renderAcceptItems();
 }
 
 // Regroupe les dents connectées via union-find
@@ -5454,15 +5760,26 @@ function renderAcceptItems(){
     const tarif=_findTarif(item.type);
     const prixDef=tarif?tarif.prix:0;
     const prixTotal=prixDef*(item.nb||1);
-    return '<div style="display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:6px 8px;">'+
-      '<select onchange="_acceptForm.items['+i+'].type=this.value;renderAcceptItems()" style="flex:1;min-width:0;border:1px solid #e2e8f0;border-radius:5px;padding:5px 7px;font-size:.82rem;outline:none;background:#fff;">'+
+    const none=!item.type;
+    const medium=item.conf==='medium';
+    const border=(none||medium)?'#f59e0b':'#e2e8f0';
+    const bg=(none||medium)?'#fffbeb':'#fff';
+    const placeholder=none?'<option value="" selected>— à choisir —</option>':'';
+    const badge=none
+      ? '<span title="Type non reconnu par l\'IA — choisissez-le" style="font-size:.66rem;color:#b45309;background:#fef3c7;border:1px solid #fde68a;border-radius:5px;padding:1px 6px;white-space:nowrap;">⚠️ à choisir</span>'
+      : (medium?'<span title="'+escH2(item.reason||'Proposition IA — à vérifier')+'" style="font-size:.66rem;color:#b45309;background:#fef3c7;border:1px solid #fde68a;border-radius:5px;padding:1px 6px;white-space:nowrap;">🟠 à vérifier</span>':'');
+    return '<div style="display:flex;gap:6px;align-items:center;background:'+bg+';border:1px solid '+border+';border-radius:7px;padding:6px 8px;">'+
+      '<select onchange="_acceptForm.items['+i+'].type=this.value;_acceptForm.items['+i+'].conf=\'ok\';renderAcceptItems()" style="flex:1;min-width:0;border:1px solid #e2e8f0;border-radius:5px;padding:5px 7px;font-size:.82rem;outline:none;background:#fff;">'+
+        placeholder+
         types.map(function(t){return '<option value="'+escH2(t.id)+'"'+(t.id===item.type?' selected':'')+'>'+escH2(t.label)+'</option>';}).join('')+
       '</select>'+
-      '<input type="number" min="1" max="50" value="'+(item.nb||1)+'" onchange="_acceptForm.items['+i+'].nb=parseInt(this.value)||1;renderAcceptItems()" style="width:54px;border:1px solid #e2e8f0;border-radius:5px;padding:5px 7px;font-size:.82rem;outline:none;text-align:center;"/>'+
-      '<div style="width:90px;text-align:right;font-size:.78rem;color:'+(prixDef?'#2563eb':'#cbd5e1')+';font-family:monospace;">'+(prixDef?(prixTotal.toFixed(2)+' €'):'— €')+'</div>'+
+      (badge?'<div style="flex-shrink:0;">'+badge+'</div>':'')+
+      '<input type="number" min="1" max="50" value="'+(item.nb||1)+'" onchange="_acceptForm.items['+i+'].nb=parseInt(this.value)||1;renderAcceptItems()" style="width:50px;border:1px solid #e2e8f0;border-radius:5px;padding:5px 7px;font-size:.82rem;outline:none;text-align:center;"/>'+
+      '<div style="width:78px;text-align:right;font-size:.78rem;color:'+(prixDef?'#2563eb':'#cbd5e1')+';font-family:monospace;">'+(prixDef?(prixTotal.toFixed(2)+' €'):'— €')+'</div>'+
       (_acceptForm.items.length>1?'<button type="button" onclick="removeAcceptItem('+i+')" style="background:none;border:none;color:#c0392b;font-size:1rem;cursor:pointer;padding:2px 6px;">×</button>':'<div style="width:24px;"></div>')+
     '</div>';
   }).join('');
+  if(typeof _renderTypesAlert==='function')_renderTypesAlert();
   // Récap prix
   const sum=_acceptForm.items.reduce(function(s,it){const t=_findTarif(it.type);return s+(t?t.prix:0)*(it.nb||1);},0);
   const summary=document.getElementById('af-price-summary');
@@ -5470,6 +5787,416 @@ function renderAcceptItems(){
     const missing=_acceptForm.items.some(function(it){return !_findTarif(it.type);});
     summary.innerHTML='<strong style="color:#2563eb;">Prix estimé total : '+sum.toFixed(2)+' €</strong>'+(missing?' <span style="color:#c2410c;">⚠️ Certains types n\'ont pas de tarif défini — ajoutez-les dans Paramètres → Tarifs</span>':'');
   }
+  // Un changement de types/quantité modifie structurellement la programmation → on la recalcule.
+  if(typeof _recomputeAcceptSchedule==='function')_recomputeAcceptSchedule();
+}
+
+/* ── AUTO-REMPLISSAGE DES TYPES depuis la demande du cabinet (IA) ──────────────
+   But : que le technicien n'ait, 99% du temps, qu'à accepter. L'IA lit la demande
+   et propose les types. Confiance : sûr = normal, hésitation = orange « à vérifier »,
+   non reconnu = ligne « à choisir » + alerte (jamais d'invention de type). */
+function _renderTypesAlert(){
+  var el=document.getElementById('af-types-alert');if(!el)return;
+  var html='';
+  if(_acceptForm._typesStatus==='loading'){
+    html='<div style="font-size:.8rem;color:#6b21a8;background:#faf5ff;border:1px solid #e9d5ff;border-radius:7px;padding:7px 10px;margin-bottom:8px;">✨ L\'IA analyse la demande du cabinet…</div>';
+  } else {
+    var unm=_acceptForm._typesUnmatched||[];
+    var hasMedium=(_acceptForm.items||[]).some(function(it){return it.conf==='medium';});
+    var hasNone=(_acceptForm.items||[]).some(function(it){return !it.type;});
+    if(unm.length||hasNone){
+      html='<div style="font-size:.8rem;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:8px 10px;margin-bottom:8px;">⚠️ '+
+        (unm.length?'L\'IA n\'a pas reconnu : <strong>'+unm.map(escH2).join(', ')+'</strong>. ':'')+
+        'Complétez les lignes « à choisir » vous-même'+(unm.length?' (ou créez le type dans Réglages → Programmation)':'')+'.</div>';
+    } else if(hasMedium){
+      html='<div style="font-size:.8rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:8px 10px;margin-bottom:8px;">🟠 Types proposés par l\'IA — vérifiez les lignes orange « à vérifier ».</div>';
+    } else if(_acceptForm._typesStatus==='ok'){
+      html='<div style="font-size:.78rem;color:#6b21a8;background:#ede9fe;border:1px solid #c4b5fd;border-radius:7px;padding:7px 10px;margin-bottom:8px;">🤖 Travail proposé par l\'IA depuis la demande du cabinet — <strong>contrôle nécessaire</strong> avant de créer.</div>';
+    } else if(_acceptForm._typesStatus==='error'){
+      html='<div style="font-size:.78rem;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:7px 10px;margin-bottom:8px;">⚠️ Détection IA indisponible — choisissez les types manuellement.</div>';
+    }
+  }
+  el.innerHTML=html;
+}
+async function _aiSuggestTypes(){
+  var types=_getAllJobTypeOptions();
+  var typesList=types.map(function(t){return t.id+' | '+t.label;}).join('\n');
+  var teeth='';try{var c=_findOrder(_acceptForm.portalId,_acceptForm.caseId);if(c)teeth=(c.teeth||[]).join(', ');}catch(e){}
+  var req=_acceptForm.note||'';
+  var prompt='TYPES DE TRAVAIL DISPONIBLES DANS CE LABO (id | libellé) :\n'+typesList+'\n\n'+
+    'DEMANDE DU CABINET :\n'+req+'\nDents concernées : '+(teeth||'?')+'\n\n'+
+    'Déduis les types de prothèse à fabriquer (concentre-toi sur l\'objectif final / les éléments demandés — PAS sur l\'étape de production comme « finition »). '+
+    'Associe chaque élément à un type DISPONIBLE ci-dessus. Règles strictes : '+
+    'un type correspond clairement → "high" ; tu penses mais sans certitude → "medium" ; '+
+    'un élément n\'a AUCUN type correspondant → NE l\'invente PAS, mets son nom dans "unmatched". '+
+    'N\'utilise QUE des id existants. Réponds en JSON pur, sans markdown : '+
+    '{"items":[{"type":"<id existant>","nb":1,"confidence":"high|medium","reason":"court"}],"unmatched":["<terme non reconnu>"]}';
+  var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:_aiApiHeaders(),body:JSON.stringify({
+    model:'claude-sonnet-4-6',max_tokens:900,
+    system:'Tu associes la demande d\'un cabinet dentaire aux types de travaux configurés dans un laboratoire de prothèse. Tu n\'inventes JAMAIS d\'identifiant de type. Réponds UNIQUEMENT en JSON valide, sans markdown.',
+    messages:[{role:'user',content:prompt}]
+  })});
+  var data=await resp.json();
+  if(!data||!data.content||!data.content[0])throw new Error(data&&data.error&&data.error.message?data.error.message:'réponse IA invalide');
+  var raw=(data.content[0].text||'{}').replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+  return JSON.parse(raw);
+}
+// Repli hors-ligne : association par mots-clés du libellé (confiance moyenne = orange).
+function _deterministicTypeGuess(){
+  var req=_normTxt(_acceptForm.note||'');if(!req)return [];
+  var found=[],seen={};
+  _getAllJobTypeOptions().forEach(function(t){
+    var words=_normTxt(t.label).split(/[^a-z0-9]+/).filter(function(w){return w.length>=4;});
+    if(words.some(function(w){return req.indexOf(w)>=0;})&&!seen[t.id]){seen[t.id]=1;found.push({type:t.id,nb:1,conf:'medium'});}
+  });
+  return found;
+}
+async function _autoFillTypesFromRequest(force){
+  if(_acceptForm._typesAutoTried&&!force)return;
+  _acceptForm._typesAutoTried=true;
+  var validIds={};_getAllJobTypeOptions().forEach(function(t){validIds[t.id]=t;});
+  _acceptForm._typesStatus='loading';_acceptForm._typesUnmatched=[];_renderTypesAlert();
+  try{
+    var out=await _aiSuggestTypes();
+    var items=[],unmatched=(out.unmatched||[]).filter(Boolean);
+    (out.items||[]).forEach(function(it){
+      if(it&&it.type&&validIds[it.type])items.push({type:it.type,nb:Math.max(1,parseInt(it.nb)||1),conf:(it.confidence==='high'?'ok':'medium'),reason:it.reason||''});
+      else if(it)unmatched.push(it.label||it.type||'élément');
+    });
+    unmatched.forEach(function(){items.push({type:'',nb:1,conf:'none'});});
+    if(!items.length)items.push({type:'',nb:1,conf:'none'});
+    _acceptForm.items=items;_acceptForm._typesUnmatched=unmatched;_acceptForm._typesStatus='ok';
+    renderAcceptItems();
+  }catch(e){
+    var g=[];try{g=_deterministicTypeGuess();}catch(_){}
+    if(g.length){_acceptForm.items=g;_acceptForm._typesStatus='ok';_acceptForm._typesUnmatched=[];}
+    else{_acceptForm._typesStatus='error';}
+    renderAcceptItems();
+  }
+}
+
+/* ── APERÇU DE LA PROGRAMMATION dans la modale d'acceptation ───────────────────
+   Affiche, avant validation, COMMENT le travail sera programmé (mêmes étapes/dates/
+   techniciens que « Travaux en cours »), et permet de les ajuster. Recalculé en
+   direct quand on change les types, le mode de planification ou la date labo. */
+function _recomputeAcceptSchedule(){
+  try{
+    var progOn=typeof isProgActif==='function'&&isProgActif();
+    if(!progOn){_acceptForm.plannedTasks=null;_renderAcceptSchedule();return;}
+    var validItems=(_acceptForm.items||[]).filter(function(it){return it.type;});
+    if(!validItems.length||typeof _buildScheduledTasks!=='function'){_acceptForm.plannedTasks=[];_renderAcceptSchedule();return;}
+    var deadline=(typeof _planDeadline==='function')?_planDeadline(_acceptForm.labDeliveryDate||_acceptForm.requestedDeliveryDate||''):'';
+    var sched=_buildScheduledTasks(validItems.map(function(it){return{type:it.type,nb:it.nb||1};}),false,deadline)||[];
+    _acceptForm.plannedTasks=sched.map(function(t){return{label:t.label,tech:t.tech,dueDate:t.dueDate,sameTechAsLabel:t.sameTechAsLabel};});
+    _enforceTechLinks(_acceptForm.plannedTasks);
+    _acceptForm.scheduleEdited=false;
+    _renderAcceptSchedule();
+  }catch(e){console.warn('recomputeAcceptSchedule',e);}
+}
+function _setAcceptStepField(i,field,val){
+  if(!_acceptForm.plannedTasks||!_acceptForm.plannedTasks[i])return;
+  if(field==='dueDate'){var d=new Date(val+'T12:00:00');if(!isNaN(d.getTime()))_acceptForm.plannedTasks[i].dueDate=d.toISOString();}
+  else _acceptForm.plannedTasks[i][field]=val;
+  // Apprentissage : un changement manuel de technicien est un signal fort de préférence du labo.
+  if(field==='tech'){
+    if(typeof _propagateTechFromSource==='function')_propagateTechFromSource(_acceptForm.plannedTasks,_acceptForm.plannedTasks[i].label);
+    if(typeof _recordScheduleToProfile==='function')_recordScheduleToProfile([_acceptForm.plannedTasks[i]],{weight:3});
+  }
+  _acceptForm.scheduleEdited=true;
+  _renderAcceptSchedule();
+}
+function _renderAcceptSchedule(){
+  var wrap=document.getElementById('af-schedule-wrap');if(!wrap)return;
+  var tasks=_acceptForm.plannedTasks||[];
+  var techKeys=Object.keys(TECHS||{});
+  var wd=['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
+  var rows=!tasks.length
+    ? '<div style="font-size:.84rem;color:#94a3b8;font-style:italic;padding:6px 0;">Aucune étape planifiée (choisissez un type de travail).</div>'
+    : tasks.map(function(t,i){
+        var d=new Date(t.dueDate);var iso=isNaN(d.getTime())?'':fmtISO(d);
+        var techOpts=techKeys.length
+          ? techKeys.map(function(k){return '<option value="'+escH2(k)+'"'+(k===t.tech?' selected':'')+'>'+escH2((TECHS[k]&&TECHS[k].label)||k)+'</option>';}).join('')
+          : '<option value="'+escH2(t.tech||'')+'" selected>'+escH2(t.tech||'auto')+'</option>';
+        var dot=(TECHS[t.tech]&&TECHS[t.tech].color)||'#94a3b8';
+        return '<div style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:7px 9px;">'+
+          '<div style="width:9px;height:9px;border-radius:50%;background:'+dot+';flex-shrink:0;"></div>'+
+          '<div style="flex:1;min-width:0;font-size:.85rem;color:#1e293b;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(i+1)+'. '+escH2(t.label)+(t.sameTechAsLabel?' <span title="Même technicien que : '+escH2(t.sameTechAsLabel)+' (réglage du type)" style="color:#2563eb;font-size:.8rem;">🔗</span>':'')+'</div>'+
+          '<input type="date" value="'+iso+'" onchange="_setAcceptStepField('+i+',\'dueDate\',this.value)" title="Date prévue de l\'étape" style="border:1px solid #cbd5e1;border-radius:5px;padding:4px 7px;font-size:.78rem;outline:none;"/>'+
+          '<select onchange="_setAcceptStepField('+i+',\'tech\',this.value)" title="Technicien" style="border:1px solid #cbd5e1;border-radius:5px;padding:4px 7px;font-size:.78rem;outline:none;background:#fff;max-width:118px;">'+techOpts+'</select>'+
+        '</div>';
+      }).join('');
+  var span='';
+  if(tasks.length){var ds=tasks.map(function(t){return new Date(t.dueDate);}).filter(function(d){return !isNaN(d.getTime());});if(ds.length){var mn=new Date(Math.min.apply(null,ds)),mx=new Date(Math.max.apply(null,ds));span=' · '+wd[mn.getDay()]+' '+mn.getDate()+'/'+(mn.getMonth()+1)+' → '+wd[mx.getDay()]+' '+mx.getDate()+'/'+(mx.getMonth()+1);}}
+  // Optimiseur déterministe (Palier 1) — suggestions à valider
+  var sugg=[];try{sugg=_analyzeSchedule(tasks);}catch(e){console.warn('analyzeSchedule',e);}
+  _acceptForm._sugg=sugg;
+  var suggHtml=sugg.map(function(s,i){
+    return '<div style="display:flex;gap:8px;align-items:flex-start;background:#fff;border:1px solid #fde68a;border-radius:7px;padding:8px 10px;margin-bottom:6px;">'+
+      '<div style="font-size:1rem;flex-shrink:0;line-height:1.3;">'+s.icon+'</div>'+
+      '<div style="flex:1;min-width:0;"><div style="font-size:.82rem;font-weight:600;color:#1e293b;">'+escH2(s.title)+'</div><div style="font-size:.75rem;color:#64748b;line-height:1.4;">'+escH2(s.detail)+'</div></div>'+
+      (s.apply?'<button type="button" onclick="_applySchedSuggestion('+i+')" style="background:#f59e0b;color:#fff;border:none;border-radius:6px;padding:5px 11px;font-size:.78rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">Appliquer</button>':'')+
+    '</div>';
+  }).join('');
+  var optimizerHtml=tasks.length?(
+    '<div style="margin-top:12px;border-top:1px dashed #e2e8f0;padding-top:10px;">'+
+      '<div style="font-size:.82rem;font-weight:600;color:#1e293b;margin-bottom:6px;">✨ Optimiseur'+(sugg.length?' · '+sugg.length+' suggestion'+(sugg.length>1?'s':''):'')+'</div>'+
+      (sugg.length?suggHtml:'<div style="font-size:.78rem;color:#16a34a;margin-bottom:8px;">✓ Programmation déjà cohérente.</div>')+
+      '<button type="button" onclick="_aiOptimizeSchedule()" style="background:#ede9fe;color:#6b21a8;border:1px solid #c4b5fd;border-radius:6px;padding:6px 12px;font-size:.8rem;font-weight:600;cursor:pointer;">🤖 Optimiser avec l\'IA</button>'+
+      '<div id="af-ai-result" style="margin-top:8px;"></div>'+
+    '</div>'
+  ):'';
+  wrap.innerHTML=
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">'+
+      '<label style="font-size:.92rem;font-weight:600;color:#1e293b;">🗓️ Programmation prévue <span style="font-weight:400;color:#94a3b8;font-size:.78rem;">— modifiable'+span+'</span></label>'+
+      '<button type="button" onclick="_recomputeAcceptSchedule()" style="background:#f1f5f9;border:1px solid #cbd5e1;border-radius:6px;padding:5px 12px;font-size:.8rem;font-weight:600;cursor:pointer;color:#475569;">🔄 Recalculer</button>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:6px;">'+rows+'</div>'+
+    (_acceptForm.scheduleEdited?'<div style="font-size:.73rem;color:#a16207;margin-top:6px;">✎ Programmation ajustée manuellement — « 🔄 Recalculer » pour repartir de l\'automatique.</div>':'')+
+    optimizerHtml;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   IA / OPTIMISATION DE LA PROGRAMMATION (3 paliers)
+   1. Optimiseur déterministe (familles d'étapes, équilibrage, délais)
+   2. Copilote IA (Claude via /ai-chat)
+   3. Apprentissage par labo (profil qui mémorise les choix → affine 1 et 2)
+   ══════════════════════════════════════════════════════════════════════════ */
+// Familles de postes : permet de reconnaître que deux étapes de libellés différents
+// relèvent du MÊME poste (ex. « Modélisation couronne » et « Modélisation bridge » = CAO).
+var STEP_FAMILIES=[
+  {id:'empreinte',icon:'🔍',label:'Empreinte / scan',kw:['empreinte','scan','recup','récup','stereo','numeris','fichier optique']},
+  {id:'pilier',icon:'🪛',label:'Pilier / inlay-core',kw:['inlay core','inlay-core','pilier','tenon']},
+  {id:'cao',icon:'💻',label:'CAO / modélisation',kw:['modelis','modélis','cao','design','wax','maquette','conception']},
+  {id:'usinage',icon:'⚙️',label:'Usinage / impression',kw:['usinage','fraisage','frittage','impression','imprim','decoupe','découpe']},
+  {id:'coulee',icon:'🔥',label:'Coulée / armature métal',kw:['coulee','coulée','chape','armature','alliage','fonte']},
+  {id:'montage',icon:'🦷',label:'Montage / cosmétique',kw:['montage','cosmet','cosmét','ceram','céram','stratif','maquill','emaill','émaill']},
+  {id:'cuisson',icon:'♨️',label:'Cuisson / biscuit',kw:['cuisson','biscuit','four']},
+  {id:'finition',icon:'✨',label:'Finition / glaçage',kw:['glacage','glaçage','finition','polissage','glaze','ebavur','ébavur']}
+];
+function _normTxt(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
+function _stepFamily(label){
+  var n=_normTxt(label);
+  for(var i=0;i<STEP_FAMILIES.length;i++){var f=STEP_FAMILIES[i];for(var j=0;j<f.kw.length;j++){if(n.indexOf(_normTxt(f.kw[j]))>=0)return f;}}
+  return {id:'autre',icon:'•',label:'Autre',kw:[]};
+}
+function _modeOf(arr){var c={},b=null,bc=-1;arr.forEach(function(x){if(!x)return;c[x]=(c[x]||0)+1;if(c[x]>bc){bc=c[x];b=x;}});return b;}
+
+// ── Liens « même technicien que » configurés dans les types (step.sameAs) ──
+// Forcent une étape liée à copier le technicien de son étape source (par libellé).
+function _enforceTechLinks(tasks){
+  if(!tasks||!tasks.length)return;
+  var byLabel={};
+  tasks.forEach(function(t){if(t.label&&byLabel[t.label]===undefined)byLabel[t.label]=t;});
+  tasks.forEach(function(t){if(t.sameTechAsLabel){var src=byLabel[t.sameTechAsLabel];if(src&&src.tech)t.tech=src.tech;}});
+}
+// Quand on change le technicien d'une étape SOURCE, ses étapes liées suivent.
+function _propagateTechFromSource(tasks,srcLabel){
+  if(!tasks||!srcLabel)return;
+  var src=tasks.find(function(t){return t.label===srcLabel;});if(!src||!src.tech)return;
+  tasks.forEach(function(t){if(t.sameTechAsLabel===srcLabel)t.tech=src.tech;});
+}
+// Décrit pour l'IA la configuration RÉELLE des types du labo (étapes, J+, techniciens éligibles, liens).
+function _labWorkflowContextForAI(items){
+  if(!items||!items.length)return '';
+  var lines=[],seen={};
+  items.forEach(function(it){
+    if(seen[it.type])return;seen[it.type]=1;
+    var ct=(typeof customTypes!=='undefined'&&Array.isArray(customTypes))?customTypes.find(function(c){return c.id===it.type;}):null;
+    var label=ct?ct.label:((typeof TYPE_LABELS!=='undefined'&&TYPE_LABELS[it.type])||it.type);
+    var phase=(typeof _typePhase==='function')?_typePhase(it.type):'';
+    var head='• Type "'+label+'"'+(phase?' (phase '+phase+')':'');
+    if(ct&&Array.isArray(ct.steps)&&ct.steps.length){
+      var steps=ct.steps.map(function(s,i){
+        var tech=(s.sameAs!==null&&s.sameAs!==undefined)
+          ? 'MÊME TECHNICIEN que «'+(((ct.steps[s.sameAs]||{}).label)||('étape '+(s.sameAs+1)))+'»'
+          : (Array.isArray(s.tech)?('au choix parmi '+s.tech.join('/')):(s.tech&&s.tech!=='auto'?('de préférence '+s.tech):'auto / moins chargé'));
+        return '   - '+(s.label||('étape '+(i+1)))+' [J+'+(s.dayOffset||1)+', '+tech+']';
+      }).join('\n');
+      lines.push(head+' :\n'+steps);
+    } else lines.push(head+' (workflow standard)');
+  });
+  return lines.join('\n');
+}
+// Charge actuelle de l'atelier : tâches non livrées déjà programmées, par jour ouvré et par technicien.
+function _labLoadContextForAI(){
+  var byDay={};
+  (typeof jobs!=='undefined'?jobs:[]).forEach(function(j){
+    (j.tasks||[]).forEach(function(t){
+      if(t.status==='delivered'||t.done)return;
+      var k=(t.dueDate||'').slice(0,10);if(!k)return;
+      byDay[k]=byDay[k]||{};byDay[k][t.tech||'?']=(byDay[k][t.tech||'?']||0)+1;
+    });
+  });
+  var today=fmtISO(new Date());
+  var keys=Object.keys(byDay).filter(function(k){return k>=today;}).sort().slice(0,14);
+  var prof=_loadSchedProfile();
+  var cap=prof.capacityPerDay?(' (capacité habituelle ≈ '+prof.capacityPerDay+' tâches/jour/technicien)'):'';
+  if(!keys.length)return 'Atelier libre sur la période — aucune autre tâche déjà programmée'+cap+'.';
+  return keys.map(function(k){var m=byDay[k];return k+' : '+Object.keys(m).map(function(tk){return ((TECHS[tk]&&TECHS[tk].label)||tk)+'×'+m[tk];}).join(', ');}).join('\n')+cap;
+}
+// Disponibilité (jours non travaillés, absences à venir) et compétences (postes habituels) par technicien.
+function _techContextForAI(){
+  var keys=Object.keys(TECHS||{});if(!keys.length)return '(aucun technicien défini)';
+  var today=fmtISO(new Date());
+  var prof=_loadSchedProfile();var skillByTech={};
+  Object.keys(prof.familyTech||{}).forEach(function(fam){var m=prof.familyTech[fam];var top=Object.keys(m).sort(function(a,b){return m[b]-m[a];})[0];if(top){(skillByTech[top]=skillByTech[top]||[]).push(fam);}});
+  return keys.map(function(k){
+    var off=(typeof getTechOffDayList==='function'?getTechOffDayList(k):[]).map(function(d){return (typeof DFR!=='undefined'&&DFR[d])||d;}).join('/');
+    var abs=((typeof absences!=='undefined'&&absences[k])||[]).filter(function(d){return d>=today;}).slice(0,8).join(', ');
+    var sk=(skillByTech[k]||[]).join('/');
+    return '- '+k+' ('+((TECHS[k]&&TECHS[k].label)||k)+')'+(sk?' · postes habituels: '+sk:'')+(off?' · ne travaille pas le: '+off:'')+(abs?' · absent: '+abs:'');
+  }).join('\n');
+}
+
+// ── Palier 3 : profil d'apprentissage du labo ──
+function _loadSchedProfile(){try{return JSON.parse(localStorage.getItem('lb_sched_profile')||'{}');}catch(e){return {};}}
+function _saveSchedProfile(p){try{localStorage.setItem('lb_sched_profile',JSON.stringify(p));}catch(e){}if(typeof scheduleSave==='function')scheduleSave();}
+function _recordScheduleToProfile(tasks,opts){
+  if(!tasks||!tasks.length)return;
+  var w=(opts&&opts.weight)||1;
+  var p=_loadSchedProfile();p.familyTech=p.familyTech||{};p.samples=(p.samples||0)+1;
+  var dayCount={};
+  tasks.forEach(function(t){
+    var fam=_stepFamily(t.label).id;
+    if(t.tech){p.familyTech[fam]=p.familyTech[fam]||{};p.familyTech[fam][t.tech]=(p.familyTech[fam][t.tech]||0)+w;}
+    var k=(t.dueDate||'').slice(0,10);if(k)dayCount[k]=(dayCount[k]||0)+1;
+  });
+  var maxDay=Math.max.apply(null,[0].concat(Object.keys(dayCount).map(function(k){return dayCount[k];})));
+  if(maxDay>(p.capacityPerDay||0))p.capacityPerDay=maxDay;
+  _saveSchedProfile(p);
+}
+function _preferredTechForFamily(fam){
+  var p=_loadSchedProfile();var m=(p.familyTech||{})[fam];if(!m)return null;
+  var best=null,bc=-1;Object.keys(m).forEach(function(k){if(m[k]>bc&&TECHS[k]){bc=m[k];best=k;}});return best;
+}
+
+// ── Palier 1 : optimiseur déterministe → liste de suggestions ──
+function _analyzeSchedule(tasks){
+  var sugg=[];if(!tasks||!tasks.length)return sugg;
+  var techKeys=Object.keys(TECHS||{});
+  // 0) Liens « même technicien » (réglages du labo) non respectés
+  var linkViol=tasks.some(function(t){if(!t.sameTechAsLabel)return false;var src=tasks.find(function(x){return x.label===t.sameTechAsLabel;});return src&&src.tech&&t.tech&&src.tech!==t.tech;});
+  if(linkViol){
+    sugg.push({id:'links',icon:'🔗',title:'Respecter les liens technicien de vos réglages',
+      detail:'Des étapes que vous avez liées (même technicien) ont actuellement des prothésistes différents. Les réaligner sur l\'étape source.',
+      apply:function(){_enforceTechLinks(tasks);}});
+  }
+  // 1) Mutualisation par famille (même poste sur des jours/techs différents)
+  var byFam={};
+  tasks.forEach(function(t,i){var f=_stepFamily(t.label);if(f.id==='autre')return;(byFam[f.id]=byFam[f.id]||{fam:f,idx:[]}).idx.push(i);});
+  Object.keys(byFam).forEach(function(fid){
+    var g=byFam[fid];if(g.idx.length<2)return;
+    var dates=g.idx.map(function(i){return (tasks[i].dueDate||'').slice(0,10);});
+    var techs=g.idx.map(function(i){return tasks[i].tech;});
+    var diffDates=dates.filter(function(v,k){return dates.indexOf(v)===k;}).length>1;
+    var diffTechs=techs.filter(function(v,k){return techs.indexOf(v)===k;}).length>1;
+    if(diffDates||diffTechs){
+      sugg.push({id:'merge_'+fid,icon:g.fam.icon,
+        title:'Regrouper '+g.idx.length+' étapes « '+g.fam.label+' »',
+        detail:'Ces étapes relèvent du même poste'+(g.fam.id==='empreinte'?' — un seul scan/récupération suffit pour tout le travail':' — les faire le même jour par le même technicien évite les doublons de manipulation')+'.',
+        apply:function(){
+          var minDate=dates.slice().sort()[0];
+          var pref=_preferredTechForFamily(fid)||_modeOf(techs)||techs[0];
+          g.idx.forEach(function(i){if(minDate)tasks[i].dueDate=new Date(minDate+'T12:00:00').toISOString();if(pref)tasks[i].tech=pref;});
+        }});
+    }
+  });
+  // 2) Équilibrage technicien (tout sur un seul prothésiste)
+  var usedTechs=tasks.map(function(t){return t.tech;}).filter(function(v,k,a){return v&&a.indexOf(v)===k;});
+  if(tasks.length>=2&&usedTechs.length<=1&&techKeys.length>=2){
+    sugg.push({id:'balance',icon:'⚖️',title:'Répartir la charge entre techniciens',
+      detail:'Toutes les étapes sont sur un seul prothésiste. Les répartir par poste accélère la production.',
+      apply:function(){
+        tasks.forEach(function(t){var pref=_preferredTechForFamily(_stepFamily(t.label).id);if(pref)t.tech=pref;});
+        var still=tasks.map(function(t){return t.tech;}).filter(function(v,k,a){return v&&a.indexOf(v)===k;});
+        if(still.length<=1){var map={},n=0;tasks.forEach(function(t){var f=_stepFamily(t.label).id;if(map[f]==null){map[f]=techKeys[n%techKeys.length];n++;}t.tech=map[f];});}
+      }});
+  }
+  // 3) Délai dépassé par la planification
+  var deadline=_acceptForm.requestedDeliveryDate||_acceptForm.labDeliveryDate||'';
+  if(deadline){
+    var maxD=tasks.reduce(function(m,t){var d=new Date(t.dueDate);return (!isNaN(d.getTime())&&d>m)?d:m;},new Date(0));
+    if(maxD>new Date(deadline+'T23:59:59')){
+      sugg.push({id:'tight',icon:'⏰',title:'La planification dépasse la date demandée',
+        detail:'La dernière étape tombe après le '+fmtL(new Date(deadline+'T12:00:00'))+'. Passer « au plus tôt » (et regrouper) peut rattraper le délai.',
+        apply:function(){if(typeof setPlanMode==='function')setPlanMode('earliest');}});
+    }
+  }
+  return sugg;
+}
+function _applySchedSuggestion(i){
+  var s=(_acceptForm._sugg||[])[i];if(!s||!s.apply)return;
+  try{s.apply();}catch(e){console.warn('applySchedSuggestion',e);}
+  _enforceTechLinks(_acceptForm.plannedTasks); // une optimisation ne doit jamais casser un lien configuré
+  _acceptForm.scheduleEdited=true;
+  _renderAcceptSchedule();
+}
+
+// ── Palier 2 : copilote IA (Claude) ──
+async function _aiOptimizeSchedule(){
+  var tasks=_acceptForm.plannedTasks||[];
+  var wrap=document.getElementById('af-ai-result');
+  if(!tasks.length){if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">Aucune étape à optimiser.</div>';return;}
+  if(wrap)wrap.innerHTML='<div style="font-size:.82rem;color:#7c3aed;">🤖 L\'IA analyse la programmation…</div>';
+  try{
+    var techList=Object.keys(TECHS||{}).map(function(k){return k+' ('+((TECHS[k]&&TECHS[k].label)||k)+')';}).join(', ')||'(aucun défini)';
+    var prof=_loadSchedProfile();
+    var profStr=Object.keys(prof.familyTech||{}).map(function(f){var m=prof.familyTech[f];var top=Object.keys(m).sort(function(a,b){return m[b]-m[a];})[0];return f+'→'+top;}).join(', ')||'(pas encore d\'historique)';
+    var stepsStr=tasks.map(function(t,i){return (i+1)+'. '+t.label+' | poste:'+_stepFamily(t.label).label+' | '+(t.dueDate||'').slice(0,10)+' | tech:'+(t.tech||'?')+(t.sameTechAsLabel?' | 🔗 DOIT avoir le même technicien que «'+t.sameTechAsLabel+'»':'');}).join('\n');
+    var wfCtx=_labWorkflowContextForAI(_acceptForm.items);
+    var loadCtx=(typeof _labLoadContextForAI==='function')?_labLoadContextForAI():'';
+    var techCtx=(typeof _techContextForAI==='function')?_techContextForAI():'';
+    var congesStr=(typeof conges!=='undefined'&&conges&&conges.length)?conges.join(', '):'aucun';
+    var deadline=_acceptForm.requestedDeliveryDate||_acceptForm.labDeliveryDate||'';
+    var prompt='CONTEXTE — laboratoire de prothèse dentaire. Aujourd\'hui : '+fmtISO(new Date())+'.\n'+
+      'Travail à programmer : patient '+(_acceptForm.patient||'?')+(_acceptForm.urgent?' — URGENT':'')+'. Échéance demandée : '+(deadline||'non précisée')+'.\n'+
+      'Jours de fermeture du labo : '+congesStr+'.\n\n'+
+      'TECHNICIENS — disponibilité & compétences :\n'+techCtx+'\n\n'+
+      'CHARGE ACTUELLE DE L\'ATELIER (autres travaux déjà programmés) :\n'+loadCtx+'\n\n'+
+      (wfCtx?('CONFIGURATION DES TYPES PAR CE LABO (règles à respecter — étapes, J+, techniciens éligibles, liens) :\n'+wfCtx+'\n\n'):'')+
+      'Habitudes apprises (poste→technicien préféré) : '+profStr+'.\n\n'+
+      'PROGRAMMATION ACTUELLE À OPTIMISER :\n'+stepsStr+'\n\n'+
+      'RAISONNE COMME UN CHEF DE PRODUCTION et optimise POUR CE LABO. Contraintes ABSOLUES :\n'+
+      '1. Liens « MÊME TECHNICIEN que » : une étape liée a EXACTEMENT le même technicien que son étape source.\n'+
+      '2. N\'affecte une étape qu\'à un technicien AUTORISÉ pour elle, et JAMAIS un jour où il est absent / ne travaille pas / le labo est fermé.\n'+
+      '3. Respecte l\'ordre de fabrication (préparation → réalisation → finition) et les délais J+ entre étapes ; ne dépasse pas l\'échéance.\n'+
+      'Puis OPTIMISE : a) regroupe les étapes d\'un même poste sur le même jour/technicien (un seul scan, une seule session CAO pour tout le travail, une seule cuisson…) pour éviter les doublons ; b) lisse la charge en tenant compte des autres travaux déjà programmés (évite de surcharger un technicien un jour donné) ; c) garde la cohérence métier (ex. essai métal avant cosmétique, inlay-core/pilier avant la couronne) ; d) si urgent, priorise sans casser les contraintes.\n'+
+      'Réponds en JSON pur, sans markdown : {"explication":"2-3 phrases sur ton raisonnement et les regroupements faits","risques":["alerte courte si délai tendu / technicien surchargé / contrainte impossible"],"plan":[{"label":"<libellé EXACT>","date":"YYYY-MM-DD","tech":"<clé technicien>","raison":"pourquoi ce jour/ce technicien"}]}. Garde exactement les mêmes libellés et le même nombre d\'étapes.';
+    var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:_aiApiHeaders(),body:JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:2000,
+      system:'Tu es un chef de production expert d\'un laboratoire de prothèse dentaire. Tu optimises la programmation des étapes : tu respectes les contraintes (liens technicien, techniciens éligibles, disponibilités/absences, ordre de fabrication, délais), tu mutualises les postes identiques (scan, CAO, cuisson…) pour éviter les doublons, tu lisses la charge entre techniciens et tu raisonnes sur la logique métier prothétique. Réponds UNIQUEMENT en JSON valide, sans markdown ni texte autour.',
+      messages:[{role:'user',content:prompt}]
+    })});
+    var data=await resp.json();
+    if(!data||!data.content||!data.content[0])throw new Error(data&&data.error&&data.error.message?data.error.message:'réponse IA invalide');
+    var raw=(data.content[0].text||'{}').replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+    var out=JSON.parse(raw);
+    _acceptForm._aiPlan=Array.isArray(out.plan)?out.plan:[];
+    var risks=Array.isArray(out.risques)?out.risques.filter(Boolean):[];
+    if(wrap){
+      wrap.innerHTML='<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px 12px;">'+
+        '<div style="font-size:.82rem;color:#6b21a8;font-weight:600;margin-bottom:6px;">🤖 Proposition de l\'IA</div>'+
+        '<div style="font-size:.8rem;color:#475569;line-height:1.5;margin-bottom:8px;white-space:pre-wrap;">'+escH2(out.explication||'')+'</div>'+
+        (risks.length?'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:7px 10px;margin-bottom:8px;">'+risks.map(function(r){return '<div style="font-size:.76rem;color:#9a3412;">⚠️ '+escH2(r)+'</div>';}).join('')+'</div>':'')+
+        (_acceptForm._aiPlan.length?'<button type="button" onclick="_applyAiPlan()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:.82rem;font-weight:600;cursor:pointer;">Appliquer la proposition IA</button>':'<span style="font-size:.8rem;color:#94a3b8;">Aucun changement proposé.</span>')+
+      '</div>';
+    }
+  }catch(e){
+    if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">⚠️ IA indisponible ('+escH2(e.message||'erreur')+'). L\'optimiseur automatique ci-dessus reste utilisable.</div>';
+  }
+}
+function _applyAiPlan(){
+  var plan=_acceptForm._aiPlan||[];var tasks=_acceptForm.plannedTasks||[];if(!plan.length)return;
+  plan.forEach(function(pp){
+    var t=tasks.find(function(x){return _normTxt(x.label)===_normTxt(pp.label);});
+    if(t){if(pp.date)t.dueDate=new Date(pp.date+'T12:00:00').toISOString();if(pp.tech&&TECHS[pp.tech])t.tech=pp.tech;}
+  });
+  _enforceTechLinks(tasks); // l'IA ne doit jamais casser un lien technicien configuré
+  _acceptForm.scheduleEdited=true;
+  _recordScheduleToProfile(tasks,{weight:2});
+  _renderAcceptSchedule();
+  if(typeof showToast==='function')showToast('✅ Proposition IA appliquée','#7c3aed');
 }
 
 var _acceptingInProgress=false;
@@ -5539,19 +6266,39 @@ async function confirmAcceptOrder(){
   try {
   // Construire le job avec items multi-types (comme la saisie normale)
   const totalNb=validItems.reduce(function(s,it){return s+(it.nb||1);},0);
-  const tasks=[];
-  // Construit les tâches via buildTasks UNIQUEMENT si la programmation est activée
-  const progOn=typeof isProgActif==='function'&&isProgActif();
-  if(progOn&&typeof buildTasks==='function'){
-    validItems.forEach(function(it){
-      try{const subTasks=buildTasks(it.type,false);if(subTasks)tasks.push.apply(tasks,subTasks);}catch(e){}
-    });
-  }
 
+  // Lire d'abord la date labo + le créneau : ils sont nécessaires au rétro-planning des étapes.
   var afSlot=document.getElementById('af-delivery-slot');
   if(afSlot)_acceptForm.labDeliverySlot=afSlot.value||'12';
   var afLab=document.getElementById('af-lab-delivery');
   if(afLab){_acceptForm.labDeliveryDate=afLab.value||'';_acceptForm.deliveryDate=afLab.value||'';}
+
+  const tasks=[];
+  // Construit les étapes UNIQUEMENT si la programmation est activée.
+  // On utilise _buildScheduledTasks (comme le bouton « ⚡ Programmer ») pour caler les
+  // étapes AU PLUS TARD sur l'échéance (rétro-planning), au lieu de les empiler au plus
+  // tôt à partir d'aujourd'hui — sinon un travail dû dans 10 jours est fait dès demain.
+  const progOn=typeof isProgActif==='function'&&isProgActif();
+  if(progOn&&_acceptForm.plannedTasks&&_acceptForm.plannedTasks.length){
+    // L'utilisateur a vu (et éventuellement ajusté) la programmation dans l'aperçu « 🗓️ Programmation
+    // prévue » → on l'utilise telle quelle, au lieu de la recalculer en silence.
+    _acceptForm.plannedTasks.forEach(function(t){tasks.push({label:t.label,tech:t.tech,dueDate:t.dueDate});});
+  } else if(progOn&&typeof _buildScheduledTasks==='function'){
+    try{
+      // _planDeadline() renvoie l'échéance UNIQUEMENT en mode « pour l'échéance » (rétro-planning) ;
+      // en mode « au plus tôt » (défaut), elle renvoie '' → étapes planifiées dès maintenant.
+      const _deadline=(typeof _planDeadline==='function')?_planDeadline(_acceptForm.labDeliveryDate||_acceptForm.requestedDeliveryDate||''):'';
+      const _sched=_buildScheduledTasks(validItems.map(function(it){return{type:it.type,nb:it.nb||1};}),false,_deadline);
+      if(_sched&&_sched.length)tasks.push.apply(tasks,_sched);
+    }catch(e){console.warn('confirmAcceptOrder schedule',e);}
+  } else if(progOn&&typeof buildTasks==='function'){
+    // Repli si _buildScheduledTasks indisponible : ancien comportement (au plus tôt).
+    validItems.forEach(function(it){
+      try{const subTasks=buildTasks(it.type,false);if(subTasks)tasks.push.apply(tasks,subTasks);}catch(e){}
+    });
+  }
+  // Apprentissage par labo : mémorise la programmation validée (poste→technicien, capacité/jour).
+  if(progOn&&tasks.length&&typeof _recordScheduleToProfile==='function'){try{_recordScheduleToProfile(tasks);}catch(e){}}
   const job={
     id:String(Date.now()),
     patient:_acceptForm.patient,
@@ -5601,8 +6348,20 @@ async function confirmAcceptOrder(){
 
   // Libérer le verrou anti-doublon AVANT de fermer la modale
   _acceptingInProgress=false;
+  // Alerte « délai serré » : si, même planifiées au plus tôt, les étapes finissent
+  // après la date demandée par le cabinet, prévenir (sans bloquer l'acceptation).
+  var _tightWarn='';
+  try{
+    var _deadlineISO=_acceptForm.requestedDeliveryDate||_acceptForm.labDeliveryDate||'';
+    if(_deadlineISO&&tasks.length){
+      var _maxDue=tasks.reduce(function(m,tk){var d=new Date(tk.dueDate);return d>m?d:m;},new Date(0));
+      var _dl=new Date(_deadlineISO+'T23:59:59');
+      if(_maxDue.getTime()>_dl.getTime())_tightWarn='⚠️ Délai serré : dernière étape prévue le '+fmtL(_maxDue)+', après la date demandée ('+fmtL(_dl)+').';
+    }
+  }catch(e){}
   const overlayEl=document.getElementById('order-overlay');if(overlayEl)overlayEl.remove();
   showConfirm('Travail créé pour '+_acceptForm.patient+'.\n\nIl est maintenant dans « Mes travaux ».',{kind:'success'});
+  if(_tightWarn&&typeof showToast==='function')showToast(_tightWarn,'#e67e22',6500);
   render();renderDashboard();
   } catch(e) {
     // #region agent log
@@ -5808,8 +6567,12 @@ function _resetEditMissingState(){
   var wrap=document.getElementById('ej-missing-wrap');if(wrap)wrap.style.display='none';
 }
 
+// Étiquettes d'étapes générées par un type — sert à réconcilier les tâches après
+// retrait d'un élément (on ne supprime que les étapes propres au type retiré).
+function _stepLabelsForType(typeId){try{return (buildTasks(typeId,false)||[]).map(function(t){return t.label;});}catch(e){return [];}}
 function saveEditJob(){
   const job=jobs.find(function(j){return j.id===_editJob.id;});if(!job)return;
+  const _prevItemsForRecon=(job.items||[]).map(function(it){return{type:it.type,nb:it.nb};});
   const validItems=_editJob.items.filter(function(it){return it.type;});
   if(!validItems.length){alert('Au moins un type de travail est requis.');return;}
   if(!_editJob.patient.trim()){alert('Le code patient est requis.');return;}
@@ -5837,7 +6600,20 @@ function saveEditJob(){
   job.items=validItems.map(function(it){return{type:it.type,nb:it.nb||1};});
   job.type=validItems[0].type;
   job.nb=validItems.reduce(function(s,it){return s+(it.nb||1);},0);
-  // Tâches : on ne re-génère PAS automatiquement (sauf si prog activée + pas de tâches existantes)
+  // Réconcilier les étapes après retrait d'un élément : supprimer les étapes propres
+  // à un type qui n'est plus présent (sinon des étapes « orphelines » restent dans
+  // l'atelier alors que l'élément n'est plus facturé). On ne touche qu'aux libellés
+  // EXCLUSIFS au(x) type(s) retiré(s) — jamais ceux partagés avec un type conservé.
+  try{
+    var _newTypes=job.items.map(function(it){return it.type;});
+    var _removedTypes=_prevItemsForRecon.map(function(it){return it.type;}).filter(function(tp){return _newTypes.indexOf(tp)<0;});
+    if(_removedTypes.length&&job.tasks&&job.tasks.length){
+      var _keepLabels={};_newTypes.forEach(function(tp){_stepLabelsForType(tp).forEach(function(l){_keepLabels[l]=1;});});
+      var _dropLabels={};_removedTypes.forEach(function(tp){_stepLabelsForType(tp).forEach(function(l){if(!_keepLabels[l])_dropLabels[l]=1;});});
+      if(Object.keys(_dropLabels).length){job.tasks=job.tasks.filter(function(tk){return !_dropLabels[tk.label];});}
+    }
+  }catch(e){console.warn('reconcile tasks on edit',e);}
+  // Tâches restantes : on ne re-génère PAS automatiquement (sauf si prog activée + pas de tâches existantes)
   // Le labo peut les re-générer manuellement si besoin
   saveJobs();
   saveQueue();
@@ -6726,8 +7502,9 @@ function renderTable(){
       const jTeeth=_jobTeethArrays(j).teeth;
       const teethHint=jTeeth.length?'<div style="font-size:.65rem;color:#2a6049;font-family:monospace;margin-top:2px;">🦷 '+jTeeth.join(', ')+'</div>':'';
       const notProgBadge=(planningOn&&!j.tasks.length)?'<span class="badge" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;">Travail rentré non programmé</span> ':'';
-      const qForJob=(typeof queue!=='undefined'&&queue||[]).find(function(q){return String(q.jobId||'')===String(j.id);});
-      const progBtn=(qForJob&&planningOn)?'<button type="button" class="btn-q-auto" data-qid="'+escH2(qForJob.id)+'" title="Programmer automatiquement" style="padding:4px 9px;font-size:.7rem;margin-right:4px;">Auto</button>':'';
+      // Bouton de programmation auto : visible pour TOUT travail non programmé en mode planning
+      // (y compris ceux issus d'une commande cabinet, qui n'ont pas d'entrée de file).
+      const progBtn=planningOn?'<button type="button" class="btn-prog-auto" onclick="programJobAuto(\''+escH2(j.id)+'\')" title="Programmer automatiquement les étapes" style="padding:5px 11px;font-size:.72rem;font-weight:600;margin-right:4px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;">⚡ Programmer</button>':'';
       rows.push(`<tr>
         <td onclick="openJobDetail('${j.id}')" style="font-weight:500;cursor:pointer;">${j.urgent?'<span class="badge bg-urgent">🔴 URGENT</span> ':''}${pendingRespBadge}${missingBadge}${notProgBadge}${j.patient}${teethHint}${j.note?`<div style="font-size:.65rem;color:var(--ink-soft);font-style:italic;margin-top:2px;">📝 ${j.note}</div>`:''}${j.responseComment?`<div style="font-size:.65rem;color:#a16207;margin-top:2px;">💬 ${(j.responseComment+'').replace(/</g,'&lt;')}</div>`:''}${missing?`<div style="font-size:.65rem;color:#c2410c;margin-top:2px;">❓ ${(missing+'').replace(/</g,'&lt;')}</div>`:''}</td>
         <td><span class="badge bg-type">${getJobTypeLabel(j)}</span></td>
@@ -7000,6 +7777,8 @@ function doPDF(){
    ══════════════════════════════════════════ */
 const SKW={
   'inlay core':'inlay_only','couronne zircone':'crown_only','couronne':'crown_only',
+  'couronne ceramo metallique':'crown_ccm','ceramo metallique':'crown_ccm','ccm':'crown_ccm','ceramo metal':'crown_ccm',
+  'couronne emax':'crown_emax','couronne e max':'crown_emax',
   'inlay composite':'inlay_composite','inlay onlay emax':'inlay_emax','emax':'inlay_emax',
   'facette':'facettes','facettes':'facettes','cle de schofield':'cle_schefield','schofield':'cle_schefield',
   'cire occlusion':'cire_occlusion',"cire d occlusion":'cire_occlusion','cire':'cire_occlusion',
@@ -7156,13 +7935,20 @@ function makePieChart(data, colors){
 function renderStats(){
   const today=new Date();today.setHours(0,0,0,0);
   const ws=sowk(today);const we=new Date(ws);we.setDate(we.getDate()+4);
-  const thisMonth=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0');
+  const ym=function(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');};
+  const thisMonth=ym(today);
+  const lastMonth=ym(new Date(today.getFullYear(),today.getMonth()-1,1));
+  const locale=t('locale');
+  const eur=function(n){return Math.round(n||0).toLocaleString(locale)+' €';};
+  // Total réel d'un BL (somme des lignes). NB: b.prix ne contient que la 1re ligne.
+  const blTotal=function(b){return Number(b&&b.total!=null?b.total:(b&&b.prix?b.prix*(b.nb||1):0))||0;};
+  const blMonth=function(b){return (b.createdAt||(b.date?b.date+'T00:00':'')||'').slice(0,7);};
 
   // ── KPIs ligne 1 : stock en labo ─────────────────────────────────────────
   const allWork=jobs.concat(queue||[]); // jobs programmés + file d'attente
   const total=allWork.length;
   const urgent=allWork.filter(function(j){return j.urgent;}).length;
-  const late=jobs.filter(function(j){return j.tasks&&j.tasks.some(function(t){return new Date(t.dueDate)<today;});}).length;
+  const late=jobs.filter(function(j){return _isJobLate(j);}).length; // échéance dépassée, non livré
   const inQueue=(queue||[]).length;
   document.getElementById('s-kpi').innerHTML=
     '<div class="kcard"><div class="kval">'+total+'</div><div class="klbl">'+t('kpi.in_lab')+'</div></div>'+
@@ -7172,13 +7958,50 @@ function renderStats(){
 
   // ── KPIs ligne 2 : ce mois ────────────────────────────────────────────────
   const sortiesMois=archive.filter(function(a){return (a.lastDate||'').startsWith(thisMonth);}).length;
-  const blsMois=bdl.filter(function(b){return (b.createdAt||'').startsWith(thisMonth);});
-  const caMois=blsMois.reduce(function(s,b){return s+(b.prix||0);},0);
-  const avgBl=blsMois.length?Math.round(caMois/blsMois.length*100)/100:0;
+  const blsMois=bdl.filter(function(b){return blMonth(b)===thisMonth;});
+  const caMois=blsMois.reduce(function(s,b){return s+blTotal(b);},0);
+  const caPrev=bdl.filter(function(b){return blMonth(b)===lastMonth;}).reduce(function(s,b){return s+blTotal(b);},0);
+  const avgBl=blsMois.length?caMois/blsMois.length:0;
+  // Taux à l'heure : BL émis ce mois (avec date demandée) émis au plus tard à la date demandée
+  const blsDue=blsMois.filter(function(b){return b.requestedDeliveryDate;});
+  const onTime=blsDue.filter(function(b){return (b.date||(b.createdAt||'').slice(0,10))<=b.requestedDeliveryDate;}).length;
+  const onTimeRate=blsDue.length?Math.round(onTime/blsDue.length*100):null;
+  // CA à facturer = BL non rattachés à une facture
+  const invoicedBl=new Set();(typeof documents!=='undefined'?documents:[]).forEach(function(d){(d.bdlRefs||[]).forEach(function(r){invoicedBl.add(r);});});
+  const caAFacturer=(bdl||[]).filter(function(b){return b.status!=='annule'&&!invoicedBl.has(b.num)&&!invoicedBl.has(b.id);}).reduce(function(s,b){return s+blTotal(b);},0);
+  // Évolution CA vs mois précédent
+  let deltaHtml='';
+  if(caPrev>0){var pct=Math.round((caMois-caPrev)/caPrev*100);var up=pct>=0;deltaHtml='<div style="font-size:.6rem;margin-top:3px;color:'+(up?'#2a6049':'#c0392b')+';">'+(up?'▲ +':'▼ ')+pct+'% vs mois préc.</div>';}
   document.getElementById('s-kpi2').innerHTML=
     '<div class="kcard"><div class="kval" style="color:#2a6049;">'+sortiesMois+'</div><div class="klbl">'+t('kpi.outputs_month')+'</div></div>'+
-    '<div class="kcard"><div class="kval" style="color:#5a3472;font-size:1.1rem;">'+caMois.toLocaleString(t('locale'),{minimumFractionDigits:2,maximumFractionDigits:2})+' €</div><div class="klbl">'+t('kpi.revenue_month')+'</div></div>'+
-    '<div class="kcard"><div class="kval" style="font-size:1.1rem;">'+avgBl.toLocaleString(t('locale'),{minimumFractionDigits:2,maximumFractionDigits:2})+' €</div><div class="klbl">'+t('kpi.avg_bl')+'</div></div>';
+    '<div class="kcard"><div class="kval" style="color:#5a3472;font-size:1.05rem;">'+eur(caMois)+'</div><div class="klbl">'+t('kpi.revenue_month')+'</div>'+deltaHtml+'</div>'+
+    '<div class="kcard"><div class="kval" style="font-size:1.05rem;">'+eur(avgBl)+'</div><div class="klbl">'+t('kpi.avg_bl')+'</div></div>'+
+    '<div class="kcard"><div class="kval" style="font-size:1.05rem;color:'+(onTimeRate===null?'var(--ink-soft)':(onTimeRate>=90?'#2a6049':(onTimeRate>=70?'#e67e22':'#c0392b')))+';">'+(onTimeRate===null?'—':onTimeRate+'%')+'</div><div class="klbl">À l\'heure (mois)</div></div>'+
+    '<div class="kcard"><div class="kval" style="font-size:1.05rem;color:#1a4a7a;">'+eur(caAFacturer)+'</div><div class="klbl">À facturer (BL)</div></div>';
+
+  // ── CA des 6 derniers mois (BL) ──────────────────────────────────────────
+  const months=[];for(let i=5;i>=0;i--){const d=new Date(today.getFullYear(),today.getMonth()-i,1);months.push({key:ym(d),label:d.toLocaleDateString(locale,{month:'short'})});}
+  const caByMonth={};months.forEach(function(m){caByMonth[m.key]=0;});
+  (bdl||[]).forEach(function(b){const k=blMonth(b);if(caByMonth[k]!==undefined)caByMonth[k]+=blTotal(b);});
+  const maxCa=Math.max.apply(null,[1].concat(months.map(function(m){return caByMonth[m.key];})));
+  const elTrend=document.getElementById('s-ca-trend');
+  if(elTrend)elTrend.innerHTML=months.map(function(m){return(
+    '<div class="bar-row"><div class="bar-lbl" style="min-width:42px;text-transform:capitalize;">'+m.label+'</div>'+
+    '<div class="bar-track"><div class="bar-fill" style="width:'+(caByMonth[m.key]/maxCa*100)+'%;background:#5a3472;"></div></div>'+
+    '<div class="bar-val">'+eur(caByMonth[m.key])+'</div></div>'
+  );}).join('');
+
+  // ── Top cabinets ce mois (CA) ────────────────────────────────────────────
+  const caCab={};blsMois.forEach(function(b){const id=b.cabinet||b.cabName||'—';caCab[id]=(caCab[id]||0)+blTotal(b);});
+  const cabIds=Object.keys(caCab).sort(function(a,b){return caCab[b]-caCab[a];}).slice(0,6);
+  const maxCab=Math.max.apply(null,[1].concat(cabIds.map(function(id){return caCab[id];})));
+  const elCabs=document.getElementById('s-ca-cabs');
+  if(elCabs)elCabs.innerHTML=cabIds.length?cabIds.map(function(id){
+    const c=cabinets.find(function(x){return x.id===id;});const name=c?c.name:id;
+    return '<div class="bar-row"><div class="bar-lbl">'+escH(name)+'</div>'+
+      '<div class="bar-track"><div class="bar-fill" style="width:'+(caCab[id]/maxCab*100)+'%;background:#1a4a7a;"></div></div>'+
+      '<div class="bar-val">'+eur(caCab[id])+'</div></div>';
+  }).join(''):'<div class="empty" style="font-size:.76rem;color:var(--ink-soft);font-style:italic;">Aucun BL ce mois</div>';
 
   // ── Camembert types (travaux en cours) ───────────────────────────────────
   const PIE_COLORS=['#5a3472','#2a6049','#1a4a7a','#c8410a','#7b3f00','#5a5a1a','#b5451b','#2b5c5c'];
@@ -7763,7 +8586,7 @@ document.addEventListener('click',function(e){
   const ra=e.target.closest('[data-removeabstech]');
   if(ra){removeAbsence(ra.dataset.removeabstech,ra.dataset.removeabsdate);return;}
   const deltech=e.target.closest('[data-deltech]');
-  if(deltech){const k=deltech.dataset.deltech;if(TECHS[k]&&confirm('Supprimer '+TECHS[k].label+' ?')){delete TECHS[k];saveTechs();render();renderEquipe();refreshTechSelects();}return;}
+  if(deltech){const k=deltech.dataset.deltech;if(TECHS[k]&&confirm('Supprimer '+TECHS[k].label+' ?')){delete TECHS[k];if(techOffDays&&techOffDays[k]){delete techOffDays[k];saveTechOffDays();}saveTechs();render();renderEquipe();refreshTechSelects();renderTechOffDaysList();}return;}
   const qAutoBtn=e.target.closest('.btn-q-auto[data-qid]');
   if(qAutoBtn){programQueueAuto(qAutoBtn.dataset.qid);return;}
   const qManualBtn=e.target.closest('.btn-q-manual[data-qid]');
@@ -7849,7 +8672,7 @@ document.addEventListener('click',function(e){
         const el=document.getElementById('legal-'+k.replace('_','-'));
         if(el){const v=localStorage.getItem('lb_legal_'+k);if(v)el.value=v;}
       });
-      renderCongesList();renderAbsList();
+      renderCongesList();renderAbsList();renderTechOffDaysList();
       refreshTechSelects();
       loadStripeKeyUI();
       updateProgToggleUI();
@@ -8000,12 +8823,14 @@ document.getElementById('hist-status').addEventListener('change',renderHistoriqu
 let waiting = JSON.parse(localStorage.getItem('lb_waiting')||'[]');
 let conges  = JSON.parse(localStorage.getItem('lb_conges')||'[]');
 let absences= JSON.parse(localStorage.getItem('lb_absences')||'{}');
+let techOffDays= JSON.parse(localStorage.getItem('lb_tech_off_days')||'{}');
 // Compat legacy: certains builds/anciens scripts référencent "contges" par erreur.
 // On garde un alias pour éviter de bloquer tout le chargement sur un ReferenceError.
 var contges = conges;
 function saveWaiting(){localStorage.setItem('lb_waiting',JSON.stringify(waiting));scheduleSave();}
 function saveConges(){contges=conges;localStorage.setItem('lb_conges',JSON.stringify(conges));scheduleSave();}
 function saveAbsences(){localStorage.setItem('lb_absences',JSON.stringify(absences));scheduleSave();}
+function saveTechOffDays(){localStorage.setItem('lb_tech_off_days',JSON.stringify(techOffDays));scheduleSave();}
 
 const SITE_URL='https://labosync.app';
 const SB_URL='https://ljnfpslgwgagdisixuxz.supabase.co';
@@ -8426,13 +9251,16 @@ function renderCustomTypesList(){
   renderTarifsList();
   renderProgTypesList();
 }
-function _openTypeForm(label,category,steps,stepsEmp,editId){
+function _openTypeForm(label,category,steps,stepsEmp,editId,phase){
   _ctEditId=editId||null;
   _ctSteps=steps?steps.map(function(s){return Object.assign({},s);}):[];
   _ctSupportsEmp=!!(stepsEmp&&stepsEmp.length);
   _ctStepsEmp=stepsEmp?stepsEmp.map(function(s){return Object.assign({},s);}):[];
   document.getElementById('ct-name').value=label||'';
   document.getElementById('ct-category').value=category||'';
+  var phaseEl=document.getElementById('ct-phase');
+  // Phase : valeur du type si connue, sinon défaut intelligent (_typePhase), sinon 2.
+  if(phaseEl)phaseEl.value=String(phase||(editId?_typePhase(editId):2)||2);
   // Titre du formulaire
   const titleEl=document.getElementById('ct-form-title');
   if(titleEl)titleEl.textContent=_ctEditId?'Modifier le type':'Nouveau type';
@@ -8450,7 +9278,7 @@ function editCustomType(id){
   const t=customTypes.find(function(c){return c.id===id;});
   if(!t)return;
   if(_settingsSectionOpen!=='programmation'&&typeof openSettingsSection==='function')openSettingsSection('programmation');
-  _openTypeForm(t.label,t.category,t.steps,t.stepsEmp,id);
+  _openTypeForm(t.label,t.category,t.steps,t.stepsEmp,id,t.phase);
   document.getElementById('ct-form').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function hideCustomTypeForm(){
@@ -8571,7 +9399,9 @@ function saveCustomType(){
     if(!confirm('Certaines étapes n\'ont pas de nom et seront ignorées. Continuer ?'))return;
   }
   const mapStep=function(s){return{label:s.label.trim(),tech:s.tech,dayOffset:Math.max(1,s.dayOffset),sameAs:s.sameAs!==null&&s.sameAs!==undefined?s.sameAs:null};};
-  const newData={label:name,category:cat,steps:validSteps.map(mapStep),stepsEmp:_ctSupportsEmp&&_ctStepsEmp.length?_ctStepsEmp.filter(function(s){return s.label.trim();}).map(mapStep):null};
+  var phaseEl=document.getElementById('ct-phase');
+  var phaseVal=phaseEl?(parseInt(phaseEl.value)||2):2;
+  const newData={label:name,category:cat,phase:phaseVal,steps:validSteps.map(mapStep),stepsEmp:_ctSupportsEmp&&_ctStepsEmp.length?_ctStepsEmp.filter(function(s){return s.label.trim();}).map(mapStep):null};
   if(_ctEditId){
     const idx=customTypes.findIndex(function(t){return t.id===_ctEditId;});
     if(idx>=0){customTypes[idx]=Object.assign({},customTypes[idx],newData);}
@@ -8617,6 +9447,10 @@ function _buildAISystemPrompt(){
     if(!dates||!dates.length)return null;
     return (TECHS[k]?TECHS[k].label:k)+' : '+dates.join(', ');
   }).filter(Boolean).join('\n')||'Aucune absence enregistrée.';
+  const offDaysDesc=Object.entries(techOffDays||{}).map(function([k,days]){
+    const labels=(days||[]).map(function(d){return DFR[parseInt(d,10)]||d;}).join(', ');
+    return labels?(TECHS[k]?TECHS[k].label:k)+' : '+labels:null;
+  }).filter(Boolean).join('\n')||'Aucun jour récurrent hors laboratoire.';
 
   return `Tu es un assistant expert en gestion de laboratoire de prothèse dentaire. Tu aides l'utilisateur à configurer ses types de travaux dans le logiciel Labosync.
 
@@ -8631,6 +9465,9 @@ ${congesDesc}
 
 ABSENCES PAR TECHNICIEN :
 ${absDesc}
+
+JOURS RÉCURRENTS HORS LABORATOIRE :
+${offDaysDesc}
 
 ---
 STRUCTURE D'UN TYPE DE TRAVAIL :
@@ -8794,7 +9631,12 @@ function applyAIConfig(){
 /* ══════════════════════════════════════════
    §22 — ABSENCES & CONGÉS
    ══════════════════════════════════════════ */
+function getTechOffDayList(tech){
+  return (techOffDays&&Array.isArray(techOffDays[tech]))?techOffDays[tech].map(function(d){return parseInt(d,10);}).filter(function(d){return d>=1&&d<=5;}):[];
+}
+function isTechRecurringOff(tech,date){return getTechOffDayList(tech).includes(new Date(date).getDay());}
 function isTechAbsent(tech,date){return (absences[tech]||[]).includes(fmtISO(date));}
+function isTechUnavailableForAuto(tech,date){return isTechAbsent(tech,date)||isTechRecurringOff(tech,date);}
 function addConge(){const v=document.getElementById('conge-date-input').value;if(!v)return;if(!conges.includes(v)){conges.push(v);conges.sort();saveConges();}renderCongesList();document.getElementById('conge-date-input').value='';}
 function removeConge(d){conges=conges.filter(x=>x!==d);saveConges();renderCongesList();}
 function renderCongesList(){
@@ -8839,6 +9681,42 @@ function renderAbsList(){
     const btn=document.createElement('button');
     btn.textContent='✕';btn.style.cssText='background:none;border:none;cursor:pointer;color:#c0392b;';
     btn.addEventListener('click',function(){removeAbsence(e.tech,e.date);});
+    div.appendChild(info);div.appendChild(btn);el.appendChild(div);
+  });
+}
+
+function addTechOffDay(){
+  const tech=document.getElementById('offday-tech-sel').value;
+  const day=parseInt(document.getElementById('offday-day-sel').value,10);
+  if(!tech||!day){alert(t('alert.choose_tech_date'));return;}
+  if(!techOffDays[tech])techOffDays[tech]=[];
+  if(!techOffDays[tech].includes(day)){techOffDays[tech].push(day);techOffDays[tech].sort(function(a,b){return a-b;});}
+  saveTechOffDays();renderTechOffDaysList();render();
+}
+function removeTechOffDay(tech,day){
+  if(!techOffDays[tech])return;
+  techOffDays[tech]=techOffDays[tech].filter(function(d){return parseInt(d,10)!==parseInt(day,10);});
+  if(!techOffDays[tech].length)delete techOffDays[tech];
+  saveTechOffDays();renderTechOffDaysList();render();
+}
+function renderTechOffDaysList(){
+  const el=document.getElementById('offdays-list');if(!el)return;
+  const names=Object.fromEntries(Object.entries(TECHS).map(([k,v])=>[k,v.label]));
+  const entries=[];
+  Object.keys(techOffDays||{}).forEach(function(tech){
+    getTechOffDayList(tech).forEach(function(day){entries.push({tech:tech,day:day});});
+  });
+  entries.sort(function(a,b){return (names[a.tech]||a.tech).localeCompare(names[b.tech]||b.tech)||a.day-b.day;});
+  if(!entries.length){el.innerHTML='<div style="font-size:.74rem;color:var(--ink-soft);font-style:italic;">Aucun jour récurrent hors laboratoire.</div>';return;}
+  el.innerHTML='';
+  entries.forEach(function(e){
+    const div=document.createElement('div');
+    div.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg);border-radius:6px;margin-bottom:5px;border:1px solid var(--border);font-size:.78rem;';
+    const info=document.createElement('span');
+    info.innerHTML='<b style="color:'+(TECHS[e.tech]&&TECHS[e.tech].color||'#888')+'">'+(names[e.tech]||e.tech)+'</b> <span style="color:var(--ink-soft);margin-left:6px;">hors labo le '+DFR[e.day]+'</span>';
+    const btn=document.createElement('button');
+    btn.textContent='✕';btn.style.cssText='background:none;border:none;cursor:pointer;color:#c0392b;';
+    btn.addEventListener('click',function(){removeTechOffDay(e.tech,e.day);});
     div.appendChild(info);div.appendChild(btn);el.appendChild(div);
   });
 }
@@ -9079,6 +9957,10 @@ async function _fetchServerLabPayload(userId,token){
 }
 
 // Sauvegarde toutes les données du labo vers Supabase (avec détection de conflits)
+// Code PIN « Gestion » : géré côté serveur dans data.adminAccess de la MÊME ligne labo_data.
+// On le met en cache pour le RÉINJECTER à chaque cloudSave (sinon l'upsert qui remplace la
+// colonne data l'effacerait → perte du code à chaque sauvegarde/redéploiement).
+let _serverAdminAccess=null;
 async function cloudSave(){
   const msg=document.getElementById('cloud-msg');if(!msg)return;
   if(!currentUser){msg.textContent='';return;}
@@ -9086,7 +9968,13 @@ async function cloudSave(){
   // Si cloudRestore n'a pas encore terminé, NE PAS sauvegarder : la mémoire
   // est encore vide et on écraserait les données du cloud avec du vide.
   if(_cloudRestoreInProgress||!_initialRestoreDone){
-    console.warn('cloudSave différé : cloudRestore pas encore terminé');
+    // Throttle : ce repli peut se déclencher des dizaines de fois pendant le restore initial ;
+    // on n'en logue qu'un toutes les 5 s pour éviter de noyer la console.
+    var _nowDefer=Date.now();
+    if(!cloudSave._lastDeferWarn||_nowDefer-cloudSave._lastDeferWarn>5000){
+      console.warn('cloudSave différé : cloudRestore pas encore terminé');
+      cloudSave._lastDeferWarn=_nowDefer;
+    }
     setTimeout(function(){if(typeof scheduleSave==='function')scheduleSave();},1500);
     return;
   }
@@ -9151,7 +10039,7 @@ async function cloudSave(){
       savedAt:now,
       _tabId:_tabId,
       laboName:localStorage.getItem('lb_name')||'',
-      jobs,archive,cabinets,syns,scanHist,waiting,conges,absences,
+      jobs,archive,cabinets,syns,scanHist,waiting,conges,absences,techOffDays,
       deletedJobIds:_readDeletedJobIds(),
       queue:queue,
       documents:JSON.parse(localStorage.getItem('lb_docs')||'[]'),
@@ -9173,6 +10061,15 @@ async function cloudSave(){
       },
       billingSettings:getBillingSettings(),
     };
+    // ── PRÉSERVATION DU CODE PIN GESTION (data.adminAccess) ──────────────────
+    // L'upsert ci-dessous REMPLACE la colonne data. Le code PIN est géré par la
+    // fonction lab-access dans data.adminAccess : on le relit (source de vérité)
+    // et on le réinjecte, sinon chaque sauvegarde l'effacerait.
+    try{
+      const aq=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+userId+'&select=adminAccess:data->adminAccess',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token}});
+      if(aq.ok){const ar=await aq.json();_serverAdminAccess=(ar&&ar[0]&&ar[0].adminAccess)?ar[0].adminAccess:null;}
+    }catch(e){console.warn('préservation adminAccess (lecture) échouée, repli cache',e);}
+    if(_serverAdminAccess)payload.adminAccess=_serverAdminAccess;
     let r=await fetch(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
       headers:{
@@ -9271,6 +10168,7 @@ async function cloudRestore(silent=false){
       return;
     }
     const p=rows[0].data;
+    if(p.adminAccess)_serverAdminAccess=p.adminAccess; // capter le code PIN pour le préserver aux sauvegardes
     if(p.ownerUserId&&String(p.ownerUserId)!==String(userId)){
       throw new Error('Sauvegarde cloud refusée : données appartenant à un autre compte');
     }
@@ -9304,6 +10202,7 @@ async function cloudRestore(silent=false){
     if(p.waiting)waiting=p.waiting;
     if(p.conges)conges=p.conges;
     if(p.absences)absences=p.absences;
+    if(p.techOffDays&&typeof p.techOffDays==='object')techOffDays=p.techOffDays;
     if(p.queue){
       queue=(_initialRestoreDone&&silent)||mergeLocalInitial?_mergeCloudQueue(queue,p.queue):_filterDeletedQueue(p.queue,deletedJobIds);
       localStorage.setItem('lb_queue',JSON.stringify(queue));
@@ -9344,7 +10243,7 @@ async function cloudRestore(silent=false){
     }
 
     refreshTypeSelects();
-    saveJobs();saveArchive();saveCabinets();saveSyns();saveWaiting();saveConges();saveAbsences();
+    saveJobs();saveArchive();saveCabinets();saveSyns();saveWaiting();saveConges();saveAbsences();saveTechOffDays();
     // Restauration vraiment réussie : autoriser les saves et capturer un snapshot
     // de référence pour détecter les sauvegardes destructives futures.
     _initialRestoreDone=true;
@@ -9354,7 +10253,7 @@ async function cloudRestore(silent=false){
     msg.style.color='#2a6049';
     msg.textContent=ti('toast.restored',{date:savedDate});
     refreshTechSelects();applyProgMode();updateProgToggleUI();
-    render();refreshCabSelects();renderWaiting();renderQueueMain();
+    render();refreshCabSelects();renderWaiting();renderQueueMain();renderTechOffDaysList();
     if((recoveredTechs||mergeLocalInitial)&&typeof scheduleSave==='function')scheduleSave();
     // Rafraîchir la facturation si l'onglet est actif
     if(typeof renderBillDocs==='function'){renderToInvoice();renderToInvoice();renderBillDocs();updateBillStats();renderTarifs();}
@@ -9388,7 +10287,7 @@ document.getElementById('btn-reset-all').addEventListener('click',function(){
   if(!guardPerm('action:reset_all','⛔ Seul un admin peut effacer toutes les données.'))return;
   if(!confirm(t('confirm.clear_data')))return;
   reportAudit({action:'reset_all_confirmed',target:'local_data'});
-  ['lb_jobs','lb_archive','lb_cabinets','lb_syns','lb_scans','lb_waiting','lb_conges','lb_absences','lb_techs','lb_prog_actif'].forEach(function(k){localStorage.removeItem(k);});
+  ['lb_jobs','lb_archive','lb_cabinets','lb_syns','lb_scans','lb_waiting','lb_conges','lb_absences','lb_tech_off_days','lb_techs','lb_prog_actif'].forEach(function(k){localStorage.removeItem(k);});
   localStorage.setItem('lb_techs','{}'); // nouveau départ = aucun technicien
   location.reload();
 });
@@ -10773,12 +11672,12 @@ function addToQueue(){
   const missingItems=_readMissingItems();
   if(!name){alert(t('alert.enter_patient'));return;}
   const allItems=getSaisieItems(type,nb);
-  var patientSex=typeof readSaisiePatientSex==='function'?readSaisiePatientSex():'';
+  var patientSex=typeof readSaisiePatientSex==='function'?readSaisiePatientSex():'';var patientAge=((document.getElementById('saisie-iage')||{}).value||'').trim();
   var toothD=_readSaisieTeethFields();
   const jobId=String(Date.now());
   const trackCode=typeof genTrackCode==='function'?genTrackCode():'';
-  const baseJob=applyDeliveryFieldsToObject({id:jobId,patient:name,type:allItems[0].type,tasks:[],nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,createdAt:new Date().toISOString(),trackCode:trackCode,prothesisId:'',teeth:toothD.teeth,links:toothD.links,patientSex:patientSex,needsProg:true},deliv);
-  const queueItem=applyDeliveryFieldsToObject({id:jobId+'_q',jobId:jobId,patient:name,type:allItems[0].type,nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,emp:emp||false,createdAt:baseJob.createdAt,trackCode:trackCode,teeth:toothD.teeth,links:toothD.links,patientSex:patientSex},deliv);
+  const baseJob=applyDeliveryFieldsToObject({id:jobId,patient:name,type:allItems[0].type,tasks:[],nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,createdAt:new Date().toISOString(),trackCode:trackCode,prothesisId:'',teeth:toothD.teeth,links:toothD.links,patientSex:patientSex,patientAge:patientAge,needsProg:true},deliv);
+  const queueItem=applyDeliveryFieldsToObject({id:jobId+'_q',jobId:jobId,patient:name,type:allItems[0].type,nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,emp:emp||false,createdAt:baseJob.createdAt,trackCode:trackCode,teeth:toothD.teeth,links:toothD.links,patientSex:patientSex,patientAge:patientAge},deliv);
   if(missingItems.length){queueItem.missingInfoItems=missingItems;}
   if(missingItems.length){baseJob.missingInfoItems=missingItems;}
   jobs.push(baseJob);
@@ -10788,7 +11687,7 @@ function addToQueue(){
   // Reset
   document.getElementById('saisie-ip').value='';
   if(typeof resetSaisiePatientSex==='function')resetSaisiePatientSex();
-  document.getElementById('saisie-inb').value='1';
+  document.getElementById('saisie-inb').value='1';var _iaR=document.getElementById('saisie-iage');if(_iaR)_iaR.value='';
   document.getElementById('saisie-inote').value='';
   resetSaisieDeliveryFields();
   document.getElementById('saisie-iurg').checked=false;
@@ -10816,13 +11715,13 @@ function addDirect(){
   const missingItems=_readMissingItems();
   if(!name){alert(t('alert.enter_patient'));return;}
   const allItems=getSaisieItems(type,nb);
-  var patientSex=typeof readSaisiePatientSex==='function'?readSaisiePatientSex():'';
-  var toothD=_readSaisieTeethFields();const job=applyDeliveryFieldsToObject({id:String(Date.now()),patient:name,type:allItems[0].type,tasks:[],nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,createdAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId:'',teeth:toothD.teeth,links:toothD.links,patientSex:patientSex},deliv);
+  var patientSex=typeof readSaisiePatientSex==='function'?readSaisiePatientSex():'';var patientAge=((document.getElementById('saisie-iage')||{}).value||'').trim();
+  var toothD=_readSaisieTeethFields();const job=applyDeliveryFieldsToObject({id:String(Date.now()),patient:name,type:allItems[0].type,tasks:[],nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,createdAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId:'',teeth:toothD.teeth,links:toothD.links,patientSex:patientSex,patientAge:patientAge},deliv);
   if(missingItems.length){job.missingInfoItems=missingItems;}
   jobs.push(job);saveJobs();
   document.getElementById('saisie-ip').value='';
   if(typeof resetSaisiePatientSex==='function')resetSaisiePatientSex();
-  document.getElementById('saisie-inb').value='1';
+  document.getElementById('saisie-inb').value='1';var _iaR=document.getElementById('saisie-iage');if(_iaR)_iaR.value='';
   document.getElementById('saisie-inote').value='';
   resetSaisieDeliveryFields();
   document.getElementById('saisie-iurg').checked=false;
@@ -10846,30 +11745,37 @@ function removeFromQueue(id,opts){
 }
 
 // Programme automatiquement un item de la queue (affectation auto des techs)
-// Labels d'étapes "communes" placées en début ou fin lors d'une session multi-types
-const SHARED_START_STEPS=['Récupération fichiers empreinte optique','Scan & impression modèle'];
-const SHARED_END_STEPS=['Impression du modèle'];
-
-// Construit la liste fusionnée d'étapes pour multi-types :
-// - étapes communes (scan/recup/impression) dédoublonnées, placées en début/fin
-// - étapes spécifiques à chaque type dans leur ordre naturel
-// Retourne [{label, tech, typeIdx}, ...] sans dates (assignées plus tard)
+// Construit la liste fusionnée d'étapes pour multi-types selon les PHASES DE FABRICATION.
+// - Les types de même phase sont planifiés en parallèle (mêmes décalages de jours).
+// - Les phases s'enchaînent : la phase n+1 démarre après la fin (jour max) de la phase n.
+// - À l'intérieur d'un type, les J+N configurés sont respectés (lus via buildTasks).
+// Retourne [{label, tech, wd}], où wd = nombre de jours ouvrés depuis le départ du travail.
 function buildMergedStepList(items,emp){
-  const tmpBase=new Date();
+  const tmpBase=new Date();tmpBase.setHours(0,0,0,0);
+  // Regrouper les types par phase, en conservant l'ordre de saisie à l'intérieur d'une phase.
+  const byPhase={};
+  items.forEach(function(item){const p=_typePhase(item.type);(byPhase[p]=byPhase[p]||[]).push(item);});
+  const phases=Object.keys(byPhase).map(Number).sort(function(a,b){return a-b;});
   const seenLabels=new Set();
-  const startSteps=[],coreSteps=[],endSteps=[];
-  items.forEach(function(item,idx){
-    const tasks=buildTasks(item.type,emp,null,tmpBase);
-    tasks.forEach(function(t){
-      if(seenLabels.has(t.label))return;
-      seenLabels.add(t.label);
-      const s={label:t.label,tech:t.tech,typeIdx:idx};
-      if(SHARED_START_STEPS.includes(t.label))startSteps.push(s);
-      else if(SHARED_END_STEPS.includes(t.label))endSteps.push(s);
-      else coreSteps.push(s);
+  const out=[];
+  let cumWD=0; // jours ouvrés déjà consommés par les phases précédentes
+  phases.forEach(function(p){
+    let phaseMax=0;
+    byPhase[p].forEach(function(item){
+      const tasks=buildTasks(item.type,emp,null,tmpBase)||[];
+      tasks.forEach(function(tk){
+        // Offset relatif de l'étape DANS son type (J+N), reconstitué depuis la date produite.
+        const off=Math.max(1,countWD(tmpBase,tk.dueDate));
+        if(off>phaseMax)phaseMax=off;
+        if(seenLabels.has(tk.label))return;
+        seenLabels.add(tk.label);
+        out.push({label:tk.label,tech:tk.tech,wd:cumWD+off,sameTechAsLabel:tk.sameTechAsLabel});
+      });
     });
+    cumWD+=phaseMax;
   });
-  return[...startSteps,...coreSteps,...endSteps];
+  out.sort(function(a,b){return a.wd-b.wd;});
+  return out;
 }
 
 function _promoteQueueItemToJob(q,tasks){
@@ -10900,17 +11806,37 @@ function programQueueAuto(id){
   const q=queue.find(function(x){return x.id===id;});if(!q)return;
   _debugAuditLog('H2','Desktop programQueueAuto start',{qid:id,queueSize:(queue||[]).length,patientCodePresent:!!q.patient});
   const items=q.items&&q.items.length?q.items:[{type:q.type,nb:q.nb||1}];
-  const base=new Date();
-  let allTasks;
-  if(items.length===1){
-    allTasks=buildTasks(items[0].type,q.emp||false,null,base);
-  } else {
-    const steps=buildMergedStepList(items,q.emp||false);
-    allTasks=steps.map(function(s,i){return{label:s.label,tech:s.tech,dueDate:addWD(base,i+1).toISOString(),done:false};});
-  }
+  // Mode au plus tôt (défaut) ou rétro-planning selon la préférence du technicien (_planDeadline).
+  const allTasks=_buildScheduledTasks(items,q.emp||false,(typeof _planDeadline==='function')?_planDeadline(q.labDeliveryDate||q.requestedDeliveryDate||''):'');
   if(!allTasks.length){alert(t('alert.unknown_type'));return;}
   _promoteQueueItemToJob(q,allTasks);
   if(typeof showToast==='function')showToast('✅ Travail programmé','#2a6049',2200);
+}
+
+// Programme automatiquement un travail par son id. Si une entrée de file existe, on passe par
+// le flux normal (programQueueAuto). Sinon (ex : travail issu d'une commande cabinet acceptée,
+// sans entrée de file), on génère les étapes directement sur le travail. Corrige le cas où un
+// travail « non programmé » n'offrait aucun bouton de programmation.
+function programJobAuto(jobId){
+  jobId=String(jobId);
+  if(typeof queue!=='undefined'&&queue){
+    const q=queue.find(function(x){return String(x.jobId||'')===jobId||String(x.id)===jobId;});
+    if(q){return programQueueAuto(q.id);}
+  }
+  const j=(typeof jobs!=='undefined'?jobs:[]).find(function(x){return String(x.id)===jobId;});
+  if(!j){if(typeof showToast==='function')showToast('Travail introuvable','#c0392b');return;}
+  const items=(j.items&&j.items.length)?j.items:[{type:j.type,nb:j.nb||1}];
+  // Mode au plus tôt (défaut) ou rétro-planning selon la préférence du technicien (_planDeadline).
+  const allTasks=_buildScheduledTasks(items,j.emp||false,(typeof _planDeadline==='function')?_planDeadline(j.labDeliveryDate||j.requestedDeliveryDate||''):'');
+  if(!allTasks.length){alert(t('alert.unknown_type'));return;}
+  j.tasks=allTasks;
+  j.needsProg=false;
+  j.updatedAt=new Date().toISOString();
+  if(typeof saveJobs==='function')saveJobs();
+  if(typeof render==='function')render();
+  if(typeof autoPublishCab==='function')autoPublishCab(j.cabinet||'',{silent:true});
+  if(typeof cloudSave==='function')cloudSave();
+  if(typeof showToast==='function')showToast('⚡ Travail programmé automatiquement','#2a6049',2200);
 }
 
 /* ══════════════════════════════════════════
@@ -10939,7 +11865,7 @@ function openManualModal(id){
   // Construire les étapes (fusionnées si multi-types), avec un numéro de jour par défaut
   const rawSteps=items.length===1
     ?buildTasks(items[0].type,q.emp||false,null).map(function(t,i){return{label:t.label,tech:t.tech,typeIdx:0,day:i+1};})
-    :buildMergedStepList(items,q.emp||false).map(function(s,i){return Object.assign({},s,{day:i+1});});
+    :buildMergedStepList(items,q.emp||false).map(function(s,i){return Object.assign({},s,{day:s.wd||(i+1)});});
   if(!rawSteps.length){alert(t('alert.unknown_type'));return;}
   mmSteps=rawSteps.map(function(s){return Object.assign({},s,{deleted:false});});
   document.getElementById('mm-title').textContent=q.patient;
@@ -10978,7 +11904,8 @@ function renderMmSteps(){
     const _dateISO=fmtISO(_stepDate);
     const _isConge=conges.includes(_dateISO);
     const _isTechOff=step.tech&&step.tech!=='auto'&&isTechAbsent(step.tech,_stepDate);
-    const _warn=_isConge||_isTechOff;
+    const _isTechRecurringOff=step.tech&&step.tech!=='auto'&&isTechRecurringOff(step.tech,_stepDate);
+    const _warn=_isConge||_isTechOff||_isTechRecurringOff;
     const _dateLbl=_stepDate.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
     // Champ jour éditable
     const dayInput=document.createElement('input');
@@ -10992,7 +11919,7 @@ function renderMmSteps(){
     // Badge date
     const dateBadge=document.createElement('span');
     dateBadge.style.cssText='font-size:.7rem;padding:2px 8px;border-radius:5px;white-space:nowrap;'+(_warn?'background:#fff3cd;color:#856404;border:1px solid #ffc107;font-weight:600;':'background:var(--surface);color:var(--ink-soft);border:1px solid var(--border);');
-    dateBadge.textContent=_dateLbl+(_isConge?' ⚠ Jour férié':_isTechOff?' ⚠ Tech absent':'');
+    dateBadge.textContent=_dateLbl+(_isConge?' ⚠ Jour férié':_isTechOff?' ⚠ Tech absent':_isTechRecurringOff?' ⚠ Hors labo':'');
     const lbl=document.createElement('div');
     lbl.style.cssText='font-size:.82rem;font-weight:500;flex:1;'+(step.deleted?'text-decoration:line-through;color:var(--ink-soft);':'');
     lbl.textContent=step.label;
@@ -13022,6 +13949,26 @@ async function _markStepDelivered(portalId,caseId,stepId,blId){
   _pendingOrdersCache[portalId]=list;
 }
 
+// Marque une étape de cas comme ANNULÉE côté portail cabinet (le praticien voit
+// « Annulé par le labo » sur sa fiche). Tolérant aux erreurs réseau (fire-and-forget).
+async function _markStepCancelled(portalId,caseId,stepId,reason){
+  try{
+    if(!portalId||!caseId||!stepId)return;
+    const list=_pendingOrdersCache[portalId]||await _fetchOrdersForCab(portalId);
+    const cIdx=list.findIndex(function(x){return x.id===caseId;});
+    if(cIdx<0)return;
+    _migrateOrderToCase(list[cIdx]);
+    const sIdx=(list[cIdx].steps||[]).findIndex(function(s){return s.id===stepId;});
+    if(sIdx<0)return;
+    list[cIdx].steps[sIdx].status='cancelled';
+    list[cIdx].steps[sIdx].cancelledAt=new Date().toISOString();
+    if(reason)list[cIdx].steps[sIdx].cancelReason=reason;
+    list[cIdx].updatedAt=new Date().toISOString();
+    await _writeOrdersForCab(portalId,list);
+    _pendingOrdersCache[portalId]=list;
+  }catch(e){console.warn('markStepCancelled',e);}
+}
+
 /* Dérive le statut :
    - si tâches planifiées → automatique depuis les dates
    - sinon → manuel via job.portalStep (défaut : recu) */
@@ -13637,7 +14584,7 @@ async function fmGenerate(){
     date:fmtISO(now),
     note:note||'Facture — '+now.toLocaleDateString('fr-FR',{month:'long',year:'numeric'}),
     lines:activeLines.map(function(l){
-      return {label:l.label,qty:l.qty||1,prix:l.prix||0,blNum:l.blId?(bdl.find(function(b){return b.id===l.blId;})||{}).num||'':''};
+      return {label:l.label,patient:l.patient||'',qty:l.qty||1,prix:l.prix||0,blNum:l.blId?(bdl.find(function(b){return b.id===l.blId;})||{}).num||'':''};
     }),
     total,
     bdlRefs:checkedBls.map(function(b){return b.num;}),
@@ -13711,15 +14658,26 @@ function renderLivraisons(){
     return (b.patient||'').toLowerCase().includes(search)||(b.typeLabel||'').toLowerCase().includes(search)||(b.num||'').toLowerCase().includes(search)||(b.prothesisId||'').toLowerCase().includes(search);
   };
 
-  // Jobs sans BL (programmés ou non)
+  // Jobs sans BL (programmés ou non).
+  // Règle : pas de BL existant + correspond à la recherche, ET
+  //  - si une recherche est active → on montre TOUT ce qui correspond (le labo décide quand
+  //    émettre un BL, même en avance — cf. « Vous décidez quand émettre chaque bon ») ;
+  //  - sinon → on n'affiche que les travaux dus (date de livraison atteinte) pour ne pas encombrer.
   const todayISO=fmtISO(new Date());
-  const jobsNoBL=jobs.filter(function(j){
-    return !hasBLForItem(j)&&_isJobDueForDeliveryNote(j,todayISO)&&matchJob(j);
-  });
+  const filterMode=document.getElementById('livr-filter-mode')?document.getElementById('livr-filter-mode').value:'due';
+  const _weekEnd=new Date();_weekEnd.setDate(_weekEnd.getDate()+7);const weekISO=fmtISO(_weekEnd);
+  const _eligibleNoBL=function(j){
+    if(hasBLForItem(j)||!matchJob(j))return false;
+    if(search)return true;            // recherche → on montre tout ce qui correspond
+    if(filterMode==='all')return true;
+    var d=_jobLabDeliveryDate(j);
+    if(!d)return false;               // sans date de livraison : visible seulement via recherche ou « Tous »
+    if(filterMode==='week')return d<=weekISO;
+    return d<=todayISO;               // 'due' : échus + aujourd'hui
+  };
+  const jobsNoBL=jobs.filter(_eligibleNoBL);
   // Items en file d'attente non programmés (pas encore dans jobs)
-  const queueNoBL=queue.filter(function(q){
-    return !hasBLForItem(q)&&_isJobDueForDeliveryNote(q,todayISO)&&matchJob(q);
-  }).map(function(q){return Object.assign({},q,{tasks:[],_fromQueue:true});});
+  const queueNoBL=queue.filter(_eligibleNoBL).map(function(q){return Object.assign({},q,{tasks:[],_fromQueue:true});});
   const noBL=[...jobsNoBL,...queueNoBL].sort(function(a,b){
     var da=_jobLabDeliveryDate(a)||(a.createdAt?String(a.createdAt).slice(0,10):'');
     var db=_jobLabDeliveryDate(b)||(b.createdAt?String(b.createdAt).slice(0,10):'');
@@ -13753,7 +14711,7 @@ function renderLivraisons(){
         div.innerHTML=
           '<div class="livr-avatar" style="background:var(--accent);">'+ini+'</div>'+
           '<div class="livr-info">'+
-            '<div class="livr-patient">'+(job.urgent?'🔴 ':'')+job.patient+'</div>'+
+            '<div class="livr-patient">'+(job.urgent?'🔴 ':'')+escH(formatJobPatientLabel(job))+'</div>'+
             '<div class="livr-type">'+getJobTypeLabel(job)+(job.nb>1?' × '+job.nb:'')+(job.prothesisId?' · #'+job.prothesisId:'')+'</div>'+
             (_fmtJobDeliveryLine(job)?'<div style="font-size:.68rem;color:#2a6049;margin-top:3px;">'+_fmtJobDeliveryLine(job)+(_isJobLate(job)?' <span style="color:#dc2626;font-weight:700;">· retard</span>':'')+'</div>':'')+
             (job._fromQueue?'<div style="font-size:.68rem;color:#8b4513;margin-top:3px;background:#fff3e0;border-radius:4px;padding:1px 6px;display:inline-block;">⏳ '+t('misc.pending_prog')+'</div>':'')+
@@ -13778,7 +14736,7 @@ function renderLivraisons(){
       doneEl.innerHTML='';
       filtered.forEach(function(x){
         const bl=x.bl;const job=x.job;
-        const patient=job.patient||bl.patient||'Sans code patient';
+        const patient=(job&&job.patient)?formatJobPatientLabel(job):(bl.patient||'Sans code patient');
         const typeLabel=bl.typeLabel||getJobTypeLabel(job);
         const div=document.createElement('div');
         div.className='livr-item done-item';
@@ -14248,10 +15206,13 @@ function _safeBootToLogin(message){
 
 window.addEventListener('error', function(ev){
   _debugAuditLog('H1','Desktop window.error',{msg:ev&&ev.message?String(ev.message):'window.error'});
+  var _stack = ev && ev.error && ev.error.stack ? ev.error.stack : '';
+  // Les SyntaxError de script n'ont pas d'ev.error : on garde fichier:ligne:colonne pour pouvoir localiser.
+  if(!_stack && ev && (ev.filename||ev.lineno)) _stack = 'at '+(ev.filename||'')+':'+(ev.lineno||0)+':'+(ev.colno||0);
   reportClientError({
     level: 'error',
     message: ev && ev.message ? ev.message : 'window.error',
-    stack: ev && ev.error && ev.error.stack ? ev.error.stack : '',
+    stack: _stack,
   });
   try{
     var loading=document.getElementById('auth-loading');
@@ -14390,7 +15351,13 @@ function showTrialBanner(sub){
   if(sub.stripeSubscriptionId){el.style.display='none';return;}
   // Sinon : essai gratuit en cours, on incite à souscrire
   var te=getTrialEnd(sub);
-  if(sub.status==='trialing'||(te&&new Date(te)>new Date())){
+  // Fin d'accès effective : la date la plus tardive entre la fin d'essai et un accès accordé
+  // manuellement par l'admin (grantedAccessUntil). Sans ça le compteur affichait « 0j » alors
+  // que l'accès était prolongé (cf. hasAccess qui regarde grantedAccessUntil).
+  var ga=sub.grantedAccessUntil||null;
+  var effEnd=te;
+  if(ga&&(!effEnd||new Date(ga)>new Date(effEnd)))effEnd=ga;
+  if(sub.status==='trialing'||(effEnd&&new Date(effEnd)>new Date())){
     function _fmtTrialCountdown(endIso){
       var ms=Math.max(0,new Date(endIso||Date.now()).getTime()-Date.now());
       var totalMin=Math.floor(ms/60000);
@@ -14400,7 +15367,7 @@ function showTrialBanner(sub){
       return d+'j '+String(h).padStart(2,'0')+'h '+String(m).padStart(2,'0')+'m';
     }
     function _renderTrialCountdown(){
-      var cd=_fmtTrialCountdown(te);
+      var cd=_fmtTrialCountdown(effEnd);
       el.innerHTML='🎁 Essai gratuit — <strong>'+cd+' restants</strong> · Cliquez pour souscrire';
     }
     _renderTrialCountdown();
@@ -14764,6 +15731,7 @@ function _memoryHasTenantData(){
     if((bdc||[]).length||(scanHist||[]).length)return true;
     if(syns&&Object.keys(syns).length)return true;
     if(TECHS&&Object.keys(TECHS).length)return true;
+    if(techOffDays&&Object.keys(techOffDays).length)return true;
     if(customTypes&&customTypes.length)return true;
   }catch(e){}
   return false;
@@ -14771,7 +15739,7 @@ function _memoryHasTenantData(){
 
 function _resetInMemoryLabState(){
   jobs=[];archive=[];cabinets=[];syns={};scanHist=[];
-  waiting=[];conges=[];absences={};queue=[];
+  waiting=[];conges=[];absences={};techOffDays={};queue=[];
   documents=[];tarifs=[];bdc=[];fourns=[];bdl=[];
   TECHS={};customTypes=[];
   if(typeof _chatUnread!=='undefined'){Object.keys(_chatUnread).forEach(function(k){delete _chatUnread[k];});}
@@ -14789,6 +15757,7 @@ function _hydrateLabStateFromLocalStorage(){
   waiting=JSON.parse(localStorage.getItem('lb_waiting')||'[]');
   conges=JSON.parse(localStorage.getItem('lb_conges')||'[]');
   absences=JSON.parse(localStorage.getItem('lb_absences')||'{}');
+  techOffDays=JSON.parse(localStorage.getItem('lb_tech_off_days')||'{}');
   contges=conges;
   queue=JSON.parse(localStorage.getItem('lb_queue')||'[]');
   documents=JSON.parse(localStorage.getItem('lb_docs')||'[]');
@@ -16081,8 +17050,39 @@ function processNewCabinetMessages(cab, msgs){
   if(_dashPane&&_dashPane.classList.contains('on')&&typeof renderDashboard==='function')renderDashboard();
 }
 
+// Bandeau « session expirée » : affiché quand le token a expiré en cours de session (refresh
+// impossible). Stoppe le poll chat (sinon spam de 401) et propose une reconnexion claire.
+function _showSessionExpiredBanner(){
+  if(document.getElementById('session-expired-banner'))return;
+  try{ if(typeof _chatBgInterval!=='undefined'&&_chatBgInterval){clearInterval(_chatBgInterval);_chatBgInterval=null;} }catch(e){}
+  var b=document.createElement('div');
+  b.id='session-expired-banner';
+  b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;text-align:center;font-size:.85rem;font-weight:600;box-shadow:0 2px 10px rgba(0,0,0,.25);';
+  b.innerHTML='⚠️ Votre session a expiré. '+
+    '<button onclick="if(window.authLogout)authLogout();else location.reload();" style="margin-left:10px;background:#fff;color:#b91c1c;border:none;border-radius:6px;padding:5px 12px;font-weight:700;cursor:pointer;">Se reconnecter</button>';
+  document.body.appendChild(b);
+}
+window._showSessionExpiredBanner=_showSessionExpiredBanner;
+
 async function pollAllChatsOnce(){
   if(_labPrintWinActive)return;
+  // Session expirée (token absent malgré tentative de refresh) → on arrête de spammer des 401
+  // et on prévient l'utilisateur au lieu de laisser une app « connectée » mais cassée.
+  let _tok=await ensureFreshAccessToken(false);
+  if(!_tok){
+    // Token absent : souvent une course transitoire (juste après inscription, ou refresh en vol).
+    // Avant d'afficher un bandeau alarmant, on force un refresh ET on vérifie qu'il n'existe
+    // vraiment plus de session Supabase — sinon on a un faux positif « session expirée ».
+    _tok=await ensureFreshAccessToken(true);
+    if(!_tok){
+      let _realSession=null;
+      try{ const s=await sbClient.auth.getSession(); _realSession=s&&s.data&&s.data.session?s.data.session:null; }catch(e){}
+      if(!_realSession){ _showSessionExpiredBanner(); }
+      return;
+    }
+  }
+  // Token valide retrouvé : retirer un éventuel bandeau « session expirée » resté affiché.
+  try{ var _seb=document.getElementById('session-expired-banner'); if(_seb)_seb.remove(); }catch(e){}
   var firstBoot=!_chatPushBootstrapDone;
   for(const cab of cabinets){
     if(!cab.portalId)continue;
@@ -16140,7 +17140,7 @@ function startChatRealtimeAll(){
 function startChatBgPoll(){
   if(_chatBgInterval)return;
   pollAllChatsOnce();
-  _chatBgInterval=setInterval(pollAllChatsOnce,8000);
+  _chatBgInterval=setInterval(function(){ if(!document.hidden) pollAllChatsOnce(); },8000);
 }
 window.addEventListener('load',function(){setTimeout(startChatBgPoll,2000);});
 document.addEventListener('visibilitychange',function(){
@@ -16155,7 +17155,7 @@ function buildJobTimelineEvents(job,jobBdl){
   const jobId=String(job.id);
   const blNums=jobBdl.map(function(b){return b.num;}).filter(Boolean);
   if(job.createdAt){
-    events.push({at:job.createdAt,icon:'📋',title:'Travail créé',detail:job.patient||''});
+    events.push({at:job.createdAt,icon:'📋',title:'Travail créé',detail:formatJobPatientLabel(job)});
   }
   if(job.pendingResponse){
     events.push({at:job.pendingSince||job.createdAt,icon:'⏸',title:'En attente de réponse cabinet',detail:(job.responseComment||'').slice(0,100)});
@@ -16339,7 +17339,7 @@ function openJobDetail(jobId){
     <div id="job-detail-panel" style="background:var(--bg);border-radius:16px 16px 0 0;width:100%;max-width:680px;max-height:85vh;overflow-y:auto;padding:24px 24px 32px;animation:slideUp .25s ease;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
         <div>
-          <div style="font-family:'Inter',sans-serif;font-weight:700;font-size:1.25rem;font-weight:700;">${job.urgent?'🔴 ':''}${escH(job.patient)}</div>
+          <div style="font-family:'Inter',sans-serif;font-weight:700;font-size:1.25rem;font-weight:700;">${job.urgent?'🔴 ':''}${escH(formatJobPatientLabel(job))}</div>
           <div style="font-size:.75rem;color:var(--ink-soft);margin-top:3px;">${escH(getJobTypeLabel(job))}${job.nb>1?' · '+job.nb+' éléments':''}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">

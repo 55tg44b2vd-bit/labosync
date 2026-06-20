@@ -98,7 +98,7 @@ async function readErrorDashboard(serviceKey, opts) {
   const limit = Math.min(1000, Math.max(50, parseInt((opts && opts.limit) || 500, 10) || 500));
   const threshold = Math.max(1, parseInt((opts && opts.threshold) || 20, 10) || 20);
   const r = await fetch(
-    `${SB_URL}/rest/v1/labo_data?id=like.err_%&select=id,data,updated_at&order=updated_at.desc&limit=${limit}`,
+    `${SB_URL}/rest/v1/labo_data?id=like.err_%25&select=id,data,updated_at&order=updated_at.desc&limit=${limit}`,
     { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
   );
   if (!r.ok) throw new Error(`Lecture erreurs impossible (${r.status})`);

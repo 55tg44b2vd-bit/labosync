@@ -517,6 +517,7 @@
     var cab = cabEl ? cabEl.value : '';
     var urg = document.getElementById('saisie-iurg').checked;
     var patientSex = readSaisiePatientSex();
+    var patientAge = (((global.document.getElementById('saisie-iage') || {}).value) || '').trim();
     var missingItems =
       typeof global._readMissingItems === 'function' ? global._readMissingItems() : [];
     var allItems =
@@ -546,6 +547,7 @@
       links: toothD.links,
       needsProg: isProgEnabled(),
       patientSex: patientSex,
+      patientAge: patientAge,
     };
     if (missingItems.length) job.missingInfoItems = missingItems;
     if (isProgEnabled() && typeof global.promptAdminJobFinish === 'function') {
@@ -564,6 +566,7 @@
         requestedDeliveryDate: req,
         jobId: job.id,
         patientSex: patientSex,
+      patientAge: patientAge,
       };
       if (missingItems.length) queueItem.missingInfoItems = missingItems;
       global.promptAdminJobFinish({ job: job, queueItem: queueItem });
