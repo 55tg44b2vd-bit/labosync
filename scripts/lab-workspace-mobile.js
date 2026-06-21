@@ -507,8 +507,16 @@
     if (!el) return;
     var state = getMobileState();
     var list = (state.queue || []).slice();
+    // Anti-doublon : un travail créé en mode Gestion possède À LA FOIS une entrée
+    // de file (state.queue, avec jobId) ET un job needsProg. Sans ce filtre il
+    // s'affichait deux fois dans « À programmer ». On garde l'entrée de file
+    // (sa planification met à jour le job existant et nettoie la file).
+    var queuedJobIds = {};
+    (state.queue || []).forEach(function (q) {
+      if (q && q.jobId != null) queuedJobIds[String(q.jobId)] = true;
+    });
     (state.jobs || []).forEach(function (j) {
-      if ((!j.tasks || !j.tasks.length) && j.needsProg) {
+      if ((!j.tasks || !j.tasks.length) && j.needsProg && !queuedJobIds[String(j.id)]) {
         list.push({
           id: 'job_' + j.id,
           jobId: j.id,
