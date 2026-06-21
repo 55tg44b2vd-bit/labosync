@@ -1455,8 +1455,25 @@ body.has-sidebar #drawer{transform:translateX(0);}
       <div class="card" id="card-tarifs">
         <h2>💰 Tarifs de vos travaux</h2>
         <p data-i18n="desc.types" style="font-size:.76rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;">Indiquez le <strong>prix en euros</strong> de chaque type de travail (couronne, inlay, facette…). Ce prix sera proposé automatiquement sur les bons de livraison et les factures.</p>
-        <p style="font-size:.7rem;color:var(--ink-muted);margin-bottom:14px;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);">💡 Pour ajouter un type ou configurer les étapes, ouvrez <button type="button" class="btn btn-b" style="display:inline;padding:2px 8px;font-size:.68rem;vertical-align:baseline;margin:0 2px;" onclick="openSettingsSection('programmation')">Programmation</button>.</p>
+        <p style="font-size:.7rem;color:var(--ink-muted);margin-bottom:14px;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);">💡 Ajoutez ici un type de travail avec son prix. Pour lui définir des <strong>étapes de planning atelier</strong>, ouvrez <button type="button" class="btn btn-b" style="display:inline;padding:2px 8px;font-size:.68rem;vertical-align:baseline;margin:0 2px;" onclick="openSettingsSection('programmation')">Programmation</button>.</p>
         <div id="ct-list" style="margin-bottom:16px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-b" id="btn-tarif-type-show" onclick="showTarifTypeForm()">+ Ajouter un type de travail</button>
+        </div>
+        <div id="tarif-type-form" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
+          <div style="font-size:.82rem;font-weight:700;margin-bottom:12px;">Nouveau type de travail</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div class="fl"><label>Nom du type</label><input type="text" id="tarif-type-name" placeholder="ex: Gouttière de bruxisme"/></div>
+            <div class="fl"><label>Catégorie</label><input type="text" id="tarif-type-cat" placeholder="ex: Prothèse &amp; Occlusion" list="ct-cat-list"/></div>
+          </div>
+          <div class="fl" style="max-width:200px;margin-bottom:14px;"><label>Prix (€)</label><input type="number" min="0" step="0.01" id="tarif-type-prix" placeholder="0.00"/></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-a" onclick="saveTarifType()">Enregistrer le type</button>
+            <button class="btn btn-b" onclick="hideTarifTypeForm()">Annuler</button>
+          </div>
+          <p style="font-size:.7rem;color:var(--ink-muted);margin-top:10px;">💡 Ce type sera aussi disponible dans <button type="button" class="btn btn-b" style="display:inline;padding:2px 8px;font-size:.68rem;vertical-align:baseline;margin:0 2px;" onclick="openSettingsSection('programmation')">Programmation</button> si vous souhaitez lui ajouter des étapes.</p>
+          <p id="tarif-type-msg" style="font-size:.74rem;color:#c0392b;margin-top:6px;min-height:16px;"></p>
+        </div>
       </div>
     </div>
 
@@ -10039,6 +10056,7 @@ async function cloudSave(){
       savedAt:now,
       _tabId:_tabId,
       laboName:localStorage.getItem('lb_name')||'',
+      laboLogo:localStorage.getItem('lb_logo')||'',
       jobs,archive,cabinets,syns,scanHist,waiting,conges,absences,techOffDays,
       deletedJobIds:_readDeletedJobIds(),
       queue:queue,
@@ -10061,15 +10079,26 @@ async function cloudSave(){
       },
       billingSettings:getBillingSettings(),
     };
-    // ── PRÉSERVATION DU CODE PIN GESTION (data.adminAccess) ──────────────────
-    // L'upsert ci-dessous REMPLACE la colonne data. Le code PIN est géré par la
-    // fonction lab-access dans data.adminAccess : on le relit (source de vérité)
-    // et on le réinjecte, sinon chaque sauvegarde l'effacerait.
+    // ── PRÉSERVATION DES CHAMPS GÉRÉS HORS DE CE CLIENT ──────────────────────
+    // L'upsert ci-dessous REMPLACE toute la colonne data. Or certains champs sont
+    // écrits ailleurs : le code PIN Gestion (data.adminAccess) par la fonction
+    // lab-access, et des réglages saisis sur un AUTRE poste (mobile, etc.) qui ne
+    // figurent pas forcément dans ce payload. On relit donc la ligne serveur et on
+    // FUSIONNE : les clés de notre payload priment (état le plus récent de ce poste),
+    // mais toute clé présente côté serveur et absente ici est CONSERVÉE. Sans cette
+    // fusion, chaque sauvegarde effacerait les paramètres réglés sur un autre poste.
+    let _mergedData=payload;
     try{
-      const aq=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+userId+'&select=adminAccess:data->adminAccess',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token}});
-      if(aq.ok){const ar=await aq.json();_serverAdminAccess=(ar&&ar[0]&&ar[0].adminAccess)?ar[0].adminAccess:null;}
-    }catch(e){console.warn('préservation adminAccess (lecture) échouée, repli cache',e);}
-    if(_serverAdminAccess)payload.adminAccess=_serverAdminAccess;
+      const aq=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+userId+'&select=data',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token}});
+      if(aq.ok){
+        const ar=await aq.json();
+        const sd=(ar&&ar[0]&&ar[0].data&&typeof ar[0].data==='object')?ar[0].data:null;
+        if(sd){_mergedData=Object.assign({},sd,payload);if(sd.adminAccess)_serverAdminAccess=sd.adminAccess;}
+      }
+    }catch(e){
+      console.warn('préservation champs serveur (lecture) échouée, repli cache PIN',e);
+      if(_serverAdminAccess)_mergedData=Object.assign({adminAccess:_serverAdminAccess},payload);
+    }
     let r=await fetch(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
       headers:{
@@ -10078,7 +10107,7 @@ async function cloudSave(){
         'Authorization':'Bearer '+token,
         'Prefer':'resolution=merge-duplicates,return=minimal'
       },
-      body:JSON.stringify({id:userId,data:payload,updated_at:now})
+      body:JSON.stringify({id:userId,data:_mergedData,updated_at:now})
     });
     if(r.status===401){
       token=await ensureFreshAccessToken(true);
@@ -10090,7 +10119,7 @@ async function cloudSave(){
           'Authorization':'Bearer '+token,
           'Prefer':'resolution=merge-duplicates,return=minimal'
         },
-        body:JSON.stringify({id:userId,data:payload,updated_at:now})
+        body:JSON.stringify({id:userId,data:_mergedData,updated_at:now})
       });
     }
     if(r.ok||r.status===200||r.status===201||r.status===204){
@@ -12355,6 +12384,42 @@ function saveTypePrices(){
   renderCustomTypesList();
   const msg=document.getElementById('ct-prix-msg');
   if(msg){msg.textContent=t('toast.prices_saved');setTimeout(function(){msg.textContent='';},2500);}
+}
+
+// ── Ajout rapide d'un type de travail depuis l'onglet Tarifs ──────────────────
+// Permet de créer un type (nom + catégorie + prix) sans passer par la Programmation.
+// Le type créé n'a aucune étape : il reste utilisable tel quel, et les labos qui
+// font du planning atelier pourront lui ajouter des étapes via l'onglet Programmation.
+function showTarifTypeForm(){
+  var f=document.getElementById('tarif-type-form');if(!f)return;
+  var n=document.getElementById('tarif-type-name');if(n)n.value='';
+  var c=document.getElementById('tarif-type-cat');if(c)c.value='';
+  var p=document.getElementById('tarif-type-prix');if(p)p.value='';
+  var msg=document.getElementById('tarif-type-msg');if(msg)msg.textContent='';
+  f.style.display='block';
+  var btn=document.getElementById('btn-tarif-type-show');if(btn)btn.style.display='none';
+  if(n)n.focus();
+}
+function hideTarifTypeForm(){
+  var f=document.getElementById('tarif-type-form');if(f)f.style.display='none';
+  var btn=document.getElementById('btn-tarif-type-show');if(btn)btn.style.display='';
+}
+function saveTarifType(){
+  var nameEl=document.getElementById('tarif-type-name');
+  var catEl=document.getElementById('tarif-type-cat');
+  var prixEl=document.getElementById('tarif-type-prix');
+  var msg=document.getElementById('tarif-type-msg');
+  var name=nameEl?nameEl.value.trim():'';
+  var cat=catEl&&catEl.value.trim()?catEl.value.trim():'Autre';
+  var prix=prixEl?(parseFloat(prixEl.value)||0):0;
+  if(!name){if(msg)msg.textContent='Indiquez un nom de type.';return;}
+  var dup=customTypes.some(function(c){return (c.label||'').trim().toLowerCase()===name.toLowerCase();});
+  if(dup){if(msg)msg.textContent='Ce type existe déjà.';return;}
+  var id='ct_'+name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,15)+'_'+Date.now();
+  customTypes.push({id:id,label:name,category:cat,phase:2,steps:[],stepsEmp:null,prix:prix});
+  saveCustomTypes();syncCustomTypesToTL();refreshTypeSelects();syncTarifsFromCustomTypes();renderCustomTypesList();
+  hideTarifTypeForm();
+  if(typeof showToast==='function')showToast('✅ Type ajouté : '+name,'#2a6049');
 }
 
 function renderTarifs(){

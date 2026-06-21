@@ -1590,12 +1590,25 @@ async function saveData(){
         ce_num:localStorage.getItem('lb_legal_ce_num')||'',
       }
     };
-    // Préserver le code PIN Gestion (data.adminAccess) que l'upsert effacerait.
+    // ── PRÉSERVATION DES CHAMPS GÉRÉS HORS MOBILE ──────────────────────────
+    // L'upsert REMPLACE toute la colonne data. Or certains réglages ne sont écrits
+    // que côté desktop (billingSettings, techOffDays, deletedJobIds) ou par
+    // lab-access (adminAccess, code Gestion) — ils ne figurent pas dans ce payload.
+    // On relit la ligne serveur et on FUSIONNE : nos clés priment, mais toute clé
+    // serveur absente ici est CONSERVÉE. Sans ça, une sauvegarde mobile effacerait
+    // les paramètres réglés sur le poste de gestion.
+    let _mergedData=payload;
     try{
-      const aq=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+currentUser.id+'&select=adminAccess:data->adminAccess',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_token}});
-      if(aq.ok){const ar=await aq.json();_serverAdminAccessMob=(ar&&ar[0]&&ar[0].adminAccess)?ar[0].adminAccess:null;}
-    }catch(e){console.warn('préservation adminAccess mobile échouée, repli cache',e);}
-    if(_serverAdminAccessMob)payload.adminAccess=_serverAdminAccessMob;
+      const aq=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.'+currentUser.id+'&select=data',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+_token}});
+      if(aq.ok){
+        const ar=await aq.json();
+        const sd=(ar&&ar[0]&&ar[0].data&&typeof ar[0].data==='object')?ar[0].data:null;
+        if(sd){_mergedData=Object.assign({},sd,payload);if(sd.adminAccess)_serverAdminAccessMob=sd.adminAccess;}
+      }
+    }catch(e){
+      console.warn('préservation champs serveur mobile échouée, repli cache PIN',e);
+      if(_serverAdminAccessMob)_mergedData=Object.assign({adminAccess:_serverAdminAccessMob},payload);
+    }
     const r=await fetch(SB_URL+'/rest/v1/labo_data',{
       method:'POST',
       headers:{
@@ -1604,11 +1617,11 @@ async function saveData(){
         'Authorization':'Bearer '+_token,
         'Prefer':'resolution=merge-duplicates,return=minimal'
       },
-      body:JSON.stringify({id:currentUser.id,data:payload,updated_at:now})
+      body:JSON.stringify({id:currentUser.id,data:_mergedData,updated_at:now})
     });
     if(r.ok||r.status===201||r.status===204){
       _serverUpdatedAt=now;
-      _captureMobileCloudSnapshot(payload);
+      _captureMobileCloudSnapshot(_mergedData);
       const hhmm=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
       setMobSyncUi('ok');
     }else{
@@ -3819,6 +3832,12 @@ document.getElementById('btn-add-job').addEventListener('click',async function()
   if(!patient){toast('Entrez le code patient','var(--red)');return;}
   var items=_mjItems.filter(function(it){return it.type;}).map(function(it){return{type:it.type,nb:parseInt(it.nb)||1};});
   if(!items.length){toast('Ajoutez au moins un type','var(--red)');return;}
+  // Anti double-envoi : sur mobile, un double-tap avant la fin de saveData() créait
+  // deux travaux (ids Date.now() distincts) → doublon visible à la recherche.
+  if(window._addingJobMobile)return;
+  window._addingJobMobile=true;
+  var _addBtn=this;if(_addBtn)_addBtn.disabled=true;
+  try{
   var totalNb=items.reduce(function(s,it){return s+it.nb;},0);
   var lbl=totalNb>1?patient+' ('+totalNb+' éléments)':patient;
   var tasks=[];
@@ -3848,6 +3867,7 @@ document.getElementById('btn-add-job').addEventListener('click',async function()
     if(cabObj)publishPortal(cabObj);
   }
   renderAll();
+  }finally{window._addingJobMobile=false;if(_addBtn)_addBtn.disabled=false;}
 });
 
 function renderJobList(){
@@ -4913,6 +4933,11 @@ function openQuickJobSheet(){
     var missingItems=_readMissingFromForm('qj');
     var items=_qjItems.filter(function(it){return it.type;}).map(function(it){return{type:it.type,nb:parseInt(it.nb)||1};});
     if(!items.length){toast('Ajoutez au moins un type','var(--red)');return;}
+    // Anti double-envoi (double-tap mobile) → évite la création en double du travail.
+    if(window._addingJobMobile)return;
+    window._addingJobMobile=true;
+    var _qjBtn=this;if(_qjBtn)_qjBtn.disabled=true;
+    try{
     var totalNb=items.reduce(function(s,it){return s+it.nb;},0);
     var lbl=totalNb>1?patient+' ('+totalNb+' éléments)':patient;
     var ws=typeof getWorkspace==='function'?getWorkspace():'admin';
@@ -4948,6 +4973,7 @@ function openQuickJobSheet(){
     await saveData();
     if(cab){var cabObj=cabinets.find(function(c){return c.id===cab;});if(cabObj)publishPortal(cabObj);}
     renderAll();
+    }finally{window._addingJobMobile=false;if(_qjBtn)_qjBtn.disabled=false;}
   });
 }
 
