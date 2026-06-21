@@ -845,8 +845,8 @@ body.has-sidebar #drawer{transform:translateX(0);}
     <div class="frow2" style="margin-top:10px;">
       <div class="fl" style="flex:1;min-width:180px;"><label data-i18n="form.note">Note / instructions</label><input type="text" id="saisie-inote" data-i18n-ph="form.ph.note" placeholder="teinte A2, instructions..."/></div>
       <div class="fl" style="min-width:150px;"><label>📅 Date demandée (cabinet)</label><input type="date" id="saisie-ireq-delivery" onchange="onSaisieRequestedDateChange()"/></div>
-      <div class="fl field-prog-only" style="min-width:150px;"><label>📦 Date labo (coursier)</label><input type="date" id="saisie-ilab-delivery" onchange="onSaisieLabDateChange()" title="Dernier jour ouvré avant la livraison (hors week-ends et congés)"/></div>
-      <div class="fl field-prog-only" style="min-width:140px;"><label>🚚 Créneau coursier</label><select id="saisie-idelivery-slot" style="width:100%;border:1.5px solid var(--border);border-radius:7px;padding:9px;font-size:.88rem;background:#fff;"><option value="9">9h — finir avant</option><option value="12" selected>12h — finir avant</option><option value="18">18h — finir avant</option></select></div>
+      <div class="fl" style="min-width:150px;"><label>📦 Date labo (coursier)</label><input type="date" id="saisie-ilab-delivery" onchange="onSaisieLabDateChange()" title="Dernier jour ouvré avant la livraison (hors week-ends et congés)"/></div>
+      <div class="fl" style="min-width:140px;"><label>🚚 Créneau coursier</label><select id="saisie-idelivery-slot" style="width:100%;border:1.5px solid var(--border);border-radius:7px;padding:9px;font-size:.88rem;background:#fff;"></select></div>
       <div class="fl" style="min-width:150px;"><label data-i18n="form.cabinet">🏥 Cabinet</label><select id="saisie-icab"><option value="" data-i18n="form.none">— Aucun —</option></select></div>
       <input type="checkbox" id="saisie-iurg" style="display:none;"/>
       <label class="chk field-prog-only prog-tab" id="saisie-emp-wrap" style="display:none;"><input type="checkbox" id="saisie-iemp"/><span data-i18n="form.digital">📡 Empreinte numérique</span></label>
@@ -1607,6 +1607,16 @@ body.has-sidebar #drawer{transform:translateX(0);}
         </div>
         <div id="courier-link-msg" style="font-size:.74rem;margin-top:10px;min-height:16px;color:var(--ink-soft);"></div>
         <div id="courier-links-list" style="margin-top:16px;"></div>
+      </div>
+      <div class="card">
+        <h2>🚚 Créneaux de livraison</h2>
+        <p style="font-size:.76rem;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;">Définissez les <strong>créneaux d'enlèvement coursier</strong> proposés à la saisie d'un travail (propres à votre labo). À la création, on saisit la <strong>date demandée par le cabinet</strong> : la <strong>date labo</strong> est alors pré-remplie automatiquement (veille ouvrée, week-ends et congés exclus) et le <strong>créneau par défaut</strong> est appliqué.</p>
+        <div id="courier-slots-list" style="margin-bottom:12px;"></div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+          <div class="fl" style="max-width:150px;"><label>Ajouter un créneau</label><input type="time" id="courier-slot-new" step="900"/></div>
+          <button type="button" class="btn btn-b" onclick="addCourierSlot()">+ Ajouter</button>
+        </div>
+        <p id="courier-slots-msg" style="font-size:.74rem;color:#2a6049;margin-top:8px;min-height:16px;"></p>
       </div>
     </div>
 
@@ -2967,6 +2977,7 @@ function openSettingsSection(id){
   if(id==='relances'){syncBillingRemindersUi();}
   if(id==='tarifs'){renderTarifsList();}
   if(id==='programmation'){renderProgTypesList();}
+  if(id==='coursiers'){renderCourierSlotsSettings();}
   if(id==='labo'){setTimeout(function(){initAllSignaturePads();},80);}
   try{sec.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}
 }
@@ -3378,8 +3389,25 @@ function saveSyns(){localStorage.setItem('lb_syns',JSON.stringify(syns));schedul
 function saveScanHist(){localStorage.setItem('lb_scans',JSON.stringify(scanHist));scheduleSave();}
 
 /* ── Livraison : date demandée / date labo / créneau coursier ── */
-var LAB_DELIVERY_SLOTS={9:'9h coursier',12:'12h coursier',18:'18h coursier'};
-function _labSlotHour(slot){var h=parseInt(slot,10);return h===9||h===18?h:12;}
+var LAB_DELIVERY_SLOTS={9:'9h coursier',12:'12h coursier',18:'18h coursier'}; // repli hérité
+// ── Créneaux coursier configurables par labo (lb_courier_slots) ───────────────
+var _DEFAULT_COURIER_CFG={slots:[{value:'9',label:'9h',hour:9},{value:'12',label:'12h',hour:12},{value:'18',label:'18h',hour:18}],default:'12'};
+function getCourierCfg(){
+  try{
+    var c=JSON.parse(localStorage.getItem('lb_courier_slots')||'null');
+    if(c&&Array.isArray(c.slots)&&c.slots.length){
+      c.slots=c.slots.map(function(s){return {value:String(s.value),label:s.label||(String(s.value)+'h'),hour:(typeof s.hour==='number'?s.hour:(parseInt(s.value,10)||12))};});
+      if(!c.default||!c.slots.some(function(s){return s.value===String(c.default);}))c.default=c.slots[0].value;
+      else c.default=String(c.default);
+      return c;
+    }
+  }catch(e){}
+  return JSON.parse(JSON.stringify(_DEFAULT_COURIER_CFG));
+}
+function saveCourierCfg(cfg){localStorage.setItem('lb_courier_slots',JSON.stringify(cfg));if(typeof scheduleSave==='function')scheduleSave();}
+function getDefaultCourierSlot(){return getCourierCfg().default;}
+function _courierSlotByValue(v){return getCourierCfg().slots.find(function(s){return s.value===String(v);})||null;}
+function _labSlotHour(slot){var s=_courierSlotByValue(slot);if(s)return s.hour;var h=parseInt(slot,10);return isNaN(h)?12:h;}
 function migrateJobDelivery(j){
   if(!j)return;
   if(!j.labDeliveryDate&&j.deliveryDate)j.labDeliveryDate=j.deliveryDate;
@@ -3396,7 +3424,7 @@ function migrateJobDelivery(j){
 function migrateAllJobsDelivery(){jobs.forEach(migrateJobDelivery);if(typeof queue!=='undefined'&&queue)queue.forEach(migrateJobDelivery);}
 function _jobLabDeliveryDate(j){migrateJobDelivery(j);return j.labDeliveryDate||'';}
 function _jobRequestedDeliveryDate(j){migrateJobDelivery(j);return j.requestedDeliveryDate||'';}
-function _fmtDeliverySlot(slot){return LAB_DELIVERY_SLOTS[slot]||LAB_DELIVERY_SLOTS['12'];}
+function _fmtDeliverySlot(slot){var s=_courierSlotByValue(slot);if(s)return s.label+' coursier';return LAB_DELIVERY_SLOTS[slot]||LAB_DELIVERY_SLOTS['12'];}
 function _isLabOpenDay(d){
   if(!d||isNaN(d.getTime()))return false;
   var w=d.getDay();
@@ -3453,7 +3481,7 @@ function _isJobDueForDeliveryNote(j,todayISO){
 function _fmtJobDeliveryLine(j){
   migrateJobDelivery(j);
   var lab=_jobLabDeliveryDate(j),req=_jobRequestedDeliveryDate(j),slot=_fmtDeliverySlot(j.labDeliverySlot);
-  var showSlot=typeof isProgActif==='function'&&isProgActif();
+  var showSlot=true;
   if(!lab&&!req)return '';
   var parts=[];
   if(lab)parts.push('📦 '+new Date(lab+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+(showSlot?' · '+slot:''));
@@ -3475,7 +3503,8 @@ function _deliveryFieldsFromSource(src){
 }
 function resetSaisieDeliveryFields(){
   ['saisie-ireq-delivery','saisie-ilab-delivery'].forEach(function(id){var el=document.getElementById(id);if(el){el.value='';delete el.dataset.userSet;}});
-  var slot=document.getElementById('saisie-idelivery-slot');if(slot)slot.value='12';
+  var slot=document.getElementById('saisie-idelivery-slot');
+  if(slot){slot.innerHTML=_deliverySlotOptionsHtml(getDefaultCourierSlot());slot.value=getDefaultCourierSlot();}
 }
 function onSaisieRequestedDateChange(){
   var req=document.getElementById('saisie-ireq-delivery'),lab=document.getElementById('saisie-ilab-delivery');
@@ -3487,9 +3516,57 @@ function onSaisieRequestedDateChange(){
 }
 function onSaisieLabDateChange(){var lab=document.getElementById('saisie-ilab-delivery');if(lab&&lab.value)lab.dataset.userSet='1';}
 function _deliverySlotOptionsHtml(cur){
-  return [['9','9h — coursier'],['12','12h — coursier'],['18','18h — coursier']].map(function(s){
-    return '<option value="'+s[0]+'"'+(String(cur||'12')===s[0]?' selected':'')+'>'+s[1]+'</option>';
+  var c=getCourierCfg();var sel=String(cur||c.default);
+  return c.slots.map(function(s){
+    return '<option value="'+escHtml(s.value)+'"'+(sel===s.value?' selected':'')+'>'+escHtml(s.label)+' — coursier</option>';
   }).join('');
+}
+// Repeuple les <select> de créneau coursier du formulaire de saisie depuis la config.
+function refreshCourierSlotSelects(){
+  var sel=document.getElementById('saisie-idelivery-slot');
+  if(sel){var cur=sel.value||getDefaultCourierSlot();sel.innerHTML=_deliverySlotOptionsHtml(cur);}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',refreshCourierSlotSelects);
+else refreshCourierSlotSelects();
+function _slotLabelFromTime(t){
+  var parts=String(t).split(':');var h=parseInt(parts[0],10);if(isNaN(h))return String(t);
+  var m=parts[1]?parseInt(parts[1],10):0;
+  return h+'h'+(m?String(m).padStart(2,'0'):'');
+}
+function renderCourierSlotsSettings(){
+  var el=document.getElementById('courier-slots-list');if(!el)return;
+  var c=getCourierCfg();
+  el.innerHTML=c.slots.map(function(s){
+    var isDef=s.value===c.default;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border-soft);border-radius:8px;background:var(--surface);margin-bottom:6px;">'+
+      '<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer;flex:1;"><input type="radio" name="courier-default" '+(isDef?'checked':'')+' onchange="setDefaultCourierSlot(\''+escHtml(s.value)+'\')"/> <strong>'+escHtml(s.label)+'</strong>'+(isDef?' <span style="font-size:.62rem;color:#2a6049;font-weight:700;letter-spacing:.04em;">PAR DÉFAUT</span>':'')+'</label>'+
+      (c.slots.length>1?'<button type="button" title="Supprimer ce créneau" onclick="removeCourierSlot(\''+escHtml(s.value)+'\')" style="background:none;border:1px solid #e0c8c8;border-radius:5px;padding:2px 9px;cursor:pointer;font-size:.7rem;color:#c0392b;">✕</button>':'')+
+    '</div>';
+  }).join('');
+}
+function addCourierSlot(){
+  var inp=document.getElementById('courier-slot-new');var msg=document.getElementById('courier-slots-msg');
+  var t=inp?inp.value.trim():'';
+  if(!t){if(msg){msg.style.color='#c0392b';msg.textContent='Choisissez une heure.';}return;}
+  var c=getCourierCfg();
+  if(c.slots.some(function(s){return s.value===t;})){if(msg){msg.style.color='#c0392b';msg.textContent='Ce créneau existe déjà.';}return;}
+  var hour=parseInt(t.split(':')[0],10);if(isNaN(hour))hour=12;
+  c.slots.push({value:t,label:_slotLabelFromTime(t),hour:hour});
+  c.slots.sort(function(a,b){return a.hour-b.hour;});
+  saveCourierCfg(c);
+  if(inp)inp.value='';
+  renderCourierSlotsSettings();refreshCourierSlotSelects();
+  if(msg){msg.style.color='#2a6049';msg.textContent='Créneau ajouté.';setTimeout(function(){msg.textContent='';},2000);}
+}
+function removeCourierSlot(value){
+  var c=getCourierCfg();
+  if(c.slots.length<=1)return;
+  c.slots=c.slots.filter(function(s){return s.value!==String(value);});
+  if(c.default===String(value))c.default=c.slots[0].value;
+  saveCourierCfg(c);renderCourierSlotsSettings();refreshCourierSlotSelects();
+}
+function setDefaultCourierSlot(value){
+  var c=getCourierCfg();c.default=String(value);saveCourierCfg(c);renderCourierSlotsSettings();
 }
 function ensureJobAttachments(job){migrateJobDelivery(job);if(!job.attachments)job.attachments=[];}
 function _compressImageDataUrl(dataUrl,cb){
@@ -5645,12 +5722,11 @@ function _renderViewOrderStep2(overlay,c,cab,step){
           '<div><label style="font-size:.92rem;font-weight:600;color:#1e293b;display:block;margin-bottom:6px;">Date demandée (cabinet)</label>'+
             '<input type="date" id="af-req-delivery" value="'+escH2(_acceptForm.requestedDeliveryDate)+'" readonly style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:11px 13px;font-size:1rem;background:#f8fafc;color:#64748b;"/></div>'+
         '</div>'+
-        '<div style="display:grid;grid-template-columns:'+(progOn?'1fr 1fr':'1fr')+';gap:14px;margin-bottom:16px;">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">'+
           '<div><label style="font-size:.92rem;font-weight:600;color:#1e293b;display:block;margin-bottom:6px;">Date labo (enlèvement coursier)</label>'+
             '<input type="date" id="af-lab-delivery" value="'+escH2(_acceptForm.labDeliveryDate)+'" oninput="_acceptForm.labDeliveryDate=this.value;_acceptForm.deliveryDate=this.value;if(typeof _recomputeAcceptSchedule===\'function\')_recomputeAcceptSchedule()" style="width:100%;border:1.5px solid #cbd5e1;border-radius:8px;padding:11px 13px;font-size:1rem;outline:none;"/></div>'+
-          (progOn?
           '<div><label style="font-size:.92rem;font-weight:600;color:#1e293b;display:block;margin-bottom:6px;">Créneau coursier</label>'+
-            '<select id="af-delivery-slot" onchange="_acceptForm.labDeliverySlot=this.value" style="width:100%;border:1.5px solid #cbd5e1;border-radius:8px;padding:11px 13px;font-size:1rem;">'+_deliverySlotOptionsHtml(_acceptForm.labDeliverySlot)+'</select></div>':'')+
+            '<select id="af-delivery-slot" onchange="_acceptForm.labDeliverySlot=this.value" style="width:100%;border:1.5px solid #cbd5e1;border-radius:8px;padding:11px 13px;font-size:1rem;">'+_deliverySlotOptionsHtml(_acceptForm.labDeliverySlot)+'</select></div>'+
         '</div>'+
         (progOn?planModeToggleHtml():'')+
         '<label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:.96rem;margin-bottom:20px;color:#dc2626;font-weight:600;"><input type="checkbox" id="af-urgent"'+(_acceptForm.urgent?' checked':'')+' onchange="_acceptForm.urgent=this.checked"/>Travail urgent</label>'+
@@ -6457,12 +6533,11 @@ function editJob(jobId){
           '<div><label style="font-size:.74rem;font-weight:600;color:#64748b;display:block;margin-bottom:4px;">Date demandée</label>'+
             '<input type="date" id="ej-req-delivery" value="'+escH2(_editJob.requestedDeliveryDate)+'" oninput="_editJob.requestedDeliveryDate=this.value" style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:9px 11px;font-size:.88rem;outline:none;"/></div>'+
         '</div>'+
-        '<div style="display:grid;grid-template-columns:'+(progOn?'1fr 1fr':'1fr')+';gap:10px;margin-bottom:12px;">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'+
           '<div><label style="font-size:.74rem;font-weight:600;color:#64748b;display:block;margin-bottom:4px;">📦 Date labo</label>'+
             '<input type="date" id="ej-lab-delivery" value="'+escH2(_editJob.labDeliveryDate)+'" oninput="_editJob.labDeliveryDate=this.value;_editJob.deliveryDate=this.value" style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:9px 11px;font-size:.88rem;outline:none;"/></div>'+
-          (progOn?
           '<div><label style="font-size:.74rem;font-weight:600;color:#64748b;display:block;margin-bottom:4px;">🚚 Créneau</label>'+
-            '<select id="ej-delivery-slot" onchange="_editJob.labDeliverySlot=this.value" style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:9px 11px;font-size:.88rem;">'+_deliverySlotOptionsHtml(_editJob.labDeliverySlot)+'</select></div>':'')+
+            '<select id="ej-delivery-slot" onchange="_editJob.labDeliverySlot=this.value" style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:9px 11px;font-size:.88rem;">'+_deliverySlotOptionsHtml(_editJob.labDeliverySlot)+'</select></div>'+
         '</div>'+
         '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.86rem;margin-bottom:14px;color:#c0392b;"><input type="checkbox" id="ej-urgent" '+(_editJob.urgent?'checked':'')+' onchange="_editJob.urgent=this.checked"/>🔴 Urgent</label>'+
         '<div style="margin-bottom:14px;">'+
@@ -10057,6 +10132,7 @@ async function cloudSave(){
       _tabId:_tabId,
       laboName:localStorage.getItem('lb_name')||'',
       laboLogo:localStorage.getItem('lb_logo')||'',
+      courierSlots:JSON.parse(localStorage.getItem('lb_courier_slots')||'null'),
       jobs,archive,cabinets,syns,scanHist,waiting,conges,absences,techOffDays,
       deletedJobIds:_readDeletedJobIds(),
       queue:queue,
@@ -10269,6 +10345,10 @@ async function cloudRestore(silent=false){
     }
     if(p.billingSettings&&typeof p.billingSettings==='object'){
       saveBillingSettings(p.billingSettings,true);
+    }
+    if(p.courierSlots&&typeof p.courierSlots==='object'){
+      localStorage.setItem('lb_courier_slots',JSON.stringify(p.courierSlots));
+      if(typeof refreshCourierSlotSelects==='function')refreshCourierSlotSelects();
     }
 
     refreshTypeSelects();

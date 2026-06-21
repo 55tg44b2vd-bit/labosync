@@ -1523,6 +1523,7 @@ async function loadData(){
     if(p.laboName)localStorage.setItem('lb_name',p.laboName);
     if(p.laboLogo)localStorage.setItem('lb_logo',p.laboLogo);
     else if(p.laboLogo===null)localStorage.removeItem('lb_logo');
+    if(p.courierSlots&&typeof p.courierSlots==='object')localStorage.setItem('lb_courier_slots',JSON.stringify(p.courierSlots));
     if(typeof updateMobTopbarBranding==='function')updateMobTopbarBranding();
     if(p.legalInfo){
       var li=p.legalInfo;
@@ -1572,6 +1573,7 @@ async function saveData(){
       version:2,ownerUserId:currentUser.id,savedAt:now,
       laboName:localStorage.getItem('lb_name')||'',
       laboLogo:localStorage.getItem('lb_logo')||'',
+      courierSlots:JSON.parse(localStorage.getItem('lb_courier_slots')||'null'),
       jobs,archive,cabinets,
       queue,waiting,conges:conges||[],absences:absences||[],
       syns:syns||[],scanHist:scanHist||[],
@@ -1654,6 +1656,38 @@ function startPoll(){
   },15000);
 }
 function stopPoll(){if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}}
+
+/* ── Créneaux coursier configurables (lb_courier_slots, synchronisé depuis le desktop) ── */
+function mobCourierCfg(){
+  try{
+    var c=JSON.parse(localStorage.getItem('lb_courier_slots')||'null');
+    if(c&&Array.isArray(c.slots)&&c.slots.length){
+      c.slots=c.slots.map(function(s){return {value:String(s.value),label:s.label||(String(s.value)+'h'),hour:(typeof s.hour==='number'?s.hour:(parseInt(s.value,10)||12))};});
+      if(!c.default||!c.slots.some(function(s){return s.value===String(c.default);}))c.default=c.slots[0].value;else c.default=String(c.default);
+      return c;
+    }
+  }catch(e){}
+  return {slots:[{value:'9',label:'9h',hour:9},{value:'12',label:'12h',hour:12},{value:'18',label:'18h',hour:18}],default:'12'};
+}
+function mobSlotOptions(cur){var c=mobCourierCfg();var sel=String(cur||c.default);return c.slots.map(function(s){return '<option value="'+esc(s.value)+'"'+(sel===s.value?' selected':'')+'>'+esc(s.label)+'</option>';}).join('');}
+function _mobIsoOf(x){var y=x.getFullYear(),m=String(x.getMonth()+1).padStart(2,'0'),dd=String(x.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
+// Veille ouvrée de la date cabinet (week-ends et congés exclus), jamais dans le passé.
+function mobSuggestLabDate(iso){
+  if(!iso)return '';
+  var d=new Date(iso+'T12:00:00');if(isNaN(d.getTime()))return '';
+  var conge=(typeof conges!=='undefined'&&conges)?conges:[];
+  d.setDate(d.getDate()-1);
+  var guard=0;
+  while((d.getDay()===0||d.getDay()===6||conge.indexOf(_mobIsoOf(d))>=0)&&guard<400){d.setDate(d.getDate()-1);guard++;}
+  var today=new Date();today.setHours(0,0,0,0);
+  if(d.getTime()<today.getTime()){var cur=new Date(today.getTime());guard=0;while((cur.getDay()===0||cur.getDay()===6||conge.indexOf(_mobIsoOf(cur))>=0)&&guard<400){cur.setDate(cur.getDate()+1);guard++;}d=cur;}
+  return _mobIsoOf(d);
+}
+function mobOnCabDateChange(){
+  var req=document.getElementById('qj-delivery'),lab=document.getElementById('qj-lab-delivery');
+  if(!req||!lab||lab.dataset.userSet)return;
+  if(req.value)lab.value=mobSuggestLabDate(req.value);
+}
 
 /* ── NAVIGATION ── */
 document.querySelectorAll('.nav-item').forEach(function(btn){
@@ -4873,12 +4907,12 @@ function openQuickJobSheet(){
       '<div id="qj-teeth-chart" style="margin-bottom:10px;"></div>'+
       '<div class="form-grid">'+
         '<div class="form-row"><label>Cabinet</label><select id="qj-cab" style="font-size:16px;"><option value="">— Aucun —</option>'+cabinets.map(function(c){return '<option value="'+c.id+'"'+(c.id===lastCab?' selected':'')+'>'+esc(c.name)+'</option>';}).join('')+'</select></div>'+
-        '<div class="form-row"><label>📅 Date demandée (cabinet)</label><input type="date" id="qj-delivery" style="font-size:16px;"/></div>'+
+        '<div class="form-row"><label>📅 Date demandée (cabinet)</label><input type="date" id="qj-delivery" onchange="mobOnCabDateChange()" style="font-size:16px;"/></div>'+
       '</div>'+
-      (localStorage.getItem('lb_prog_actif')==='1'?('<div class="form-grid">'+
-        '<div class="form-row"><label>📦 Date labo (coursier)</label><input type="date" id="qj-lab-delivery" style="font-size:16px;"/></div>'+
-        '<div class="form-row"><label>🚚 Créneau</label><select id="qj-slot" style="font-size:16px;"><option value="9">9h</option><option value="12" selected>12h</option><option value="18">18h</option></select></div>'+
-      '</div>'):'')+
+      '<div class="form-grid">'+
+        '<div class="form-row"><label>📦 Date labo (coursier)</label><input type="date" id="qj-lab-delivery" onchange="this.dataset.userSet=\'1\'" title="Veille ouvrée de la date cabinet (pré-remplie)" style="font-size:16px;"/></div>'+
+        '<div class="form-row"><label>🚚 Créneau</label><select id="qj-slot" style="font-size:16px;">'+mobSlotOptions()+'</select></div>'+
+      '</div>'+
       '<div class="form-row"><label>Note</label><textarea id="qj-note" placeholder="Notes, instructions..." rows="2" style="font-size:16px;"></textarea></div>'+
       '<div class="form-check" style="margin:0 0 8px;"><input type="checkbox" id="qj-urgent"/><label for="qj-urgent">🔴 Travail urgent</label></div>'+
       '<div class="form-check" style="margin:0 0 8px;"><input type="checkbox" id="qj-missing" onchange="toggleMissingPanel(\'qj\')"/><label for="qj-missing">❓ Infos manquantes (appel praticien)</label></div>'+
