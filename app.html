@@ -3200,7 +3200,13 @@ const DEFAULT_CUSTOM_TYPES=[
 function cloneDefaultTypes(){return DEFAULT_CUSTOM_TYPES.map(function(t){return {id:t.id,label:t.label,category:t.category,steps:t.steps.map(function(s){return {label:s.label,tech:s.tech,dayOffset:s.dayOffset};})};});}
 
 let customTypes=JSON.parse(localStorage.getItem('lb_custom_types')||'[]');
-function saveCustomTypes(){localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));scheduleSave();}
+// Édition utilisateur de la config des types → on horodate la révision (lb_ct_rev).
+// Sert à résoudre les conflits multi-poste par RÉCENCE (et non par comptage), pour ne
+// pas qu'un poste avec une config périmée écrase les techniciens assignés ailleurs.
+function saveCustomTypes(){localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));localStorage.setItem('lb_ct_rev',String(Date.now()));scheduleSave();}
+// Persistance SANS bump de révision : réservée aux seeds/migrations système (types par
+// défaut), pour qu'un poste fraîchement initialisé ne « gagne » pas sur la config cloud.
+function _persistCustomTypesSeed(){localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));scheduleSave();}
 
 /* ── Phases de fabrication (séquencement multi-types) ──────────────────────────
    Quand un travail combine plusieurs types, chacun a une « phase ». Les types de
@@ -3227,7 +3233,7 @@ function _typePhase(typeId){
 if(!localStorage.getItem('lb_types_seeded')){
   if(!customTypes.length)customTypes=cloneDefaultTypes();
   localStorage.setItem('lb_types_seeded','1');
-  saveCustomTypes();
+  _persistCustomTypesSeed();
 }
 
 // Migration douce : ajoute le type « Retouche / Ajustement » aux comptes DÉJÀ initialisés
@@ -3236,7 +3242,7 @@ if(!localStorage.getItem('lb_types_seeded')){
 if(!localStorage.getItem('lb_retouche_seeded')){
   if(Array.isArray(customTypes)&&!customTypes.some(function(c){return c.id==='retouche';})){
     customTypes.push({id:'retouche',label:'Retouche / Ajustement',category:'Retouches & SAV',steps:[{label:'Retouche / ajustement',tech:'auto',dayOffset:1}]});
-    saveCustomTypes();
+    _persistCustomTypesSeed();
   }
   localStorage.setItem('lb_retouche_seeded','1');
 }
@@ -3248,7 +3254,7 @@ if(!localStorage.getItem('lb_crowns_seeded')){
   if(Array.isArray(customTypes)){
     if(!customTypes.some(function(c){return c.id==='crown_ccm';}))customTypes.push({id:'crown_ccm',label:'Couronne céramo-métallique',category:'Couronnes',steps:[{label:'Chape métallique (CCM)',tech:'auto',dayOffset:1},{label:'Montage cosmétique CCM',tech:'auto',dayOffset:2},{label:'Glaçage CCM',tech:'auto',dayOffset:3}]});
     if(!customTypes.some(function(c){return c.id==='crown_emax';}))customTypes.push({id:'crown_emax',label:'Couronne E.max',category:'Composite & Céramique',steps:[{label:'Modélisation E.max',tech:'auto',dayOffset:1},{label:'Maquillage / glaçage E.max',tech:'auto',dayOffset:2}]});
-    saveCustomTypes();
+    _persistCustomTypesSeed();
   }
   localStorage.setItem('lb_crowns_seeded','1');
 }
@@ -10225,6 +10231,7 @@ async function cloudSave(){
       techs:TECHS,
       progActif:localStorage.getItem('lb_prog_actif')||'0',
       customTypes:customTypes,
+      customTypesRev:parseInt(localStorage.getItem('lb_ct_rev')||'0',10),
       legalInfo:{
         raison:localStorage.getItem('lb_legal_raison')||'',
         siret:localStorage.getItem('lb_legal_siret')||'',
@@ -10250,7 +10257,16 @@ async function cloudSave(){
       if(aq.ok){
         const ar=await aq.json();
         const sd=(ar&&ar[0]&&ar[0].data&&typeof ar[0].data==='object')?ar[0].data:null;
-        if(sd){_mergedData=Object.assign({},sd,payload);if(sd.adminAccess)_serverAdminAccess=sd.adminAccess;}
+        if(sd){
+          _mergedData=Object.assign({},sd,payload);
+          if(sd.adminAccess)_serverAdminAccess=sd.adminAccess;
+          // Garde-fou config types : ne jamais écraser une config cloud plus récente
+          // (techniciens assignés) avec une config locale périmée.
+          if(Array.isArray(sd.customTypes)&&parseInt(sd.customTypesRev||0,10)>(payload.customTypesRev||0)){
+            _mergedData.customTypes=sd.customTypes;
+            _mergedData.customTypesRev=sd.customTypesRev;
+          }
+        }
       }
     }catch(e){
       console.warn('préservation champs serveur (lecture) échouée, repli cache PIN',e);
@@ -10415,7 +10431,16 @@ async function cloudRestore(silent=false){
       if((!_initialRestoreDone||!silent)&&!(mergeLocalInitial&&(localStorage.getItem('lb_prog_actif')==='1'||_currentDataCounts().programmedTasks>0))){localStorage.setItem('lb_prog_actif',p.progActif);}
     }
     if(p.customTypes&&Array.isArray(p.customTypes)){
-      customTypes=(_initialRestoreDone&&silent)||mergeLocalInitial?_mergeCloudCustomTypes(customTypes,p.customTypes):p.customTypes;
+      // Conflit de config des types résolu par RÉCENCE (lb_ct_rev), pas par comptage :
+      // le cloud aussi récent ou plus récent l'emporte → corrige la perte des techniciens
+      // (un poste à config périmée n'écrase plus la config éditée ailleurs). On ne garde
+      // le local QUE s'il porte une édition strictement plus récente non encore synchronisée.
+      var _localCtRev=parseInt(localStorage.getItem('lb_ct_rev')||'0',10);
+      var _cloudCtRev=parseInt(p.customTypesRev||0,10);
+      if(_cloudCtRev>=_localCtRev){
+        customTypes=p.customTypes;
+        localStorage.setItem('lb_ct_rev',String(_cloudCtRev));
+      }
       localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));
       syncCustomTypesToTL();
     }
@@ -15355,7 +15380,7 @@ async function completeLabBoot(session){
     clearIfDifferentUser(session.user.id);
     if(typeof _bindMessagesPaneClicks==='function')_bindMessagesPaneClicks();
     if(!localStorage.getItem('lb_types_seeded')){
-      if(!customTypes.length){customTypes=cloneDefaultTypes();saveCustomTypes();}
+      if(!customTypes.length){customTypes=cloneDefaultTypes();_persistCustomTypesSeed();}
       localStorage.setItem('lb_types_seeded','1');
     }
     showApp();

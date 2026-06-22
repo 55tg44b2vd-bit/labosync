@@ -1481,7 +1481,11 @@ function _mergeRemoteBeforeMobileSave(remote){
   bdc=_mergeMobileRecords(bdc,p.bdc||[]);
   fourns=_mergeMobileRecords(fourns,p.fourns||[]);
   if(!Object.keys(TECHS||{}).length&&p.techs)TECHS=p.techs;
-  if(!(customTypes||[]).length&&p.customTypes)customTypes=p.customTypes;
+  // Config des types résolue par récence (lb_ct_rev) : le cloud aussi récent/plus
+  // récent l'emporte → le mobile ne réécrit jamais une config périmée par-dessus
+  // les techniciens assignés sur ordinateur.
+  var _lcr=parseInt(localStorage.getItem('lb_ct_rev')||'0',10),_ccr=parseInt(p.customTypesRev||0,10);
+  if(p.customTypes&&((!(customTypes||[]).length)||_ccr>=_lcr)){customTypes=p.customTypes;localStorage.setItem('lb_ct_rev',String(_ccr));}
   if(p.progActif!==undefined&&p.progActif!==null)localStorage.setItem('lb_prog_actif',p.progActif);
 }
 async function loadData(){
@@ -1514,7 +1518,7 @@ async function loadData(){
     if(p.waiting)waiting=p.waiting;
     if(p.queue)queue=p.queue;
     if(p.techs)TECHS=p.techs;
-    if(p.customTypes)customTypes=p.customTypes;
+    if(p.customTypes){customTypes=p.customTypes;localStorage.setItem('lb_ct_rev',String(parseInt(p.customTypesRev||0,10)));}
     if(p.conges)conges=p.conges;
     if(p.absences)absences=p.absences;
     if(p.bdc)bdc=p.bdc;
@@ -1581,6 +1585,7 @@ async function saveData(){
       bdc,fourns,bdl,
       techs:TECHS,
       customTypes,
+      customTypesRev:parseInt(localStorage.getItem('lb_ct_rev')||'0',10),
       progActif:localStorage.getItem('lb_prog_actif')||'0',
       legalInfo:{
         raison:localStorage.getItem('lb_legal_raison')||'',
@@ -1605,7 +1610,15 @@ async function saveData(){
       if(aq.ok){
         const ar=await aq.json();
         const sd=(ar&&ar[0]&&ar[0].data&&typeof ar[0].data==='object')?ar[0].data:null;
-        if(sd){_mergedData=Object.assign({},sd,payload);if(sd.adminAccess)_serverAdminAccessMob=sd.adminAccess;}
+        if(sd){
+          _mergedData=Object.assign({},sd,payload);
+          if(sd.adminAccess)_serverAdminAccessMob=sd.adminAccess;
+          // Garde-fou config types : ne pas écraser une config cloud plus récente.
+          if(Array.isArray(sd.customTypes)&&parseInt(sd.customTypesRev||0,10)>(payload.customTypesRev||0)){
+            _mergedData.customTypes=sd.customTypes;
+            _mergedData.customTypesRev=sd.customTypesRev;
+          }
+        }
       }
     }catch(e){
       console.warn('préservation champs serveur mobile échouée, repli cache PIN',e);
