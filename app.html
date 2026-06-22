@@ -803,7 +803,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
       <div class="fl" style="min-width:140px;"><label>Sexe patient</label><div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap;"><label class="chk" style="margin:0;padding:6px 10px;"><input type="checkbox" id="saisie-isex-m" onchange="if(this.checked){var f=document.getElementById('saisie-isex-f');if(f)f.checked=false;}"/> Homme</label><label class="chk" style="margin:0;padding:6px 10px;"><input type="checkbox" id="saisie-isex-f" onchange="if(this.checked){var m=document.getElementById('saisie-isex-m');if(m)m.checked=false;}"/> Femme</label></div></div>
       <div class="fl" style="min-width:80px;"><label>Âge</label><input type="number" id="saisie-iage" min="0" max="120" placeholder="ans" style="width:84px;"/></div>
       <div class="fl" style="flex:1;min-width:220px;"><label data-i18n="form.type">Type</label>
-        <select id="saisie-it" style="width:100%;min-width:220px;max-width:100%;">
+        <select id="saisie-it" onchange="updateSaisieEmpVisibility()" style="width:100%;min-width:220px;max-width:100%;">
           <optgroup label="Couronnes">
             <option value="inlay_only">Inlay core seul</option>
             <option value="crown_only">Couronne zircone seule</option>
@@ -849,7 +849,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
       <div class="fl" style="min-width:140px;"><label>🚚 Créneau coursier</label><select id="saisie-idelivery-slot" style="width:100%;border:1.5px solid var(--border);border-radius:7px;padding:9px;font-size:.88rem;background:#fff;"></select></div>
       <div class="fl" style="min-width:150px;"><label data-i18n="form.cabinet">🏥 Cabinet</label><select id="saisie-icab"><option value="" data-i18n="form.none">— Aucun —</option></select></div>
       <input type="checkbox" id="saisie-iurg" style="display:none;"/>
-      <label class="chk field-prog-only prog-tab" id="saisie-emp-wrap" style="display:none;"><input type="checkbox" id="saisie-iemp"/><span data-i18n="form.digital">📡 Empreinte numérique</span></label>
+      <label class="chk" id="saisie-emp-wrap" style="display:none;border-color:#3b82f6;background:#eff6ff;color:#1d4ed8;"><input type="checkbox" id="saisie-iemp"/><span>📡 Numérique (empreinte optique)</span></label>
       <label class="chk" style="border-color:#fb923c;background:#fff7ed;color:#c2410c;"><input type="checkbox" id="saisie-imissing" onchange="document.getElementById('saisie-missing-wrap').style.display=this.checked?'':'none';if(this.checked)renderMissingChipsSaisie();"/><span>❓ Infos manquantes</span></label>
     </div>
     <div id="saisie-missing-wrap" style="display:none;margin-top:10px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;">
@@ -877,7 +877,22 @@ body.has-sidebar #drawer{transform:translateX(0);}
     <div class="fl" style="min-width:170px;margin:0;"><label>📅 Jour à afficher</label><input type="date" id="planning-date"/></div>
     <button type="button" class="btn-b" id="planning-next-day" title="Jour suivant" style="min-width:38px;padding:9px 12px;font-size:1rem;">›</button>
     <button type="button" class="btn-b" id="planning-today">Aujourd'hui</button>
+    <button type="button" class="btn btn-a" id="btn-add-gtask" onclick="toggleGTaskForm()" style="padding:9px 14px;">🔧 + Tâche atelier</button>
     <span id="planning-date-hint" style="font-size:.74rem;color:var(--ink-soft);line-height:1.4;">Programmation par technicien pour le jour choisi uniquement.</span>
+  </div>
+  <div id="gtask-form" style="display:none;margin-bottom:14px;padding:14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;">
+    <div style="font-size:.82rem;font-weight:700;margin-bottom:10px;color:#0369a1;">🔧 Nouvelle tâche atelier (non liée à un travail)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+      <div class="fl" style="flex:2;min-width:200px;margin:0;"><label>Tâche</label><input type="text" id="gtask-label" placeholder="ex : Nettoyage machine, maintenance four…"/></div>
+      <div class="fl" style="min-width:160px;margin:0;"><label>Technicien</label><select id="gtask-tech"></select></div>
+      <div class="fl" style="min-width:150px;margin:0;"><label>Date</label><input type="date" id="gtask-date"/></div>
+    </div>
+    <div class="fl" style="margin:10px 0 0;"><label>Note (optionnel)</label><input type="text" id="gtask-note" placeholder="Détails…"/></div>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button type="button" class="btn btn-a" onclick="saveGTask()">Ajouter la tâche</button>
+      <button type="button" class="btn btn-b" onclick="toggleGTaskForm(false)">Annuler</button>
+      <span id="gtask-msg" style="font-size:.74rem;color:#c0392b;align-self:center;"></span>
+    </div>
   </div>
   <div id="tgrid-container" style="display:none;margin-bottom:20px;"></div>
   <!-- Travaux programmés -->
@@ -3289,6 +3304,7 @@ function refreshTypeSelects(){
     sel.innerHTML=html||'<option value="">'+t('select.no_type')+'</option>';
     if(prev&&sel.querySelector('option[value="'+prev+'"]'))sel.value=prev;
   });
+  if(typeof updateSaisieEmpVisibility==='function')updateSaisieEmpVisibility();
 }
 const EMP_TYPES=['crown_only','crown_ccm','crown_emax','inlay_composite','facettes','armature_zircon','armature_metal','inlay_emax','wax_up','bridge_zircone','bridge_metal'];
 const MFR=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -7437,8 +7453,20 @@ function renderTech(tech){
     if(t.tech===tech&&sameDay(t.dueDate,planningDay))tasks.push({...t,patient:j.patient,urgent:j.urgent,note:j.note,jobId:j.id,taskIdx:idx,trackCode:j.trackCode||''});
   }));
   tasks.sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  if(!tasks.length){el.innerHTML='<div class="empty">Aucune tâche ce jour</div>';return;}
-  el.innerHTML=tasks.map(t=>{
+  const gtasks=(genericTasks||[]).filter(g=>g.tech===tech&&sameDay(g.dueDate,planningDay));
+  if(!tasks.length&&!gtasks.length){el.innerHTML='<div class="empty">Aucune tâche ce jour</div>';return;}
+  const genHtml=gtasks.map(g=>{
+    return `<div class="tcard" style="background:#f0f9ff;border:1px solid #bae6fd;${g.done?'opacity:.55;':''}" data-gtask="${g.id}">
+      <div class="tp" style="color:#0369a1;">🔧 Tâche atelier</div>
+      <div class="ts" style="${g.done?'text-decoration:line-through;':''}">${escHtml(g.label)}</div>
+      ${g.note?`<div class="tnote">📝 ${escHtml(g.note)}</div>`:''}
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button type="button" onclick="toggleGenericTaskDone('${g.id}')" style="flex:1;background:${g.done?'#e2e8f0':'#16a34a'};color:${g.done?'#475569':'#fff'};border:none;border-radius:6px;padding:4px 6px;font-size:.66rem;cursor:pointer;">${g.done?'↩ Rouvrir':'✓ Fait'}</button>
+        <button type="button" onclick="deleteGenericTask('${g.id}')" title="Supprimer" style="background:none;border:1px solid #e0c8c8;color:#c0392b;border-radius:6px;padding:4px 8px;font-size:.66rem;cursor:pointer;">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+  const jobHtml=tasks.map(t=>{
     const late=new Date(t.dueDate)<today;
     let cls=`tcard tc-${tech}`;
     if(t.urgent)cls+=' urgent';
@@ -7451,6 +7479,53 @@ function renderTech(tech){
       ${t.note?`<div class="tnote">📝 ${t.note}</div>`:''}
     </div>`;
   }).join('');
+  el.innerHTML=genHtml+jobHtml;
+}
+
+// ── Tâches atelier génériques (non liées à un travail) ───────────────────────
+function _fillGTaskTechSelect(){
+  var sel=document.getElementById('gtask-tech');if(!sel)return;
+  var keys=Object.keys(TECHS||{});
+  sel.innerHTML=keys.length?keys.map(function(k){return '<option value="'+k+'">'+escHtml(TECHS[k].label||k)+'</option>';}).join(''):'<option value="">— Aucun technicien (Réglages → Équipe) —</option>';
+}
+function toggleGTaskForm(show){
+  var f=document.getElementById('gtask-form');if(!f)return;
+  var willShow=(show===undefined)?(f.style.display==='none'):!!show;
+  if(willShow){
+    _fillGTaskTechSelect();
+    var d=document.getElementById('gtask-date');
+    if(d&&!d.value){try{d.value=fmtISO(getPlanningDay());}catch(e){d.value=fmtISO(new Date());}}
+    var msg=document.getElementById('gtask-msg');if(msg)msg.textContent='';
+    f.style.display='';
+  }else{f.style.display='none';}
+}
+function saveGTask(){
+  var label=((document.getElementById('gtask-label')||{}).value||'').trim();
+  var tech=(document.getElementById('gtask-tech')||{}).value||'';
+  var date=(document.getElementById('gtask-date')||{}).value||'';
+  var note=((document.getElementById('gtask-note')||{}).value||'').trim();
+  var msg=document.getElementById('gtask-msg');
+  if(!label){if(msg)msg.textContent='Indiquez le libellé de la tâche.';return;}
+  if(!tech){if(msg)msg.textContent='Ajoutez d\'abord un technicien dans Réglages → Équipe.';return;}
+  if(!date){if(msg)msg.textContent='Choisissez une date.';return;}
+  genericTasks.push({id:'gt_'+Date.now(),label:label,tech:tech,dueDate:date+'T12:00:00',note:note,done:false});
+  saveGenericTasks();
+  var lblEl=document.getElementById('gtask-label');if(lblEl)lblEl.value='';
+  var noteEl=document.getElementById('gtask-note');if(noteEl)noteEl.value='';
+  toggleGTaskForm(false);
+  if(typeof render==='function')render();
+  if(typeof showToast==='function')showToast('🔧 Tâche atelier ajoutée','#0369a1');
+}
+function toggleGenericTaskDone(id){
+  var g=(genericTasks||[]).find(function(x){return x.id===id;});if(!g)return;
+  g.done=!g.done;saveGenericTasks();
+  if(typeof render==='function')render();
+}
+function deleteGenericTask(id){
+  var g=(genericTasks||[]).find(function(x){return x.id===id;});if(!g)return;
+  if(!confirm('Supprimer la tâche « '+g.label+' » ?'))return;
+  genericTasks=genericTasks.filter(function(x){return x.id!==id;});saveGenericTasks();
+  if(typeof render==='function')render();
 }
 
 // ── Mode opérations (volume élevé) ──
@@ -8916,6 +8991,9 @@ let waiting = JSON.parse(localStorage.getItem('lb_waiting')||'[]');
 let conges  = JSON.parse(localStorage.getItem('lb_conges')||'[]');
 let absences= JSON.parse(localStorage.getItem('lb_absences')||'{}');
 let techOffDays= JSON.parse(localStorage.getItem('lb_tech_off_days')||'{}');
+// Tâches atelier génériques (non liées à un travail) : {id,label,tech,dueDate,note,done}
+let genericTasks= JSON.parse(localStorage.getItem('lb_generic_tasks')||'[]');
+function saveGenericTasks(){localStorage.setItem('lb_generic_tasks',JSON.stringify(genericTasks));scheduleSave();}
 // Compat legacy: certains builds/anciens scripts référencent "contges" par erreur.
 // On garde un alias pour éviter de bloquer tout le chargement sur un ReferenceError.
 var contges = conges;
@@ -10134,6 +10212,7 @@ async function cloudSave(){
       laboLogo:localStorage.getItem('lb_logo')||'',
       courierSlots:JSON.parse(localStorage.getItem('lb_courier_slots')||'null'),
       jobs,archive,cabinets,syns,scanHist,waiting,conges,absences,techOffDays,
+      genericTasks:genericTasks,
       deletedJobIds:_readDeletedJobIds(),
       queue:queue,
       documents:JSON.parse(localStorage.getItem('lb_docs')||'[]'),
@@ -10308,6 +10387,7 @@ async function cloudRestore(silent=false){
     if(p.conges)conges=p.conges;
     if(p.absences)absences=p.absences;
     if(p.techOffDays&&typeof p.techOffDays==='object')techOffDays=p.techOffDays;
+    if(Array.isArray(p.genericTasks)){genericTasks=p.genericTasks;localStorage.setItem('lb_generic_tasks',JSON.stringify(genericTasks));}
     if(p.queue){
       queue=(_initialRestoreDone&&silent)||mergeLocalInitial?_mergeCloudQueue(queue,p.queue):_filterDeletedQueue(p.queue,deletedJobIds);
       localStorage.setItem('lb_queue',JSON.stringify(queue));
@@ -11714,11 +11794,12 @@ function renderSaisieLines(){
       }).join('');
       return '<div style="display:flex;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 10px;">'
         +'<span style="font-size:.7rem;color:var(--ink-soft);white-space:nowrap;">+ Type</span>'
-        +'<select onchange="_saisieLines['+i+'].type=this.value" style="flex:2;font-size:.8rem;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">'+opts+'</select>'
+        +'<select onchange="_saisieLines['+i+'].type=this.value;updateSaisieEmpVisibility()" style="flex:2;font-size:.8rem;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">'+opts+'</select>'
         +'<input type="number" min="1" max="20" value="'+l.nb+'" oninput="_saisieLines['+i+'].nb=parseInt(this.value)||1" style="width:60px;font-size:.8rem;padding:4px 6px;border:1px solid var(--border);border-radius:6px;text-align:center;">'
         +'<button onclick="removeSaisieLine('+i+')" style="background:none;border:none;cursor:pointer;color:#c0392b;font-size:1rem;padding:0 4px;">✕</button>'
         +'</div>';
     }).join('')+'</div>';
+  if(typeof updateSaisieEmpVisibility==='function')updateSaisieEmpVisibility();
 }
 function getSaisieItems(primaryType,primaryNb){
   const items=[{type:primaryType,nb:primaryNb}];
@@ -11726,6 +11807,20 @@ function getSaisieItems(primaryType,primaryNb){
   return items;
 }
 function resetSaisieLines(){_saisieLines=[];renderSaisieLines();}
+// Case « Numérique (empreinte optique) » : visible seulement si le planning est
+// actif ET qu'un type sélectionné possède un workflow numérique (stepsEmp).
+function _typeSupportsEmp(typeId){var c=Array.isArray(customTypes)?customTypes.find(function(x){return x.id===typeId;}):null;return !!(c&&c.stepsEmp&&c.stepsEmp.length);}
+function _anySaisieTypeSupportsEmp(){
+  var types=[];var prim=document.getElementById('saisie-it');if(prim)types.push(prim.value);
+  (_saisieLines||[]).forEach(function(l){types.push(l.type);});
+  return types.some(_typeSupportsEmp);
+}
+function updateSaisieEmpVisibility(){
+  var wrap=document.getElementById('saisie-emp-wrap');if(!wrap)return;
+  var show=(typeof isProgActif==='function'&&isProgActif())&&_anySaisieTypeSupportsEmp();
+  wrap.style.display=show?'':'none';
+  if(!show){var cb=document.getElementById('saisie-iemp');if(cb)cb.checked=false;}
+}
 
 // ── Lignes extra pour le formulaire Programmation (pane-accueil) ─────────────
 let _progLines=[];
@@ -14286,6 +14381,7 @@ function applyProgMode(){
   // Bouton "Ajouter le travail" dans le formulaire
   const btnSaisieAdd=document.getElementById('btn-saisie-add');
   if(btnSaisieAdd)btnSaisieAdd.textContent=on?'+ Mettre en file d\'attente':'+ Ajouter le travail';
+  if(typeof updateSaisieEmpVisibility==='function')updateSaisieEmpVisibility();
   // Queue et tgrid : visibles seulement en mode prog ON
   const queueSection=document.getElementById('queue-section');
   if(queueSection)queueSection.style.display=on?'':'none';
@@ -15884,7 +15980,7 @@ function _memoryHasTenantData(){
 
 function _resetInMemoryLabState(){
   jobs=[];archive=[];cabinets=[];syns={};scanHist=[];
-  waiting=[];conges=[];absences={};techOffDays={};queue=[];
+  waiting=[];conges=[];absences={};techOffDays={};queue=[];genericTasks=[];
   documents=[];tarifs=[];bdc=[];fourns=[];bdl=[];
   TECHS={};customTypes=[];
   if(typeof _chatUnread!=='undefined'){Object.keys(_chatUnread).forEach(function(k){delete _chatUnread[k];});}
@@ -15903,6 +15999,7 @@ function _hydrateLabStateFromLocalStorage(){
   conges=JSON.parse(localStorage.getItem('lb_conges')||'[]');
   absences=JSON.parse(localStorage.getItem('lb_absences')||'{}');
   techOffDays=JSON.parse(localStorage.getItem('lb_tech_off_days')||'{}');
+  genericTasks=JSON.parse(localStorage.getItem('lb_generic_tasks')||'[]');
   contges=conges;
   queue=JSON.parse(localStorage.getItem('lb_queue')||'[]');
   documents=JSON.parse(localStorage.getItem('lb_docs')||'[]');

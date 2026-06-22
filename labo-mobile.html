@@ -1688,6 +1688,16 @@ function mobOnCabDateChange(){
   if(!req||!lab||lab.dataset.userSet)return;
   if(req.value)lab.value=mobSuggestLabDate(req.value);
 }
+// Case « Numérique (empreinte optique) » : visible si planning actif ET type avec stepsEmp.
+function _mobTypeSupportsEmp(typeId){var c=Array.isArray(customTypes)?customTypes.find(function(x){return x.id===typeId;}):null;return !!(c&&c.stepsEmp&&c.stepsEmp.length);}
+function updateQjEmpVisibility(){
+  var wrap=document.getElementById('qj-emp-wrap');if(!wrap)return;
+  var prog=localStorage.getItem('lb_prog_actif')==='1';
+  var any=(typeof _qjItems!=='undefined'&&_qjItems)?_qjItems.some(function(it){return _mobTypeSupportsEmp(it.type);}):false;
+  var show=prog&&any;
+  wrap.style.display=show?'':'none';
+  if(!show){var cb=document.getElementById('qj-emp');if(cb)cb.checked=false;}
+}
 
 /* ── NAVIGATION ── */
 document.querySelectorAll('.nav-item').forEach(function(btn){
@@ -3725,14 +3735,15 @@ function pick(pool,day,forced){
   return active.reduce(function(a,b){return(c[a]||0)<=(c[b]||0)?a:b;});
 }
 
-function buildTasksMobile(type){
+function buildTasksMobile(type,emp){
   var base=new Date();var tasks=[];
   // ── PRIORITÉ À LA CONFIG PERSONNALISÉE ──
   // Si l'utilisateur a configuré ce type via l'éditeur de types, utiliser SA
   // config plutôt que les pools hardcodés (qui contiennent des techniciens
-  // fantômes pour les nouveaux comptes).
+  // fantômes pour les nouveaux comptes). En empreinte numérique (emp), on bascule
+  // sur le workflow stepsEmp s'il est défini.
   var customDef=Array.isArray(customTypes)?customTypes.find(function(c){return c.id===type;}):null;
-  var hasCustomSteps=customDef&&Array.isArray(customDef.steps)&&customDef.steps.length>0;
+  var hasCustomSteps=customDef&&((Array.isArray(customDef.steps)&&customDef.steps.length>0)||(emp&&Array.isArray(customDef.stepsEmp)&&customDef.stepsEmp.length>0));
   var PM=['jc','lilou','litcha','tom'];
   var PF=['jc','litcha'];
   var PO=['marie','tom'];
@@ -3750,7 +3761,7 @@ function buildTasksMobile(type){
   function scan(d){push('Scan & impression modèle','fabien',d);}
   // Si l'utilisateur a édité ce type, on utilise SA config (même pour les types intégrés)
   if(hasCustomSteps){
-    var stepsToUse=customDef.steps;
+    var stepsToUse=(emp&&customDef.stepsEmp&&customDef.stepsEmp.length)?customDef.stepsEmp:customDef.steps;
     stepsToUse.forEach(function(step){
       var d=addWD(base,Math.max(1,step.dayOffset||1));
       var allTechKeys=Object.keys(TECHS||{});
@@ -4914,6 +4925,7 @@ function openQuickJobSheet(){
         '<div class="form-row"><label>🚚 Créneau</label><select id="qj-slot" style="font-size:16px;">'+mobSlotOptions()+'</select></div>'+
       '</div>'+
       '<div class="form-row"><label>Note</label><textarea id="qj-note" placeholder="Notes, instructions..." rows="2" style="font-size:16px;"></textarea></div>'+
+      '<div class="form-check" id="qj-emp-wrap" style="display:none;margin:0 0 8px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:7px 10px;"><input type="checkbox" id="qj-emp"/><label for="qj-emp" style="color:#1d4ed8;">📡 Numérique (empreinte optique)</label></div>'+
       '<div class="form-check" style="margin:0 0 8px;"><input type="checkbox" id="qj-urgent"/><label for="qj-urgent">🔴 Travail urgent</label></div>'+
       '<div class="form-check" style="margin:0 0 8px;"><input type="checkbox" id="qj-missing" onchange="toggleMissingPanel(\'qj\')"/><label for="qj-missing">❓ Infos manquantes (appel praticien)</label></div>'+
       '<div id="qj-missing-wrap" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:10px;">'+
@@ -4942,9 +4954,10 @@ function openQuickJobSheet(){
         (_qjItems.length>1?'<button type="button" data-qji-rm="'+i+'" style="background:var(--red-soft);color:var(--red);border:1px solid var(--red);border-radius:8px;padding:6px 10px;font-size:.9rem;cursor:pointer;min-height:40px;min-width:40px;">×</button>':'')+
       '</div>';
     }).join('');
-    el.querySelectorAll('[data-qji-type]').forEach(function(s){s.addEventListener('change',function(){_qjItems[parseInt(s.dataset.qjiType)].type=s.value;});});
+    el.querySelectorAll('[data-qji-type]').forEach(function(s){s.addEventListener('change',function(){_qjItems[parseInt(s.dataset.qjiType)].type=s.value;updateQjEmpVisibility();});});
     el.querySelectorAll('[data-qji-nb]').forEach(function(n){n.addEventListener('input',function(){_qjItems[parseInt(n.dataset.qjiNb)].nb=parseInt(n.value)||1;});});
     el.querySelectorAll('[data-qji-rm]').forEach(function(b){b.addEventListener('click',function(){_qjItems.splice(parseInt(b.dataset.qjiRm),1);renderQjItems();});});
+    updateQjEmpVisibility();
   }
   renderQjItems();
   document.getElementById('qj-add-item').addEventListener('click',function(){
@@ -4963,6 +4976,7 @@ function openQuickJobSheet(){
     var age=((document.getElementById('qj-age')||{}).value||'').trim();
     var labDelivery=(document.getElementById('qj-lab-delivery')||{}).value||'';
     var slot=(document.getElementById('qj-slot')||{}).value||'12';
+    var emp=(document.getElementById('qj-emp')||{}).checked||false;
     var teethD=(typeof _mobReadTeeth==='function')?_mobReadTeeth():{teeth:[],links:[]};
     var missingItems=_readMissingFromForm('qj');
     var items=_qjItems.filter(function(it){return it.type;}).map(function(it){return{type:it.type,nb:parseInt(it.nb)||1};});
@@ -4976,7 +4990,7 @@ function openQuickJobSheet(){
     var lbl=totalNb>1?patient+' ('+totalNb+' éléments)':patient;
     var ws=typeof getWorkspace==='function'?getWorkspace():'admin';
     if(ws==='admin'&&typeof addMobileAdminJob==='function'){
-      var _newJobId=addMobileAdminJob({patient:patient,items:items,cabinet:cab,deliveryDate:delivery,note:note,urgent:urgent,missingItems:missingItems,sexe:sexe,age:age,labDeliveryDate:labDelivery,labDeliverySlot:slot,teeth:teethD.teeth,links:teethD.links});
+      var _newJobId=addMobileAdminJob({patient:patient,items:items,cabinet:cab,deliveryDate:delivery,note:note,urgent:urgent,missingItems:missingItems,sexe:sexe,age:age,labDeliveryDate:labDelivery,labDeliverySlot:slot,emp:emp,teeth:teethD.teeth,links:teethD.links});
       if(!_newJobId)return;
       // Attacher la photo scannée au travail (ligne dédiée jobphoto_<id> + référence légère).
       if(_mobScanPhoto){
@@ -4992,11 +5006,11 @@ function openQuickJobSheet(){
     }
     var tasks=[];
     if(localStorage.getItem('lb_prog_actif')==='1'){
-      items.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type));});
+      items.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type,emp));});
     }
     var job={
       id:String(Date.now()),patient:lbl,type:items[0].type,tasks:tasks,nb:totalNb,items:items,
-      urgent:urgent,note:note,deliveryDate:delivery,cabinet:cab,
+      urgent:urgent,note:note,deliveryDate:delivery,cabinet:cab,emp:emp,
       createdAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId:''
     };
     if(missingItems.length){job.missingInfoItems=missingItems;}

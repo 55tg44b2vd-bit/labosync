@@ -409,6 +409,7 @@
       teeth: Array.isArray(opts.teeth) ? opts.teeth : [],
       links: Array.isArray(opts.links) ? opts.links : [],
       cabinet: cab,
+      emp: !!opts.emp,
       createdAt: new Date().toISOString(),
       trackCode: typeof global.genTrackCode === 'function' ? global.genTrackCode() : '',
       prothesisId: '',
@@ -431,6 +432,7 @@
         note: note,
         cabinet: cab,
         urgent: urgent,
+        emp: !!opts.emp,
         createdAt: job.createdAt,
         requestedDeliveryDate: delivery,
         jobId: job.id,
@@ -459,7 +461,7 @@
         var jobTasks = [];
         jobItems.forEach(function (it) {
           if (typeof global.buildTasksMobile === 'function') {
-            jobTasks = jobTasks.concat(global.buildTasksMobile(it.type));
+            jobTasks = jobTasks.concat(global.buildTasksMobile(it.type, !!jobOnly.emp));
           }
         });
         jobOnly.tasks = jobTasks;
@@ -473,7 +475,7 @@
     var tasks = [];
     if (typeof global.buildTasksMobile === 'function') {
       items.forEach(function (it) {
-        tasks = tasks.concat(global.buildTasksMobile(it.type));
+        tasks = tasks.concat(global.buildTasksMobile(it.type, !!q.emp));
       });
     }
     var existing = q.jobId ? (state.jobs || []).find(function (j) { return j.id === q.jobId; }) : null;
