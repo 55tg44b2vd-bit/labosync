@@ -543,6 +543,7 @@ body.has-sidebar #drawer{transform:translateX(0);}
 <script src="/scripts/lab-multi-poste.js"></script>
 <script src="/scripts/lab-admin-job-flow.js"></script>
 <script src="/scripts/lab-r2-files.js"></script>
+<script src="/scripts/lab-3d-viewer.js"></script>
 <body>
 
 <!-- ÉCRAN DE CHARGEMENT -->
@@ -4139,6 +4140,7 @@ function viewJobAttachment(jobId,attId){
   var att=(job.attachments||[]).find(function(a){return a.id===attId;});
   if(!att)return;
   if(att.storageKey){
+    if(_isView3D(att.name)){openLab3DViewer(att.storageKey,att.name);return;}
     downloadLabR2File(att.storageKey,att.name);
     return;
   }
@@ -4157,7 +4159,7 @@ function _renderJobAttachmentsSection(jobId){
   ensureJobAttachments(job);
   var list=job.attachments.length?job.attachments.map(function(a){
     var lbl=a.type==='prescription'?'📄 Prescription':(a.type==='lab_sheet'?'📋 Fiche labo':(a.type==='cabinet_scan'?'🦷 '+escH2(a.name):'📎 '+escH2(a.name)));
-    var btnLbl=a.storageKey?'Télécharger':'Voir';
+    var btnLbl=(a.storageKey&&_isView3D(a.name))?'👁️ Voir en 3D':(a.storageKey?'Télécharger':'Voir');
     return '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;margin-bottom:6px;">'+
       '<span style="flex:1;font-size:.8rem;">'+lbl+(a.size&&typeof LabR2!=='undefined'?' <span style="color:#94a3b8;font-size:.7rem;">('+LabR2.humanSize(a.size)+')</span>':'')+'</span>'+
       '<button type="button" onclick="viewJobAttachment(\''+jobId+'\',\''+a.id+'\')" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:5px;padding:4px 10px;font-size:.72rem;cursor:pointer;">'+btnLbl+'</button>'+
@@ -4183,7 +4185,7 @@ function _renderJobAttachmentsReadonly(job){
       var sz=a.size&&typeof LabR2!=='undefined'?' <span style="color:#94a3b8;font-size:.7rem;">('+LabR2.humanSize(a.size)+')</span>':'';
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;">'+
         '<span style="flex:1;font-size:.82rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+lbl+escH2(a.name||'fichier')+sz+'</span>'+
-        '<button type="button" onclick="viewJobAttachment(\''+escH2(job.id)+'\',\''+escH2(a.id)+'\')" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:6px;padding:5px 10px;font-size:.74rem;font-weight:600;cursor:pointer;">'+(a.storageKey?'Télécharger':'Voir')+'</button>'+
+        '<button type="button" onclick="viewJobAttachment(\''+escH2(job.id)+'\',\''+escH2(a.id)+'\')" style="background:#dbeafe;color:#1d4ed8;border:none;border-radius:6px;padding:5px 10px;font-size:.74rem;font-weight:600;cursor:pointer;">'+((a.storageKey&&_isView3D(a.name))?'👁️ Voir en 3D':(a.storageKey?'Télécharger':'Voir'))+'</button>'+
       '</div>';
     }).join('')+
   '</div>';
@@ -10590,15 +10592,21 @@ function labR2Headers(){
 }
 function _renderStepFilesHtml(files){
   if(!files||!files.length)return '';
+  var _3d=files.filter(function(f){return f&&f.storageKey&&_isView3D(f.name);});
+  var _regId=_3d.length?_reg3dFiles(_3d.map(function(f){return {name:f.name,storageKey:f.storageKey};})):'';
+  var _viewAll=_3d.length>1?'<button type="button" onclick="openLab3DViewerReg(\''+_regId+'\')" style="background:#0ea5e9;color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:.78rem;font-weight:600;cursor:pointer;margin-bottom:8px;">🧊 Tout visualiser en 3D ('+_3d.length+')</button>':'';
   return '<div style="margin-top:12px;"><div style="font-size:.78rem;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Empreintes / fichiers ('+files.length+')</div>'+
+    _viewAll+
     files.map(function(f,fi){
       var sz=typeof LabR2!=='undefined'?LabR2.humanSize(f.size||0):'';
       var key=escH2(f.storageKey||'');
       var nm=escH2(f.name||'fichier');
+      var _is3d=f.storageKey&&_isView3D(f.name);
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;margin-bottom:6px;">'+
         '<span style="font-size:1rem;">🦷</span>'+
         '<span style="flex:1;font-size:.88rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+nm+'</span>'+
         (sz?'<span style="font-size:.72rem;color:#64748b;">'+escH2(sz)+'</span>':'')+
+        (_is3d?'<button type="button" onclick="openLab3DViewer(\''+key+'\',\''+nm.replace(/'/g,"\\'")+'\')" style="background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:5px 11px;font-size:.76rem;font-weight:600;cursor:pointer;">👁️ 3D</button>':'')+
         '<button type="button" onclick="downloadLabR2File(\''+key+'\',\''+nm.replace(/'/g,"\\'")+'\')" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:.76rem;font-weight:600;cursor:pointer;">Télécharger</button>'+
       '</div>';
     }).join('')+
@@ -10614,6 +10622,19 @@ async function downloadLabR2File(storageKey,name){
     console.error(e);
     showToast(e.message||'Erreur téléchargement','#c2410c');
   }
+}
+// ── Viewer 3D (STL/PLY/OBJ) — ouverture depuis les pièces jointes / empreintes ──
+function _isView3D(name){return typeof LabViewer!=='undefined'?LabViewer.is3D(name):/\.(stl|ply|obj)$/i.test(String(name||''));}
+var _lab3dReg={};
+function _reg3dFiles(files){var id='r3d_'+Math.random().toString(36).slice(2,9);_lab3dReg[id]=files;return id;}
+function openLab3DViewer(storageKey,name){
+  if(typeof LabViewer==='undefined'){showToast('Visualiseur 3D non chargé','#c2410c');return;}
+  LabViewer.open([{name:name,storageKey:storageKey}],labR2Headers());
+}
+function openLab3DViewerReg(id){
+  var files=_lab3dReg[id];
+  if(!files||typeof LabViewer==='undefined')return;
+  LabViewer.open(files,labR2Headers());
 }
 function _copyStepFilesToJob(job,step){
   if(!step||!step.files||!step.files.length)return;
