@@ -1427,6 +1427,10 @@ function _mergeMobileRecords(localArr,remoteArr){
   (localArr||[]).forEach(put);
   return Object.keys(map).map(function(k){return map[k];});
 }
+// Suppressions tracées (factures/BL) — anti-résurrection lors des fusions multi-poste.
+function _mobReadDelRecs(){try{return JSON.parse(localStorage.getItem('lb_deleted_recs')||'{}')||{};}catch(e){return {};}}
+function _mobMergeDelRecs(remote){var l=_mobReadDelRecs();Object.keys(remote||{}).forEach(function(ty){if(!l[ty])l[ty]={};var rs=remote[ty]||{};Object.keys(rs).forEach(function(id){var lt=l[ty][id]?new Date(l[ty][id]).getTime():0,rt=new Date(rs[id]).getTime();if((rt&&!lt)||rt>lt)l[ty][id]=rs[id];});});try{localStorage.setItem('lb_deleted_recs',JSON.stringify(l));}catch(e){}return l;}
+function _mobFilterDel(arr,ty,map){var sub=((map||_mobReadDelRecs())[ty])||{};return (arr||[]).filter(function(r){return r&&!sub[String(r.id)];});}
 function _mobileCountsFrom(data){
   data=data||{};
   var jobList=(data.jobs||jobs||[]).concat(data.queue||queue||[],data.archive||archive||[]);
@@ -1470,12 +1474,13 @@ function _mergeRemoteBeforeMobileSave(remote){
   var p=remote&&remote.data?remote.data:null;
   if(!p)return;
   if(p.adminAccess)_serverAdminAccessMob=p.adminAccess; // préserver le code PIN Gestion
+  var _dr=_mobMergeDelRecs(p.deletedRecords||{});
   jobs=_mergeMobileRecords(jobs,p.jobs||[]);
   queue=_mergeMobileRecords(queue,p.queue||[]);
   archive=_mergeMobileRecords(archive,p.archive||[]);
   cabinets=_mergeMobileRecords(cabinets,p.cabinets||[]);
-  bdl=_mergeMobileRecords(bdl,p.bdl||[]);
-  documents=_mergeMobileRecords(documents,p.documents||[]);
+  bdl=_mobFilterDel(_mergeMobileRecords(bdl,p.bdl||[]),'bdl',_dr);
+  documents=_mobFilterDel(_mergeMobileRecords(documents,p.documents||[]),'docs',_dr);
   tarifs=_mergeMobileRecords(tarifs,p.tarifs||[]);
   waiting=_mergeMobileRecords(waiting,p.waiting||[]);
   bdc=_mergeMobileRecords(bdc,p.bdc||[]);
@@ -1512,8 +1517,9 @@ async function loadData(){
     if(p.jobs)jobs=p.jobs;
     if(p.archive)archive=p.archive;
     if(p.cabinets)cabinets=_mergeMobileRecords(cabinets,p.cabinets);
-    if(p.bdl)bdl=p.bdl;
-    if(p.documents)documents=p.documents;
+    if(p.deletedRecords)_mobMergeDelRecs(p.deletedRecords);
+    if(p.bdl)bdl=_mobFilterDel(_mergeMobileRecords(bdl,p.bdl),'bdl');
+    if(p.documents)documents=_mobFilterDel(_mergeMobileRecords(documents,p.documents),'docs');
     if(p.tarifs)tarifs=p.tarifs;
     if(p.waiting)waiting=p.waiting;
     if(p.queue)queue=p.queue;
@@ -1586,6 +1592,7 @@ async function saveData(){
       techs:TECHS,
       customTypes,
       customTypesRev:parseInt(localStorage.getItem('lb_ct_rev')||'0',10),
+      deletedRecords:_mobReadDelRecs(),
       progActif:localStorage.getItem('lb_prog_actif')||'0',
       legalInfo:{
         raison:localStorage.getItem('lb_legal_raison')||'',

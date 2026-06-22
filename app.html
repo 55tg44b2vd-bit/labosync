@@ -3387,6 +3387,59 @@ function _filterDeletedQueue(list,map){
   });
 }
 
+// ── Synchro multi-poste : traçage générique des suppressions (factures, BL…) ──
+// Permet une fusion par id SANS résurrection d'un enregistrement supprimé ailleurs.
+// Map { type: { id: isoTs } }. Types utilisés : 'docs' (factures), 'bdl' (BL).
+const LB_DELETED_RECS_KEY='lb_deleted_recs';
+const LB_DELETED_RECS_RETENTION_MS=120*24*60*60*1000;
+function _readDeletedRecs(){
+  try{
+    const raw=localStorage.getItem(LB_DELETED_RECS_KEY);
+    const map=raw?JSON.parse(raw):{};
+    const now=Date.now();let changed=false;
+    Object.keys(map).forEach(function(type){
+      const sub=map[type]||{};
+      Object.keys(sub).forEach(function(id){
+        const t=new Date(sub[id]).getTime();
+        if(!t||now-t>LB_DELETED_RECS_RETENTION_MS){delete sub[id];changed=true;}
+      });
+      if(!Object.keys(sub).length){delete map[type];changed=true;}
+    });
+    if(changed)localStorage.setItem(LB_DELETED_RECS_KEY,JSON.stringify(map));
+    return map&&typeof map==='object'?map:{};
+  }catch(e){return {};}
+}
+function _markRecDeleted(type,id){
+  if(!type||id==null||id==='')return;
+  const map=_readDeletedRecs();
+  if(!map[type])map[type]={};
+  map[type][String(id)]=new Date().toISOString();
+  try{localStorage.setItem(LB_DELETED_RECS_KEY,JSON.stringify(map));}catch(e){}
+}
+function _mergeDeletedRecs(remoteMap){
+  const local=_readDeletedRecs();
+  Object.keys(remoteMap||{}).forEach(function(type){
+    if(!local[type])local[type]={};
+    const rsub=remoteMap[type]||{};
+    Object.keys(rsub).forEach(function(id){
+      const r=rsub[id],lt=local[type][id]?new Date(local[type][id]).getTime():0,rt=new Date(r).getTime();
+      if((rt&&!lt)||rt>lt)local[type][id]=r;
+    });
+  });
+  try{localStorage.setItem(LB_DELETED_RECS_KEY,JSON.stringify(local));}catch(e){}
+  return local;
+}
+function _filterDeletedRecs(list,type,map){
+  const sub=((map||_readDeletedRecs())[type])||{};
+  return (list||[]).filter(function(r){return r&&!sub[String(r.id)];});
+}
+// Horodate un enregistrement à chaque création/édition (pour la fusion par récence).
+function _touchRec(r){if(r&&typeof r==='object')r.updatedAt=new Date().toISOString();return r;}
+// Fusion d'une liste par id + récence, en excluant les supprimés du type donné.
+function _mergeRecsTyped(localArr,remoteArr,type,delMap){
+  return _filterDeletedRecs(_mergeCloudRecords(localArr||[],remoteArr||[]),type,delMap);
+}
+
 function saveJobs(){
   _lastLocalMutationAt = Date.now();
   localStorage.setItem('lb_jobs',JSON.stringify(jobs));
@@ -10190,11 +10243,17 @@ async function cloudSave(){
             const remote=await _fetchServerLabPayload(userId,token);
             if(remote&&remote.data){
               _mergeDeletedJobIds(remote.data.deletedJobIds||{});
+              var _delRecsC=_mergeDeletedRecs(remote.data.deletedRecords||{});
               jobs=_mergeCloudJobs(jobs,remote.data.jobs||[]);
               queue=_mergeCloudQueue(queue,remote.data.queue||[]);
               TECHS=_mergeCloudTechs(TECHS,remote.data.techs||{});
-              customTypes=_mergeCloudCustomTypes(customTypes,remote.data.customTypes||[]);
+              // Config des types : récence (cohérent avec le correctif techniciens)
+              var _rCtRevC=parseInt(remote.data.customTypesRev||0,10),_lCtRevC=parseInt(localStorage.getItem('lb_ct_rev')||'0',10);
+              if(Array.isArray(remote.data.customTypes)&&_rCtRevC>=_lCtRevC){customTypes=remote.data.customTypes;localStorage.setItem('lb_ct_rev',String(_rCtRevC));}
               if(remote.data.cabinets)cabinets=_mergeCloudRecords(cabinets,remote.data.cabinets);
+              // Factures et BL : fusion par id + récence, sans résurrection des supprimés
+              documents=_mergeRecsTyped(JSON.parse(localStorage.getItem('lb_docs')||'[]'),remote.data.documents||[],'docs',_delRecsC);
+              bdl=_mergeRecsTyped(JSON.parse(localStorage.getItem('lb_bdl')||'[]'),remote.data.bdl||[],'bdl',_delRecsC);
               syncWindowLabData();
               syncWindowQueue();
               localStorage.setItem('lb_jobs',JSON.stringify(jobs));
@@ -10202,6 +10261,8 @@ async function cloudSave(){
               localStorage.setItem('lb_techs',JSON.stringify(TECHS));
               localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));
               localStorage.setItem('lb_cabinets',JSON.stringify(cabinets));
+              localStorage.setItem('lb_docs',JSON.stringify(documents));
+              localStorage.setItem('lb_bdl',JSON.stringify(bdl));
             }
             _serverUpdatedAt=remote&&remote.updated_at?remote.updated_at:rows[0].updated_at;
           }
@@ -10222,6 +10283,7 @@ async function cloudSave(){
       jobs,archive,cabinets,syns,scanHist,waiting,conges,absences,techOffDays,
       genericTasks:genericTasks,
       deletedJobIds:_readDeletedJobIds(),
+      deletedRecords:_readDeletedRecs(),
       queue:queue,
       documents:JSON.parse(localStorage.getItem('lb_docs')||'[]'),
       tarifs:JSON.parse(localStorage.getItem('lb_tarifs')||'[]'),
@@ -10389,6 +10451,7 @@ async function cloudRestore(silent=false){
     if(rows[0].updated_at)_serverUpdatedAt=rows[0].updated_at;
     const mergeLocalInitial=_shouldMergeLocalOnInitialRestore(userId,p,silent);
     const deletedJobIds=_mergeDeletedJobIds(p.deletedJobIds||{});
+    const _delRecs=_mergeDeletedRecs(p.deletedRecords||{});
     if(p.jobs){
       const remoteProg=_remoteDataCounts(p).programmedTasks;
       const localProg=_currentDataCounts().programmedTasks;
@@ -10411,11 +10474,11 @@ async function cloudRestore(silent=false){
       localStorage.setItem('lb_queue',JSON.stringify(queue));
       if(typeof syncWindowQueue==='function')syncWindowQueue();
     }
-    if(p.documents){documents=mergeLocalInitial?_mergeCloudRecords(documents,p.documents):p.documents;localStorage.setItem('lb_docs',JSON.stringify(documents));}
+    if(p.documents){documents=_mergeRecsTyped(documents,p.documents,'docs',_delRecs);localStorage.setItem('lb_docs',JSON.stringify(documents));}
     if(p.tarifs){localStorage.setItem('lb_tarifs',JSON.stringify(p.tarifs));tarifs=p.tarifs;}
     if(p.bdc){localStorage.setItem('lb_bdc',JSON.stringify(p.bdc));bdc=p.bdc;}
     if(p.fourns){localStorage.setItem('lb_fourns',JSON.stringify(p.fourns));fourns=p.fourns;}
-    if(p.bdl){localStorage.setItem('lb_bdl',JSON.stringify(p.bdl));bdl=p.bdl;}
+    if(p.bdl){bdl=_mergeRecsTyped(bdl,p.bdl,'bdl',_delRecs);localStorage.setItem('lb_bdl',JSON.stringify(bdl));}
     if(p.laboName)localStorage.setItem('lb_name',p.laboName);
     if(p.laboLogo)localStorage.setItem('lb_logo',p.laboLogo);
     else if(p.laboLogo===null)localStorage.removeItem('lb_logo');
@@ -13017,6 +13080,7 @@ document.getElementById('bill-docs-list').addEventListener('click',async functio
     if(!confirm(confirmMsg))return;
     doc.status='paye';
     if(stripePaid&&stripePaidAt)doc.paidAt=stripePaidAt;
+    _touchRec(doc);
     saveDocs();renderToInvoice();renderBillDocs();updateBillStats();
     const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
     if(cab)publishPortal(cab);
@@ -13024,7 +13088,7 @@ document.getElementById('bill-docs-list').addEventListener('click',async functio
   }
   else if(action==='envoye'){
     if(doc.status!=='brouillon'){showToast(t('toast.invoice_locked'),'#c0392b');return;}
-    doc.status='envoye';saveDocs();renderToInvoice();renderBillDocs();updateBillStats();
+    doc.status='envoye';_touchRec(doc);saveDocs();renderToInvoice();renderBillDocs();updateBillStats();
     const cab=cabinets.find(function(c){return c.id===doc.cabinet;});
     if(cab){
       publishPortal(cab);
@@ -13054,7 +13118,7 @@ document.getElementById('bill-docs-list').addEventListener('click',async functio
   else if(action==='convert'){convertToFacture(id);}
   else if(action==='delete'){
     if(isLocked){showToast(t('toast.invoice_delete_locked'),'#c0392b');return;}
-    if(confirm('Supprimer ce document ?')){documents=documents.filter(function(d){return d.id!==id;});saveDocs();renderToInvoice();renderBillDocs();updateBillStats();}
+    if(confirm('Supprimer ce document ?')){_markRecDeleted('docs',id);documents=documents.filter(function(d){return d.id!==id;});saveDocs();renderToInvoice();renderBillDocs();updateBillStats();}
   }
 });
 
