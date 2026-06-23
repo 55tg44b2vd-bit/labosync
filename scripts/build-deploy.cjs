@@ -67,6 +67,24 @@ const rootFiles = fs.readdirSync(ROOT, { withFileTypes: true })
   });
 rootFiles.forEach(copyFile);
 
+// 1b) netlify.toml : RETIRER la commande de build pour le déploiement par glisser-déposer.
+// Le dossier deploy/ est DÉJÀ construit (statique) et ne contient PAS les scripts d'outillage
+// .cjs (create-deploy-backup, clean-push-artifacts, verify:functions). Si Netlify Drop lisait
+// la commande de build, il échouerait sur « module not found ». On conserve tout le reste
+// (functions, redirections, headers). La sauvegarde pré-déploiement reste lançable à la main
+// via `npm run backup:deploy` avant de glisser le dossier.
+(function stripBuildCommand() {
+  const tomlPath = path.join(OUT, 'netlify.toml');
+  if (!fs.existsSync(tomlPath)) return;
+  let toml = fs.readFileSync(tomlPath, 'utf8');
+  const before = toml;
+  toml = toml.replace(/^[ \t]*command[ \t]*=[ \t]*".*"[ \t]*\r?\n/m, '');
+  if (toml !== before) {
+    fs.writeFileSync(tomlPath, toml);
+    console.log('   • netlify.toml : commande de build retirée (déploiement statique par glisser-déposer)');
+  }
+})();
+
 // 2) Dossiers publics
 const nVendor = copyDir('vendor');
 const nFns = copyDir(path.join('netlify', 'functions'));
