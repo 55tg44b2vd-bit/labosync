@@ -3440,6 +3440,45 @@ function _mergeRecsTyped(localArr,remoteArr,type,delMap){
   return _filterDeletedRecs(_mergeCloudRecords(localArr||[],remoteArr||[]),type,delMap);
 }
 
+// ── Synchro multi-poste : fusion de la CONFIG DES TYPES par type (et non en bloc) ──
+// La config était fusionnée comme un objet unique résolu par une seule révision
+// globale → en édition concurrente (2 sessions), la dernière sauvegarde remplaçait
+// TOUT le bloc et pouvait effacer les techniciens assignés. Ici on fusionne TYPE PAR
+// TYPE : pour chaque id, on garde la version au _rev (horodatage d'édition) le plus
+// récent ; à révision égale, on garde celle qui porte LE PLUS de techniciens assignés
+// (filet de sécurité : une config « tout Auto » n'écrase jamais une config affectée).
+function _ctRevTime(ct){var t=ct&&ct._rev?new Date(ct._rev).getTime():0;return isNaN(t)?0:t;}
+function _ctAssignedTechCount(ct){
+  if(!ct||!Array.isArray(ct.steps))return 0;
+  return ct.steps.reduce(function(n,s){
+    if(!s)return n;
+    if(s.sameAs!==null&&s.sameAs!==undefined)return n+1;            // étape liée = choix explicite
+    if(s.tech&&s.tech!=='auto'&&!(Array.isArray(s.tech)&&!s.tech.length))return n+1;
+    return n;
+  },0);
+}
+// Marque un type comme édité maintenant (pour la fusion par récence par type).
+function _stampType(ct){if(ct&&typeof ct==='object')ct._rev=new Date().toISOString();return ct;}
+function _mergeCustomTypesByType(localArr,remoteArr,delMap){
+  var sub=((delMap||_readDeletedRecs())['ctypes'])||{};
+  var map=Object.create(null);
+  function pick(a,b){
+    if(!a)return b;if(!b)return a;
+    var ra=_ctRevTime(a),rb=_ctRevTime(b);
+    if(ra!==rb)return ra>rb?a:b;
+    var ta=_ctAssignedTechCount(a),tb=_ctAssignedTechCount(b);
+    if(ta!==tb)return ta>tb?a:b;
+    return a;                                                       // sinon : local prioritaire
+  }
+  (remoteArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=ct;});
+  (localArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=pick(ct,map[ct.id]);});
+  return Object.keys(map).filter(function(id){
+    var delTs=sub[id]?new Date(sub[id]).getTime():0;
+    if(!delTs)return true;
+    return _ctRevTime(map[id])>delTs;                              // ré-édité après suppression → conservé
+  }).map(function(id){return map[id];});
+}
+
 function saveJobs(){
   _lastLocalMutationAt = Date.now();
   localStorage.setItem('lb_jobs',JSON.stringify(jobs));
@@ -9639,10 +9678,10 @@ function saveCustomType(){
   const newData={label:name,category:cat,phase:phaseVal,steps:validSteps.map(mapStep),stepsEmp:_ctSupportsEmp&&_ctStepsEmp.length?_ctStepsEmp.filter(function(s){return s.label.trim();}).map(mapStep):null};
   if(_ctEditId){
     const idx=customTypes.findIndex(function(t){return t.id===_ctEditId;});
-    if(idx>=0){customTypes[idx]=Object.assign({},customTypes[idx],newData);}
+    if(idx>=0){customTypes[idx]=_stampType(Object.assign({},customTypes[idx],newData));}
   } else {
     const id='ct_'+name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,15)+'_'+Date.now();
-    customTypes.push(Object.assign({id},newData));
+    customTypes.push(_stampType(Object.assign({id},newData)));
   }
   saveCustomTypes();syncCustomTypesToTL();refreshTypeSelects();renderCustomTypesList();hideCustomTypeForm();
 }
@@ -9650,6 +9689,7 @@ function saveCustomType(){
 function deleteCustomType(id){
   const ct=customTypes.find(function(c){return c.id===id;});
   if(!ct||!confirm(ti('confirm.delete_type',{label:ct.label})))return;
+  _markRecDeleted('ctypes',id);   // trace la suppression → la fusion par type ne le ressuscite pas
   customTypes=customTypes.filter(function(c){return c.id!==id;});
   delete TYPE_LABELS[id];
   saveCustomTypes();refreshTypeSelects();renderCustomTypesList();
@@ -9845,13 +9885,13 @@ function applyAIConfig(){
     if(idx>=0){
       const upd={label:c.label||customTypes[idx].label,category:c.category||customTypes[idx].category,steps:steps};
       if(stepsEmp){upd.stepsEmp=stepsEmp;upd.supportsEmp=true;}
-      customTypes[idx]=Object.assign({},customTypes[idx],upd);
+      customTypes[idx]=_stampType(Object.assign({},customTypes[idx],upd));
     } else{alert('Type introuvable : '+c.id);return;}
   } else {
     const id='ct_ai_'+Date.now();
     const newType={id,label:c.label||'Nouveau type',category:c.category||'Autre',steps:steps};
     if(stepsEmp){newType.stepsEmp=stepsEmp;newType.supportsEmp=true;}
-    customTypes.push(newType);
+    customTypes.push(_stampType(newType));
   }
   saveCustomTypes();syncCustomTypesToTL();refreshTypeSelects();renderCustomTypesList();
   document.getElementById('ai-config-preview').style.display='none';
@@ -10251,9 +10291,12 @@ async function cloudSave(){
               jobs=_mergeCloudJobs(jobs,remote.data.jobs||[]);
               queue=_mergeCloudQueue(queue,remote.data.queue||[]);
               TECHS=_mergeCloudTechs(TECHS,remote.data.techs||{});
-              // Config des types : récence (cohérent avec le correctif techniciens)
-              var _rCtRevC=parseInt(remote.data.customTypesRev||0,10),_lCtRevC=parseInt(localStorage.getItem('lb_ct_rev')||'0',10);
-              if(Array.isArray(remote.data.customTypes)&&_rCtRevC>=_lCtRevC){customTypes=remote.data.customTypes;localStorage.setItem('lb_ct_rev',String(_rCtRevC));}
+              // Config des types : fusion PAR TYPE (récence par type + filet anti-perte de techniciens)
+              if(Array.isArray(remote.data.customTypes)){
+                customTypes=_mergeCustomTypesByType(JSON.parse(localStorage.getItem('lb_custom_types')||'[]'),remote.data.customTypes,_delRecsC);
+                localStorage.setItem('lb_ct_rev',String(Math.max(parseInt(remote.data.customTypesRev||0,10),parseInt(localStorage.getItem('lb_ct_rev')||'0',10))));
+                localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));
+              }
               if(remote.data.cabinets)cabinets=_mergeCloudRecords(cabinets,remote.data.cabinets);
               // Factures et BL : fusion par id + récence, sans résurrection des supprimés
               documents=_mergeRecsTyped(JSON.parse(localStorage.getItem('lb_docs')||'[]'),remote.data.documents||[],'docs',_delRecsC);
@@ -10326,11 +10369,11 @@ async function cloudSave(){
         if(sd){
           _mergedData=Object.assign({},sd,payload);
           if(sd.adminAccess)_serverAdminAccess=sd.adminAccess;
-          // Garde-fou config types : ne jamais écraser une config cloud plus récente
-          // (techniciens assignés) avec une config locale périmée.
-          if(Array.isArray(sd.customTypes)&&parseInt(sd.customTypesRev||0,10)>(payload.customTypesRev||0)){
-            _mergedData.customTypes=sd.customTypes;
-            _mergedData.customTypesRev=sd.customTypesRev;
+          // Config des types : on FUSIONNE PAR TYPE l'état serveur avec le payload local
+          // avant l'upsert → ni les éditions d'un autre poste ni les nôtres ne sont perdues.
+          if(Array.isArray(sd.customTypes)){
+            _mergedData.customTypes=_mergeCustomTypesByType(payload.customTypes||[],sd.customTypes,_readDeletedRecs());
+            _mergedData.customTypesRev=Math.max(parseInt(sd.customTypesRev||0,10),(payload.customTypesRev||0));
           }
         }
       }
@@ -10498,16 +10541,12 @@ async function cloudRestore(silent=false){
       if((!_initialRestoreDone||!silent)&&!(mergeLocalInitial&&(localStorage.getItem('lb_prog_actif')==='1'||_currentDataCounts().programmedTasks>0))){localStorage.setItem('lb_prog_actif',p.progActif);}
     }
     if(p.customTypes&&Array.isArray(p.customTypes)){
-      // Conflit de config des types résolu par RÉCENCE (lb_ct_rev), pas par comptage :
-      // le cloud aussi récent ou plus récent l'emporte → corrige la perte des techniciens
-      // (un poste à config périmée n'écrase plus la config éditée ailleurs). On ne garde
-      // le local QUE s'il porte une édition strictement plus récente non encore synchronisée.
-      var _localCtRev=parseInt(localStorage.getItem('lb_ct_rev')||'0',10);
-      var _cloudCtRev=parseInt(p.customTypesRev||0,10);
-      if(_cloudCtRev>=_localCtRev){
-        customTypes=p.customTypes;
-        localStorage.setItem('lb_ct_rev',String(_cloudCtRev));
-      }
+      // Conflit de config des types résolu PAR TYPE (récence par type via _rev) et non en
+      // bloc : chaque type garde sa version la plus récente ; à égalité, la config qui porte
+      // le plus de techniciens assignés est conservée (une config « tout Auto » n'écrase plus
+      // les techniciens édités ailleurs). Corrige durablement la perte des techniciens.
+      customTypes=_mergeCustomTypesByType(customTypes,p.customTypes,_delRecs);
+      localStorage.setItem('lb_ct_rev',String(Math.max(parseInt(p.customTypesRev||0,10),parseInt(localStorage.getItem('lb_ct_rev')||'0',10))));
       localStorage.setItem('lb_custom_types',JSON.stringify(customTypes));
       syncCustomTypesToTL();
     }
@@ -12657,6 +12696,7 @@ function saveTypePriceQuick(typeId){
   const ct=customTypes.find(function(c){return c.id===typeId;});
   if(!input||!ct)return;
   ct.prix=parseFloat(input.value)||0;
+  _stampType(ct);
   saveCustomTypes();
   syncTarifsFromCustomTypes();
 }
@@ -12666,6 +12706,7 @@ function saveTypePrices(){
     const input=document.getElementById('type-prix-'+ct.id);
     if(!input)return;
     ct.prix=parseFloat(input.value)||0;
+    _stampType(ct);
   });
   saveCustomTypes();
   syncTarifsFromCustomTypes();
@@ -12704,7 +12745,7 @@ function saveTarifType(){
   var dup=customTypes.some(function(c){return (c.label||'').trim().toLowerCase()===name.toLowerCase();});
   if(dup){if(msg)msg.textContent='Ce type existe déjà.';return;}
   var id='ct_'+name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,15)+'_'+Date.now();
-  customTypes.push({id:id,label:name,category:cat,phase:2,steps:[],stepsEmp:null,prix:prix});
+  customTypes.push(_stampType({id:id,label:name,category:cat,phase:2,steps:[],stepsEmp:null,prix:prix}));
   saveCustomTypes();syncCustomTypesToTL();refreshTypeSelects();syncTarifsFromCustomTypes();renderCustomTypesList();
   hideTarifTypeForm();
   if(typeof showToast==='function')showToast('✅ Type ajouté : '+name,'#2a6049');
@@ -15026,7 +15067,8 @@ function renderLivraisons(){
     if(search)return true;            // recherche → on montre tout ce qui correspond
     if(filterMode==='all')return true;
     var d=_jobLabDeliveryDate(j);
-    if(!d)return false;               // sans date de livraison : visible seulement via recherche ou « Tous »
+    if(isJobComplete(j))return true;  // travail terminé → prêt à livrer, quelle que soit la date
+    if(!d)return true;                // sans date labo → visible (sinon perdu hors mode « Tous »)
     if(filterMode==='week')return d<=weekISO;
     return d<=todayISO;               // 'due' : échus + aujourd'hui
   };

@@ -79,4 +79,76 @@ t('A facture pendant B BL → aucun ne perd son travail', function(){
   assert.deepStrictEqual(bBlsAfterMerge.map(function(x){return x.id;}),['blB']);
 });
 
+// ── Fusion de la config des types PAR TYPE (anti-perte des techniciens) ───────
+// Reproduit _mergeCustomTypesByType (app.html).
+function ctRev(ct){var t=ct&&ct._rev?new Date(ct._rev).getTime():0;return isNaN(t)?0:t;}
+function ctTechCount(ct){
+  if(!ct||!Array.isArray(ct.steps))return 0;
+  return ct.steps.reduce(function(n,s){
+    if(!s)return n;
+    if(s.sameAs!==null&&s.sameAs!==undefined)return n+1;
+    if(s.tech&&s.tech!=='auto'&&!(Array.isArray(s.tech)&&!s.tech.length))return n+1;
+    return n;
+  },0);
+}
+function mergeCustomTypesByType(localArr,remoteArr,delMap){
+  var sub=((delMap||{})['ctypes'])||{};
+  var map=Object.create(null);
+  function pick(a,b){
+    if(!a)return b;if(!b)return a;
+    var ra=ctRev(a),rb=ctRev(b);
+    if(ra!==rb)return ra>rb?a:b;
+    var ta=ctTechCount(a),tb=ctTechCount(b);
+    if(ta!==tb)return ta>tb?a:b;
+    return a;
+  }
+  (remoteArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=ct;});
+  (localArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=pick(ct,map[ct.id]);});
+  return Object.keys(map).filter(function(id){
+    var delTs=sub[id]?new Date(sub[id]).getTime():0;
+    if(!delTs)return true;
+    return ctRev(map[id])>delTs;
+  }).map(function(id){return map[id];});
+}
+
+// 6) Le poste qui a édité les techniciens NE perd pas ses affectations face à un poste « tout Auto »
+t('config types : techniciens conservés malgré une config Auto concurrente', function(){
+  const edited=[{id:'crown',label:'Couronne',_rev:'2026-06-23T10:00:00Z',steps:[{label:'Modélisation',tech:'tom',dayOffset:1},{label:'Glaçage',tech:'marie',dayOffset:2}]}];
+  const autoStale=[{id:'crown',label:'Couronne',steps:[{label:'Modélisation',tech:'auto',dayOffset:1},{label:'Glaçage',tech:'auto',dayOffset:2}]}];
+  // distant = config éditée (récente), local = config périmée Auto → la fusion garde les techs
+  const m1=mergeCustomTypesByType(autoStale,edited,{});
+  assert.strictEqual(m1[0].steps[0].tech,'tom');
+  // et symétriquement (local édité, distant Auto sans _rev) : techs conservés via le filet de comptage
+  const autoNoRev=[{id:'crown',label:'Couronne',steps:[{label:'Modélisation',tech:'auto',dayOffset:1}]}];
+  const editedNoRev=[{id:'crown',label:'Couronne',steps:[{label:'Modélisation',tech:'tom',dayOffset:1}]}];
+  const m2=mergeCustomTypesByType(editedNoRev,autoNoRev,{});
+  assert.strictEqual(m2[0].steps[0].tech,'tom');
+});
+
+// 7) Récence par type : édition plus récente d'un type gagne, les autres types sont préservés (union)
+t('config types : édition récente gagne, union des types préservée', function(){
+  const local =[{id:'a',label:'A',_rev:'2026-06-23T09:00:00Z',steps:[{label:'s',tech:'tom',dayOffset:1}]},
+                {id:'b',label:'B',_rev:'2026-06-23T08:00:00Z',steps:[]}];
+  const remote=[{id:'a',label:'A',_rev:'2026-06-23T11:00:00Z',steps:[{label:'s',tech:'marie',dayOffset:1}]},
+                {id:'c',label:'C',_rev:'2026-06-23T07:00:00Z',steps:[]}];
+  const m=mergeCustomTypesByType(local,remote,{});
+  const byId={};m.forEach(function(x){byId[x.id]=x;});
+  assert.deepStrictEqual(Object.keys(byId).sort(),['a','b','c']);   // union : aucun type perdu
+  assert.strictEqual(byId.a.steps[0].tech,'marie');                 // a : version distante plus récente
+});
+
+// 8) Suppression d'un type : pas de résurrection (sauf ré-édition postérieure)
+t('config types : suppression non ressuscitée, ré-édition conservée', function(){
+  const del={ctypes:{old:'2026-06-23T10:00:00Z'}};
+  const m=mergeCustomTypesByType(
+    [{id:'keep',label:'K',steps:[]}],
+    [{id:'old',label:'Old',steps:[]},{id:'keep',label:'K',steps:[]}],del);
+  assert.deepStrictEqual(m.map(function(x){return x.id;}).sort(),['keep']); // 'old' supprimé reste supprimé
+  // ré-édité APRÈS la suppression → revient
+  const m2=mergeCustomTypesByType(
+    [{id:'old',label:'Old',_rev:'2026-06-23T12:00:00Z',steps:[{label:'s',tech:'tom',dayOffset:1}]}],
+    [],del);
+  assert.deepStrictEqual(m2.map(function(x){return x.id;}),['old']);
+});
+
 console.log('\nsync-merge: '+passed+' tests OK');
