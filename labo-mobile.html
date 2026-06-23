@@ -2489,7 +2489,7 @@ async function confirmAcceptOrderMobile(){
   var tasks=[];
   var progOn=localStorage.getItem('lb_prog_actif')==='1';
   if(progOn){
-    validItems.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type));});
+    validItems.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type,false,it.nb));});
   }
 
   var job={
@@ -3751,12 +3751,12 @@ function pick(pool,day,forced){
   var active=avail.length?avail:effectivePool;
   var ds=new Date(day).toDateString();
   var c={};active.forEach(function(t){c[t]=0;});
-  jobs.forEach(function(j){if(j.tasks)j.tasks.forEach(function(t){if(active.indexOf(t.tech)>=0&&new Date(t.dueDate).toDateString()===ds)c[t.tech]=(c[t.tech]||0)+1;});});
+  jobs.forEach(function(j){if(j.tasks)j.tasks.forEach(function(t){if(active.indexOf(t.tech)>=0&&new Date(t.dueDate).toDateString()===ds)c[t.tech]=(c[t.tech]||0)+(parseInt(t.nb,10)||1);});});
   return active.reduce(function(a,b){return(c[a]||0)<=(c[b]||0)?a:b;});
 }
 
-function buildTasksMobile(type,emp){
-  var base=new Date();var tasks=[];
+function buildTasksMobile(type,emp,nb){
+  var base=new Date();var tasks=[];var _nb=Math.max(1,parseInt(nb,10)||1);
   // ── PRIORITÉ À LA CONFIG PERSONNALISÉE ──
   // Si l'utilisateur a configuré ce type via l'éditeur de types, utiliser SA
   // config plutôt que les pools hardcodés (qui contiennent des techniciens
@@ -3776,7 +3776,7 @@ function buildTasksMobile(type,emp){
       var allValid=Object.keys(TECHS||{});
       finalTech=allValid.length?pick(allValid,day):tech;
     }
-    tasks.push({label:lbl,tech:finalTech,dueDate:new Date(day).toISOString()});
+    tasks.push({label:lbl,tech:finalTech,dueDate:new Date(day).toISOString(),nb:_nb});
   }
   function scan(d){push('Scan & impression modèle','fabien',d);}
   // Si l'utilisateur a édité ce type, on utilise SA config (même pour les types intégrés)
@@ -3907,7 +3907,7 @@ document.getElementById('btn-add-job').addEventListener('click',async function()
   var lbl=totalNb>1?patient+' ('+totalNb+' éléments)':patient;
   var tasks=[];
   if(localStorage.getItem('lb_prog_actif')==='1'){
-    items.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type));});
+    items.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type,false,it.nb));});
   }
   var job={
     id:String(Date.now()),patient:lbl,type:items[0].type,tasks:tasks,nb:totalNb,items:items,
@@ -5026,7 +5026,7 @@ function openQuickJobSheet(){
     }
     var tasks=[];
     if(localStorage.getItem('lb_prog_actif')==='1'){
-      items.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type,emp));});
+      items.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type,emp,it.nb));});
     }
     var job={
       id:String(Date.now()),patient:lbl,type:items[0].type,tasks:tasks,nb:totalNb,items:items,

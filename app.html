@@ -3810,7 +3810,7 @@ function generatePrintableLabSheetCard(job,opts){
         return '<div class="ls-task-row'+(t.done?' done':'')+'">'+
           '<span class="ls-task-date">'+escH2(due||'—')+'</span>'+
           '<span class="ls-task-tech">'+escH2(tech||'—')+'</span>'+
-          '<span class="ls-task-name">'+escH2(t.label||'Étape')+(t.done?' ✓':'')+'</span>'+
+          '<span class="ls-task-name">'+escH2(t.label||'Étape')+((parseInt(t.nb,10)||1)>1?' (×'+parseInt(t.nb,10)+' élts)':'')+(t.done?' ✓':'')+'</span>'+
         '</div>';
       }).join('')+
     '</section>';
@@ -4264,11 +4264,11 @@ function countWD(from,to){const a=new Date(from);a.setHours(0,0,0,0);const b=new
 // aujourd'hui). Sinon, planification « au plus tôt » à partir d'aujourd'hui (comportement initial).
 function _buildScheduledTasks(items,emp,deadlineISO){
   function buildAt(base){
-    if(items.length===1)return buildTasks(items[0].type,emp,null,base);
+    if(items.length===1)return buildTasks(items[0].type,emp,null,base,items[0].nb||1);
     // Multi-types : on respecte les phases de fabrication (parallèle/enchaînement) via le
     // décalage en jours ouvrés (wd) calculé par buildMergedStepList, au lieu d'1 étape/jour.
     const steps=buildMergedStepList(items,emp);
-    return steps.map(function(s){return{label:s.label,tech:s.tech,dueDate:addWD(base,s.wd||1).toISOString(),done:false,sameTechAsLabel:s.sameTechAsLabel};});
+    return steps.map(function(s){return{label:s.label,tech:s.tech,dueDate:addWD(base,s.wd||1).toISOString(),done:false,sameTechAsLabel:s.sameTechAsLabel,nb:s.nb||1};});
   }
   const today=new Date();today.setHours(0,0,0,0);
   let tasks=buildAt(today);
@@ -4368,8 +4368,10 @@ function pick(pool,day,forced){
   if(!avail.length)return forced||'auto';
   const active=avail;
   const ds=new Date(day).toDateString();
+  // Équilibrage par NOMBRE D'ÉLÉMENTS (et non par nombre de tâches/boîtes) : 6 éléments
+  // à modéliser pèsent plus qu'1. On somme t.nb des tâches déjà affectées ce jour-là.
   const c={};active.forEach(function(t){c[t]=0;});
-  jobs.forEach(function(j){(j.tasks||[]).forEach(function(t){if(active.indexOf(t.tech)>=0&&new Date(t.dueDate).toDateString()===ds)c[t.tech]=(c[t.tech]||0)+1;});});
+  jobs.forEach(function(j){(j.tasks||[]).forEach(function(t){if(active.indexOf(t.tech)>=0&&new Date(t.dueDate).toDateString()===ds)c[t.tech]=(c[t.tech]||0)+(parseInt(t.nb,10)||1);});});
   return active.reduce(function(a,b){return c[a]<=c[b]?a:b;});
 }
 
@@ -4377,8 +4379,8 @@ function pick(pool,day,forced){
    §6 — JOB MANAGEMENT
    ══════════════════════════════════════════ */
 // Génère le planning de tâches pour un travail selon le type, l'empreinte num. et le tech forcé
-function buildTasks(type,emp,forced,startDate){
-  const base=startDate||new Date();const tasks=[];
+function buildTasks(type,emp,forced,startDate,nb){
+  const base=startDate||new Date();const tasks=[];const _nb=Math.max(1,parseInt(nb,10)||1);
   // ── PRIORITÉ À LA CONFIG PERSONNALISÉE ────────────────────────────────────
   // Si l'utilisateur a édité ce type via "Modifier le type" (même pour un type
   // intégré comme 'crown_only'), on utilise SA configuration plutôt que les
@@ -4398,7 +4400,7 @@ function buildTasks(type,emp,forced,startDate){
       const allValid=Object.keys(TECHS||{});
       finalTech=allValid.length?pick(allValid,day,forced):tech;
     }
-    tasks.push({label:lbl,tech:finalTech,dueDate:new Date(day).toISOString()});
+    tasks.push({label:lbl,tech:finalTech,dueDate:new Date(day).toISOString(),nb:_nb});
   }
   function scan(d){push('Scan & impression modèle','fabien',d);}
   function recup(d){push('Récupération fichiers empreinte optique','fabien',d);}
@@ -7534,7 +7536,7 @@ function renderTech(tech){
     if(late)cls+=' late';
     return `<div class="${cls}" data-jid="${t.jobId}" data-tidx="${t.taskIdx}">
       <div class="tp">${t.patient}</div>
-      <div class="ts">${t.label}</div>
+      <div class="ts">${t.label}${(parseInt(t.nb,10)||1)>1?` <span style="background:#1e293b;color:#fff;border-radius:5px;padding:0 6px;font-size:.62rem;font-weight:700;">×${parseInt(t.nb,10)} élts</span>`:''}</div>
       <div class="td">📅 <strong>${fmtS(t.dueDate)}</strong></div>
       ${t.trackCode?`<div style="font-family:monospace;font-size:.6rem;color:var(--ink-soft);margin-top:2px;letter-spacing:.06em;">${t.trackCode}</div>`:''}
       ${t.note?`<div class="tnote">📝 ${t.note}</div>`:''}
@@ -7854,7 +7856,7 @@ function getPrintTasksForDate(date,techs){
       if(!sameDay(t.dueDate,date))return;
       if(techs&&techs.length&&!techs.includes(t.tech))return;
       const cab=j.cabinet?cabinets.find(function(c){return c.id===j.cabinet;}):null;
-      tasks.push({...t,patient:j.patient,urgent:j.urgent,note:j.note,jobId:j.id,taskIdx:idx,trackCode:j.trackCode||'',jobType:getJobTypeLabel(j),nb:j.nb||1,cabinetName:cab?cab.name:''});
+      tasks.push({...t,patient:j.patient,urgent:j.urgent,note:j.note,jobId:j.id,taskIdx:idx,trackCode:j.trackCode||'',jobType:getJobTypeLabel(j),nb:(parseInt(t.nb,10)||1),jobNb:j.nb||1,cabinetName:cab?cab.name:''});
     });
   });
   tasks.sort(function(a,b){
@@ -7915,13 +7917,15 @@ function buildPrintHTML(){
       return `<div class="pday" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
         <div class="pday-lbl" style="border-color:${sheet.info.color};color:${sheet.info.color};">${escH(sheet.info.label)}<span class="pday-cnt">${sheet.tasks.length} tâche(s)</span></div>
         ${sheet.groups.length?sheet.groups.map(function(group){
+          var _grpElts=group.tasks.reduce(function(s,tk){return s+(parseInt(tk.nb,10)||1);},0);
           return `<div style="margin:10px 0 12px;">
-            <div style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#334155;margin-bottom:6px;">${escH(group.label)} <span style="color:var(--ink-soft);font-weight:600;">(${group.tasks.length})</span></div>
+            <div style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#334155;margin-bottom:6px;">${escH(group.label)} <span style="color:var(--ink-soft);font-weight:600;">(${group.tasks.length} tâche${group.tasks.length>1?'s':''} · ${_grpElts} élément${_grpElts>1?'s':''})</span></div>
             ${group.tasks.map(function(task){
+              var _tn=parseInt(task.nb,10)||1;
               return `<div class="prow" style="background:${sheet.info.soft};border-color:${sheet.info.color}${task.urgent?';border-left-width:6px':''};margin-bottom:6px;">
                 <div style="width:14px;height:14px;border:1.8px solid #334155;border-radius:3px;background:#fff;flex-shrink:0;"></div>
                 <div class="pp">${task.urgent?'🔴 ':''}${escH(task.patient)}</div>
-                <div class="pst"><strong>${escH(task.jobType||'')}</strong>${task.cabinetName?' · '+escH(task.cabinetName):''}${task.note?` · <em>${escH(task.note)}</em>`:''}</div>
+                <div class="pst"><strong>${escH(task.jobType||'')}</strong>${_tn>1?` <span style="background:#1e293b;color:#fff;border-radius:4px;padding:0 5px;font-size:.66rem;font-weight:700;">×${_tn} élts</span>`:''}${task.cabinetName?' · '+escH(task.cabinetName):''}${task.note?` · <em>${escH(task.note)}</em>`:''}</div>
               </div>`;
             }).join('')}
           </div>`;
@@ -7991,7 +7995,7 @@ function doPDF(){
       doc.setFillColor(...rgb);doc.rect(M,y,3,task.note?13:9,'F');
       doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(26,22,18);
       doc.text((task.urgent?'URGENT ':'')+task.patient,M+5,y+4);
-      doc.setFont('helvetica','normal');doc.setTextColor(100,96,90);doc.text(task.label,M+50,y+4);
+      doc.setFont('helvetica','normal');doc.setTextColor(100,96,90);doc.text(task.label+((parseInt(task.nb,10)||1)>1?'  (x'+parseInt(task.nb,10)+' élts)':''),M+50,y+4);
       if(task.note){doc.setFontSize(7);doc.text(task.note,M+5,y+10);}
       y+=(task.note?13:9)+3;
     });
@@ -12075,14 +12079,14 @@ function buildMergedStepList(items,emp){
   phases.forEach(function(p){
     let phaseMax=0;
     byPhase[p].forEach(function(item){
-      const tasks=buildTasks(item.type,emp,null,tmpBase)||[];
+      const tasks=buildTasks(item.type,emp,null,tmpBase,item.nb||1)||[];
       tasks.forEach(function(tk){
         // Offset relatif de l'étape DANS son type (J+N), reconstitué depuis la date produite.
         const off=Math.max(1,countWD(tmpBase,tk.dueDate));
         if(off>phaseMax)phaseMax=off;
         if(seenLabels.has(tk.label))return;
         seenLabels.add(tk.label);
-        out.push({label:tk.label,tech:tk.tech,wd:cumWD+off,sameTechAsLabel:tk.sameTechAsLabel});
+        out.push({label:tk.label,tech:tk.tech,wd:cumWD+off,sameTechAsLabel:tk.sameTechAsLabel,nb:tk.nb||1});
       });
     });
     cumWD+=phaseMax;
@@ -17623,9 +17627,10 @@ function openJobDetail(jobId){
       +job.tasks.map(function(t){
         const late=new Date(t.dueDate)<new Date();
         const tech=getTech(t.tech);
+        const _tn=parseInt(t.nb,10)||1;
         return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:.8rem;">'
           +'<div style="width:8px;height:8px;border-radius:50%;background:'+tech.color+';flex-shrink:0;"></div>'
-          +'<span style="flex:1;">'+escH(t.label)+'</span>'
+          +'<span style="flex:1;">'+escH(t.label)+(_tn>1?' <span style="background:#1e293b;color:#fff;border-radius:4px;padding:0 5px;font-size:.64rem;font-weight:700;">×'+_tn+' élts</span>':'')+'</span>'
           +'<span style="color:'+tech.color+';font-size:.72rem;">'+escH(tech.label)+'</span>'
           +'<span style="font-size:.72rem;color:'+(late?'#c0392b':'var(--ink-soft)')+';">'+fmtS(new Date(t.dueDate))+'</span>'
           +(t.done?'<span style="color:#2a6049;font-size:.8rem;">✓</span>':'')

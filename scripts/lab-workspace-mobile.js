@@ -461,7 +461,7 @@
         var jobTasks = [];
         jobItems.forEach(function (it) {
           if (typeof global.buildTasksMobile === 'function') {
-            jobTasks = jobTasks.concat(global.buildTasksMobile(it.type, !!jobOnly.emp));
+            jobTasks = jobTasks.concat(global.buildTasksMobile(it.type, !!jobOnly.emp, it.nb));
           }
         });
         jobOnly.tasks = jobTasks;
@@ -475,7 +475,7 @@
     var tasks = [];
     if (typeof global.buildTasksMobile === 'function') {
       items.forEach(function (it) {
-        tasks = tasks.concat(global.buildTasksMobile(it.type, !!q.emp));
+        tasks = tasks.concat(global.buildTasksMobile(it.type, !!q.emp, it.nb));
       });
     }
     var existing = q.jobId ? (state.jobs || []).find(function (j) { return j.id === q.jobId; }) : null;
