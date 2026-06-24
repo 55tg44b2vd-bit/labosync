@@ -3472,21 +3472,59 @@ function _ctAssignedTechCount(ct){
     return n;
   },0);
 }
-// Marque un type comme édité maintenant (pour la fusion par récence par type).
-function _stampType(ct){if(ct&&typeof ct==='object')ct._rev=new Date().toISOString();return ct;}
+// Signature des techniciens d'un type (par étape) → sert à ne bumper _techRev QUE si les techs changent.
+function _stepTechKey(s){if(!s)return '';if(s.sameAs!==null&&s.sameAs!==undefined)return 'L'+s.sameAs;if(Array.isArray(s.tech))return s.tech.slice().sort().join('+');return s.tech||'auto';}
+function _techSig(ct){function sig(arr){return (Array.isArray(arr)?arr:[]).map(function(s){return (s&&s.label||'')+':'+_stepTechKey(s);}).join('|');}return sig(ct&&ct.steps)+' || '+sig(ct&&ct.stepsEmp);}
+// Horodatage de la dernière édition des TECHNICIENS (0 si jamais stampé → on bascule sur le filet « plus de techs »).
+function _ctTechRevTime(ct){var t=ct&&ct._techRev?new Date(ct._techRev).getTime():0;return isNaN(t)?0:t;}
+// Édition d'un type : bumpe _rev, et _techRev UNIQUEMENT si les techniciens ont changé (prev = état avant édition).
+function _stampType(ct,prev){
+  if(ct&&typeof ct==='object'){
+    ct._rev=new Date().toISOString();
+    if(prev&&prev._techRev&&_techSig(ct)===_techSig(prev))ct._techRev=prev._techRev; // techs inchangés → on conserve
+    else ct._techRev=ct._rev;                                                          // techs (re)définis maintenant
+  }
+  return ct;
+}
+// Édition NON-technicien (prix, libellé via Tarifs…) : ne touche QUE _rev, jamais _techRev.
+// → un changement de prix ne peut PLUS rendre une config « Auto » plus récente que vos techniciens.
+function _stampTypeMeta(ct){if(ct&&typeof ct==='object')ct._rev=new Date().toISOString();return ct;}
+// Recopie les techniciens de srcSteps sur baseSteps (apparié par libellé, sinon même index). Ne mute pas.
+function _overlayStepTechs(baseSteps,srcSteps){
+  if(!Array.isArray(baseSteps))return baseSteps;
+  var src=Array.isArray(srcSteps)?srcSteps:[];
+  return baseSteps.map(function(s,i){
+    if(!s)return s;
+    var m=null;
+    for(var k=0;k<src.length;k++){if(src[k]&&src[k].label===s.label){m=src[k];break;}}
+    if(!m&&src[i]&&src[i].label===s.label)m=src[i];
+    if(!m)return s;
+    var out=Object.assign({},s);out.tech=m.tech;if(m.sameAs!==undefined)out.sameAs=m.sameAs;
+    return out;
+  });
+}
+// Fusion de DEUX versions d'un même type : structure/prix du _rev le plus récent, MAIS techniciens
+// de la version au _techRev le plus récent (à défaut d'historique : celle qui porte le plus de techs).
+function _mergeOneType(a,b){
+  if(!a)return b;if(!b)return a;
+  var base=_ctRevTime(a)>=_ctRevTime(b)?a:b;
+  var other=base===a?b:a;
+  var bt=_ctTechRevTime(base),ot=_ctTechRevTime(other);
+  var techSrc;
+  if(bt!==ot)techSrc=ot>bt?other:base;                                          // techs édités le plus récemment
+  else techSrc=_ctAssignedTechCount(other)>_ctAssignedTechCount(base)?other:base; // legacy : on protège le plus garni
+  if(techSrc===base)return base;
+  var merged=Object.assign({},base);
+  merged.steps=_overlayStepTechs(base.steps,techSrc.steps);
+  if(Array.isArray(base.stepsEmp))merged.stepsEmp=_overlayStepTechs(base.stepsEmp,techSrc.stepsEmp);
+  if(techSrc._techRev)merged._techRev=techSrc._techRev;
+  return merged;
+}
 function _mergeCustomTypesByType(localArr,remoteArr,delMap){
   var sub=((delMap||_readDeletedRecs())['ctypes'])||{};
   var map=Object.create(null);
-  function pick(a,b){
-    if(!a)return b;if(!b)return a;
-    var ra=_ctRevTime(a),rb=_ctRevTime(b);
-    if(ra!==rb)return ra>rb?a:b;
-    var ta=_ctAssignedTechCount(a),tb=_ctAssignedTechCount(b);
-    if(ta!==tb)return ta>tb?a:b;
-    return a;                                                       // sinon : local prioritaire
-  }
   (remoteArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=ct;});
-  (localArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=pick(ct,map[ct.id]);});
+  (localArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=map[ct.id]?_mergeOneType(ct,map[ct.id]):ct;});
   return Object.keys(map).filter(function(id){
     var delTs=sub[id]?new Date(sub[id]).getTime():0;
     if(!delTs)return true;
@@ -10131,7 +10169,7 @@ function saveCustomType(){
   const newData={label:name,category:cat,phase:phaseVal,steps:validSteps.map(mapStep),stepsEmp:_ctSupportsEmp&&_ctStepsEmp.length?_ctStepsEmp.filter(function(s){return s.label.trim();}).map(mapStep):null};
   if(_ctEditId){
     const idx=customTypes.findIndex(function(t){return t.id===_ctEditId;});
-    if(idx>=0){customTypes[idx]=_stampType(Object.assign({},customTypes[idx],newData));}
+    if(idx>=0){customTypes[idx]=_stampType(Object.assign({},customTypes[idx],newData),customTypes[idx]);}
   } else {
     const id='ct_'+name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,15)+'_'+Date.now();
     customTypes.push(_stampType(Object.assign({id},newData)));
@@ -10338,7 +10376,7 @@ function applyAIConfig(){
     if(idx>=0){
       const upd={label:c.label||customTypes[idx].label,category:c.category||customTypes[idx].category,steps:steps};
       if(stepsEmp){upd.stepsEmp=stepsEmp;upd.supportsEmp=true;}
-      customTypes[idx]=_stampType(Object.assign({},customTypes[idx],upd));
+      customTypes[idx]=_stampType(Object.assign({},customTypes[idx],upd),customTypes[idx]);
     } else{alert('Type introuvable : '+c.id);return;}
   } else {
     const id='ct_ai_'+Date.now();
@@ -13151,7 +13189,7 @@ function saveTypePriceQuick(typeId){
   const ct=customTypes.find(function(c){return c.id===typeId;});
   if(!input||!ct)return;
   ct.prix=parseFloat(input.value)||0;
-  _stampType(ct);
+  _stampTypeMeta(ct);
   saveCustomTypes();
   syncTarifsFromCustomTypes();
 }
@@ -13161,7 +13199,7 @@ function saveTypePrices(){
     const input=document.getElementById('type-prix-'+ct.id);
     if(!input)return;
     ct.prix=parseFloat(input.value)||0;
-    _stampType(ct);
+    _stampTypeMeta(ct);
   });
   saveCustomTypes();
   syncTarifsFromCustomTypes();
