@@ -1431,6 +1431,16 @@ function _mergeMobileRecords(localArr,remoteArr){
 function _mobReadDelRecs(){try{return JSON.parse(localStorage.getItem('lb_deleted_recs')||'{}')||{};}catch(e){return {};}}
 function _mobMergeDelRecs(remote){var l=_mobReadDelRecs();Object.keys(remote||{}).forEach(function(ty){if(!l[ty])l[ty]={};var rs=remote[ty]||{};Object.keys(rs).forEach(function(id){var lt=l[ty][id]?new Date(l[ty][id]).getTime():0,rt=new Date(rs[id]).getTime();if((rt&&!lt)||rt>lt)l[ty][id]=rs[id];});});try{localStorage.setItem('lb_deleted_recs',JSON.stringify(l));}catch(e){}return l;}
 function _mobFilterDel(arr,ty,map){var sub=((map||_mobReadDelRecs())[ty])||{};return (arr||[]).filter(function(r){return r&&!sub[String(r.id)];});}
+/* ── Fusion des types PAR TYPE et CHAMP PAR CHAMP (identique au desktop) ──────────
+   Un changement de prix ou une synchro mobile ne doit JAMAIS effacer les techniciens
+   assignés sur ordinateur : structure/prix du _rev récent, techniciens du _techRev
+   récent (à défaut : la version qui porte le plus de techniciens). */
+function _ctRevTime(ct){var t=ct&&ct._rev?new Date(ct._rev).getTime():0;return isNaN(t)?0:t;}
+function _ctTechRevTime(ct){var t=ct&&ct._techRev?new Date(ct._techRev).getTime():0;return isNaN(t)?0:t;}
+function _ctAssignedTechCount(ct){if(!ct||!Array.isArray(ct.steps))return 0;return ct.steps.reduce(function(n,s){if(!s)return n;if(s.sameAs!==null&&s.sameAs!==undefined)return n+1;if(s.tech&&s.tech!=='auto'&&!(Array.isArray(s.tech)&&!s.tech.length))return n+1;return n;},0);}
+function _overlayStepTechs(baseSteps,srcSteps){if(!Array.isArray(baseSteps))return baseSteps;var src=Array.isArray(srcSteps)?srcSteps:[];return baseSteps.map(function(s,i){if(!s)return s;var m=null;for(var k=0;k<src.length;k++){if(src[k]&&src[k].label===s.label){m=src[k];break;}}if(!m&&src[i]&&src[i].label===s.label)m=src[i];if(!m)return s;var out=Object.assign({},s);out.tech=m.tech;if(m.sameAs!==undefined)out.sameAs=m.sameAs;return out;});}
+function _mergeOneType(a,b){if(!a)return b;if(!b)return a;var base=_ctRevTime(a)>=_ctRevTime(b)?a:b;var other=base===a?b:a;var bt=_ctTechRevTime(base),ot=_ctTechRevTime(other);var techSrc;if(bt!==ot)techSrc=ot>bt?other:base;else techSrc=_ctAssignedTechCount(other)>_ctAssignedTechCount(base)?other:base;if(techSrc===base)return base;var merged=Object.assign({},base);merged.steps=_overlayStepTechs(base.steps,techSrc.steps);if(Array.isArray(base.stepsEmp))merged.stepsEmp=_overlayStepTechs(base.stepsEmp,techSrc.stepsEmp);if(techSrc._techRev)merged._techRev=techSrc._techRev;return merged;}
+function _mergeCustomTypesByType(localArr,remoteArr,delMap){var sub=((delMap||_mobReadDelRecs())['ctypes'])||{};var map=Object.create(null);(remoteArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=ct;});(localArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=map[ct.id]?_mergeOneType(ct,map[ct.id]):ct;});return Object.keys(map).filter(function(id){var delTs=sub[id]?new Date(sub[id]).getTime():0;if(!delTs)return true;return _ctRevTime(map[id])>delTs;}).map(function(id){return map[id];});}
 function _mobileCountsFrom(data){
   data=data||{};
   var jobList=(data.jobs||jobs||[]).concat(data.queue||queue||[],data.archive||archive||[]);
@@ -1490,7 +1500,8 @@ function _mergeRemoteBeforeMobileSave(remote){
   // récent l'emporte → le mobile ne réécrit jamais une config périmée par-dessus
   // les techniciens assignés sur ordinateur.
   var _lcr=parseInt(localStorage.getItem('lb_ct_rev')||'0',10),_ccr=parseInt(p.customTypesRev||0,10);
-  if(p.customTypes&&((!(customTypes||[]).length)||_ccr>=_lcr)){customTypes=p.customTypes;localStorage.setItem('lb_ct_rev',String(_ccr));}
+  // Fusion PAR TYPE (et non écrasement) → le mobile ne peut jamais effacer les techniciens du desktop.
+  if(p.customTypes){customTypes=_mergeCustomTypesByType(customTypes,p.customTypes,_mobReadDelRecs());localStorage.setItem('lb_ct_rev',String(Math.max(_ccr,_lcr)));}
   if(p.progActif!==undefined&&p.progActif!==null)localStorage.setItem('lb_prog_actif',p.progActif);
 }
 async function loadData(){
@@ -1524,7 +1535,7 @@ async function loadData(){
     if(p.waiting)waiting=p.waiting;
     if(p.queue)queue=p.queue;
     if(p.techs)TECHS=p.techs;
-    if(p.customTypes){customTypes=p.customTypes;localStorage.setItem('lb_ct_rev',String(parseInt(p.customTypesRev||0,10)));}
+    if(p.customTypes){customTypes=_mergeCustomTypesByType(customTypes,p.customTypes,_mobReadDelRecs());localStorage.setItem('lb_ct_rev',String(Math.max(parseInt(p.customTypesRev||0,10),parseInt(localStorage.getItem('lb_ct_rev')||'0',10))));}
     if(p.conges)conges=p.conges;
     if(p.absences)absences=p.absences;
     if(p.bdc)bdc=p.bdc;
@@ -1620,10 +1631,12 @@ async function saveData(){
         if(sd){
           _mergedData=Object.assign({},sd,payload);
           if(sd.adminAccess)_serverAdminAccessMob=sd.adminAccess;
-          // Garde-fou config types : ne pas écraser une config cloud plus récente.
-          if(Array.isArray(sd.customTypes)&&parseInt(sd.customTypesRev||0,10)>(payload.customTypesRev||0)){
-            _mergedData.customTypes=sd.customTypes;
-            _mergedData.customTypesRev=sd.customTypesRev;
+          // Garde-fou config types : FUSION PAR TYPE avant l'upsert → une sauvegarde mobile
+          // ne peut jamais écraser les techniciens assignés côté desktop (même si le mobile
+          // porte une copie « Auto » périmée).
+          if(Array.isArray(sd.customTypes)){
+            _mergedData.customTypes=_mergeCustomTypesByType(payload.customTypes||[],sd.customTypes,_mobReadDelRecs());
+            _mergedData.customTypesRev=Math.max(parseInt(sd.customTypesRev||0,10),(payload.customTypesRev||0));
           }
         }
       }

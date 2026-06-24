@@ -1283,6 +1283,11 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <span class="settings-row-body"><span class="settings-row-title">Programmation</span><span class="settings-row-desc">Étapes par type pour la programmation automatique</span></span>
           <span class="settings-row-chevron">›</span>
         </button>
+        <button type="button" class="settings-row" onclick="openSettingsSection('progia')">
+          <span class="settings-row-icon">🎯</span>
+          <span class="settings-row-body"><span class="settings-row-title">Programmation intelligente</span><span class="settings-row-desc">Priorités techniciens, capacité, score — comment l'auto-prog choisit</span></span>
+          <span class="settings-row-chevron">›</span>
+        </button>
         <button type="button" class="settings-row" onclick="openSettingsSection('equipe')">
           <span class="settings-row-icon">👨‍🔬</span>
           <span class="settings-row-body"><span class="settings-row-title">Équipe et absences</span><span class="settings-row-desc">Techniciens, absences et fermetures</span></span>
@@ -1606,6 +1611,15 @@ body.has-sidebar #drawer{transform:translateX(0);}
           <div id="offdays-list"></div>
         </div>
       </div>
+    </div>
+
+    <div id="settings-sec-progia" class="settings-section">
+      <div class="settings-topbar">
+        <button type="button" class="settings-back" onclick="closeSettingsSection()" aria-label="Retour">←</button>
+        <h2>Programmation intelligente</h2>
+        <span class="settings-topbar-spacer"></span>
+      </div>
+      <div id="progia-body"></div>
     </div>
 
     <div id="settings-sec-coursiers" class="settings-section">
@@ -2993,6 +3007,7 @@ function openSettingsSection(id){
   if(id==='relances'){syncBillingRemindersUi();}
   if(id==='tarifs'){renderTarifsList();}
   if(id==='programmation'){renderProgTypesList();}
+  if(id==='progia'){renderProgIA();}
   if(id==='coursiers'){renderCourierSlotsSettings();}
   if(id==='labo'){setTimeout(function(){initAllSignaturePads();},80);}
   try{sec.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}
@@ -3457,21 +3472,59 @@ function _ctAssignedTechCount(ct){
     return n;
   },0);
 }
-// Marque un type comme édité maintenant (pour la fusion par récence par type).
-function _stampType(ct){if(ct&&typeof ct==='object')ct._rev=new Date().toISOString();return ct;}
+// Signature des techniciens d'un type (par étape) → sert à ne bumper _techRev QUE si les techs changent.
+function _stepTechKey(s){if(!s)return '';if(s.sameAs!==null&&s.sameAs!==undefined)return 'L'+s.sameAs;if(Array.isArray(s.tech))return s.tech.slice().sort().join('+');return s.tech||'auto';}
+function _techSig(ct){function sig(arr){return (Array.isArray(arr)?arr:[]).map(function(s){return (s&&s.label||'')+':'+_stepTechKey(s);}).join('|');}return sig(ct&&ct.steps)+' || '+sig(ct&&ct.stepsEmp);}
+// Horodatage de la dernière édition des TECHNICIENS (0 si jamais stampé → on bascule sur le filet « plus de techs »).
+function _ctTechRevTime(ct){var t=ct&&ct._techRev?new Date(ct._techRev).getTime():0;return isNaN(t)?0:t;}
+// Édition d'un type : bumpe _rev, et _techRev UNIQUEMENT si les techniciens ont changé (prev = état avant édition).
+function _stampType(ct,prev){
+  if(ct&&typeof ct==='object'){
+    ct._rev=new Date().toISOString();
+    if(prev&&prev._techRev&&_techSig(ct)===_techSig(prev))ct._techRev=prev._techRev; // techs inchangés → on conserve
+    else ct._techRev=ct._rev;                                                          // techs (re)définis maintenant
+  }
+  return ct;
+}
+// Édition NON-technicien (prix, libellé via Tarifs…) : ne touche QUE _rev, jamais _techRev.
+// → un changement de prix ne peut PLUS rendre une config « Auto » plus récente que vos techniciens.
+function _stampTypeMeta(ct){if(ct&&typeof ct==='object')ct._rev=new Date().toISOString();return ct;}
+// Recopie les techniciens de srcSteps sur baseSteps (apparié par libellé, sinon même index). Ne mute pas.
+function _overlayStepTechs(baseSteps,srcSteps){
+  if(!Array.isArray(baseSteps))return baseSteps;
+  var src=Array.isArray(srcSteps)?srcSteps:[];
+  return baseSteps.map(function(s,i){
+    if(!s)return s;
+    var m=null;
+    for(var k=0;k<src.length;k++){if(src[k]&&src[k].label===s.label){m=src[k];break;}}
+    if(!m&&src[i]&&src[i].label===s.label)m=src[i];
+    if(!m)return s;
+    var out=Object.assign({},s);out.tech=m.tech;if(m.sameAs!==undefined)out.sameAs=m.sameAs;
+    return out;
+  });
+}
+// Fusion de DEUX versions d'un même type : structure/prix du _rev le plus récent, MAIS techniciens
+// de la version au _techRev le plus récent (à défaut d'historique : celle qui porte le plus de techs).
+function _mergeOneType(a,b){
+  if(!a)return b;if(!b)return a;
+  var base=_ctRevTime(a)>=_ctRevTime(b)?a:b;
+  var other=base===a?b:a;
+  var bt=_ctTechRevTime(base),ot=_ctTechRevTime(other);
+  var techSrc;
+  if(bt!==ot)techSrc=ot>bt?other:base;                                          // techs édités le plus récemment
+  else techSrc=_ctAssignedTechCount(other)>_ctAssignedTechCount(base)?other:base; // legacy : on protège le plus garni
+  if(techSrc===base)return base;
+  var merged=Object.assign({},base);
+  merged.steps=_overlayStepTechs(base.steps,techSrc.steps);
+  if(Array.isArray(base.stepsEmp))merged.stepsEmp=_overlayStepTechs(base.stepsEmp,techSrc.stepsEmp);
+  if(techSrc._techRev)merged._techRev=techSrc._techRev;
+  return merged;
+}
 function _mergeCustomTypesByType(localArr,remoteArr,delMap){
   var sub=((delMap||_readDeletedRecs())['ctypes'])||{};
   var map=Object.create(null);
-  function pick(a,b){
-    if(!a)return b;if(!b)return a;
-    var ra=_ctRevTime(a),rb=_ctRevTime(b);
-    if(ra!==rb)return ra>rb?a:b;
-    var ta=_ctAssignedTechCount(a),tb=_ctAssignedTechCount(b);
-    if(ta!==tb)return ta>tb?a:b;
-    return a;                                                       // sinon : local prioritaire
-  }
   (remoteArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=ct;});
-  (localArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=pick(ct,map[ct.id]);});
+  (localArr||[]).forEach(function(ct){if(ct&&ct.id)map[ct.id]=map[ct.id]?_mergeOneType(ct,map[ct.id]):ct;});
   return Object.keys(map).filter(function(id){
     var delTs=sub[id]?new Date(sub[id]).getTime():0;
     if(!delTs)return true;
@@ -4392,7 +4445,14 @@ function sowk(d){const r=new Date(d);const dy=r.getDay();r.setDate(r.getDate()-(
 /* ══════════════════════════════════════════
    §5 — TECH ASSIGNMENT
    ══════════════════════════════════════════ */
-// Choisit le technicien le moins chargé dans un pool pour un jour donné
+// Contexte du travail en cours de programmation (cabinet + dents), posé par les flux
+// d'auto-prog autour de buildTasks/_buildScheduledTasks. Lu par pick() pour le score.
+// Null hors auto-prog → pick() garde son équilibrage simple historique.
+var _progPickCtx=null;
+// Choisit le technicien le moins chargé dans un pool pour un jour donné.
+// Si un contexte (cabinet/dents) est actif ET que le labo a paramétré la programmation
+// intelligente (capacités/préférences), on choisit au meilleur SCORE plutôt qu'au seul
+// nombre d'éléments — sans jamais bloquer la production (la charge ne fait que retirer des points).
 function pick(pool,day,forced){
   if(forced&&TECHS[forced])return forced;
   // Filtrer en priorité contre les techniciens RÉELS du compte (TECHS) :
@@ -4407,10 +4467,23 @@ function pick(pool,day,forced){
   if(!avail.length)return forced||'auto';
   const active=avail;
   const ds=new Date(day).toDateString();
-  // Équilibrage par NOMBRE D'ÉLÉMENTS (et non par nombre de tâches/boîtes) : 6 éléments
-  // à modéliser pèsent plus qu'1. On somme t.nb des tâches déjà affectées ce jour-là.
+  // Charge du jour par technicien, en NOMBRE D'ÉLÉMENTS (un travail à 6 éléments pèse 6, pas 1).
   const c={};active.forEach(function(t){c[t]=0;});
   jobs.forEach(function(j){(j.tasks||[]).forEach(function(t){if(active.indexOf(t.tech)>=0&&new Date(t.dueDate).toDateString()===ds)c[t.tech]=(c[t.tech]||0)+(parseInt(t.nb,10)||1);});});
+  // ── Programmation intelligente : choix au meilleur score (préférence dentiste + dent − charge relative) ──
+  if(_progPickCtx&&typeof _progScoringActive==='function'&&_progScoringActive()){
+    const ctx=_progPickCtx;
+    const zone=ctx.zone||(typeof _zoneFromTeeth==='function'?_zoneFromTeeth(ctx.teeth):null);
+    let best=null,bestScore=-Infinity,bestLoad=Infinity;
+    active.forEach(function(t){
+      const ratio=c[t]/_techCapacity(t);
+      const sc=_scoreTech(t,{cabinetId:ctx.cabinetId,zone:zone,loadRatio:ratio},_progCfg).score;
+      // Meilleur score ; à égalité, le moins chargé en valeur absolue.
+      if(sc>bestScore||(sc===bestScore&&c[t]<bestLoad)){bestScore=sc;best=t;bestLoad=c[t];}
+    });
+    if(best)return best;
+  }
+  // Équilibrage simple historique (aucun réglage de programmation intelligente).
   return active.reduce(function(a,b){return c[a]<=c[b]?a:b;});
 }
 
@@ -4564,11 +4637,14 @@ function addJob(){
   const cabEl=document.getElementById('icab');const cab=cabEl?cabEl.value:'';
   const prothesisId=document.getElementById('iprothesis')?.value.trim()||'';
   if(!name){alert(t('alert.enter_patient'));return;}
-  const tasks=buildTasks(type,emp,forced);
+  var toothD=_readSaisieTeethFields();
+  const tasks=_runWithProgCtx({cabinetId:cab,teeth:(toothD&&toothD.teeth)||[]},function(){return buildTasks(type,emp,forced);});
   if(!tasks.length){alert(t('alert.unknown_type'));return;}
   const lbl=nb>1?name+' ('+nb+' éléments)':name;
   const items=getProgItems(type,nb);
-  var toothD=_readSaisieTeethFields();jobs.push({id:String(Date.now()),patient:lbl,type,tasks,nb,items,urgent:urg,note,deliveryDate,cabinet:cab,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId,teeth:toothD.teeth,links:toothD.links});
+  const _newJob={id:String(Date.now()),patient:lbl,type,tasks,nb,items,urgent:urg,note,deliveryDate,cabinet:cab,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId,teeth:toothD.teeth,links:toothD.links};
+  _attachReviewFlags(_newJob);
+  jobs.push(_newJob);
   saveJobs();autoPublishCab(cab);
   document.getElementById('ip').value='';
   document.getElementById('inb').value='1';
@@ -6281,6 +6357,400 @@ function _preferredTechForFamily(fam){
   var best=null,bc=-1;Object.keys(m).forEach(function(k){if(m[k]>bc&&TECHS[k]){bc=m[k];best=k;}});return best;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   PROGRAMMATION INTELLIGENTE — capacité par tech, score d'affectation,
+   préférences dentiste & dent, + tutoriel intégré (réglages → 🎯)
+   ══════════════════════════════════════════════════════════════════════════ */
+// Règles de vérification « les 10 % » : combinaisons qui méritent l'œil d'un manager.
+// Seedées avec des cas concrets de prothèse ; éditables dans les réglages.
+function _reviewRulesDefault(){
+  return [
+    {id:'emax_inlay',label:'Inlay-core sous E.max',on:true,allOf:['emax','inlay'],noneOf:['ceramis','cosmetiqu','maquill'],
+     reason:"L'E.max est très translucide : l'inlay-core (faux-moignon) placé dessous doit en général être céramisé, sinon il transparaît sous la couronne. La fiche ne le précise pas.",
+     suggestion:"Confirmer avec le cabinet et, si besoin, ajouter une céramisation de l'inlay-core à la programmation."},
+    {id:'multi_ceram',label:'Matériaux céramiques multiples',on:true,allOf:['zircone','emax'],noneOf:[],
+     reason:"Zircone et E.max sur le même travail : risque d'écart de teinte/translucidité entre les éléments.",
+     suggestion:"Vérifier l'alignement des teintes et prévoir un essai si nécessaire."}
+  ];
+}
+function _progCfgDefault(){
+  return {weights:{dentist:30,tooth:20,load:40},
+          dentistPrefs:{},
+          zonePrefs:{anterior:{pref:[],avoid:[]},posterior:{pref:[],avoid:[]}},
+          reviewRules:_reviewRulesDefault(),
+          reviewBuiltins:{freeNote:true,longSpan:true,longSpanMin:4}};
+}
+function loadProgCfg(){
+  var d=_progCfgDefault();
+  try{
+    var c=JSON.parse(localStorage.getItem('lb_prog_config')||'{}');
+    if(c&&c.weights){['dentist','tooth','load'].forEach(function(k){if(c.weights[k]!=null)d.weights[k]=Math.max(0,parseInt(c.weights[k],10)||0);});}
+    if(c&&c.dentistPrefs&&typeof c.dentistPrefs==='object')d.dentistPrefs=c.dentistPrefs;
+    if(c&&c.zonePrefs){['anterior','posterior'].forEach(function(z){if(c.zonePrefs[z]){d.zonePrefs[z]={pref:Array.isArray(c.zonePrefs[z].pref)?c.zonePrefs[z].pref:[],avoid:Array.isArray(c.zonePrefs[z].avoid)?c.zonePrefs[z].avoid:[]};}});}
+    if(c&&Array.isArray(c.reviewRules))d.reviewRules=c.reviewRules;
+    if(c&&c.reviewBuiltins&&typeof c.reviewBuiltins==='object'){d.reviewBuiltins.freeNote=c.reviewBuiltins.freeNote!==false;d.reviewBuiltins.longSpan=c.reviewBuiltins.longSpan!==false;if(c.reviewBuiltins.longSpanMin)d.reviewBuiltins.longSpanMin=parseInt(c.reviewBuiltins.longSpanMin,10)||4;}
+  }catch(e){}
+  return d;
+}
+var _progCfg=loadProgCfg();
+function saveProgCfg(){try{localStorage.setItem('lb_prog_config',JSON.stringify(_progCfg));}catch(e){}if(typeof scheduleSave==='function')scheduleSave();}
+// Capacité de confort d'un technicien (éléments/jour) — seuil d'alerte, jamais un blocage.
+function _techCapacity(k){var c=(TECHS[k]&&parseInt(TECHS[k].capacity,10));return c>0?c:8;}
+// Zone d'une dent FDI : dernier chiffre 1-3 = antérieure (esthétique), 4-8 = postérieure (accès difficile).
+function _toothZone(fdi){var n=Math.abs(parseInt(fdi,10))%10;return (n>=1&&n<=3)?'anterior':'posterior';}
+// ── Cœur : note un technicien pour UN élément (préférence dentiste + dent − charge). ──
+// ctx = {cabinetId, zone:'anterior'|'posterior', loadRatio:charge/capacité}. La charge NE
+// FAIT QUE retirer des points : elle n'exclut jamais → la production n'est jamais bloquée.
+function _scoreTech(techKey,ctx,cfg){
+  cfg=cfg||_progCfg;var w=cfg.weights;var score=0;var parts=[];
+  if(ctx.cabinetId&&(cfg.dentistPrefs[ctx.cabinetId]||[]).indexOf(techKey)>=0){score+=w.dentist;parts.push({k:'Préféré du dentiste',v:+w.dentist});}
+  if(ctx.zone){
+    var z=cfg.zonePrefs[ctx.zone]||{pref:[],avoid:[]};
+    if((z.pref||[]).indexOf(techKey)>=0){score+=w.tooth;parts.push({k:'Doué sur cette dent',v:+w.tooth});}
+    else if((z.avoid||[]).indexOf(techKey)>=0){var pen=Math.round(w.tooth*0.75);score-=pen;parts.push({k:'Peu à l\'aise sur cette dent',v:-pen});}
+  }
+  if(ctx.loadRatio!=null){var lp=Math.round(ctx.loadRatio*w.load);score-=lp;parts.push({k:'Charge du jour',v:-lp});}
+  return {score:score,parts:parts};
+}
+// Zone représentative d'un travail : si une dent antérieure est présente, l'esthétique prime → 'anterior'.
+function _zoneFromTeeth(teeth){
+  if(!Array.isArray(teeth)||!teeth.length)return null;
+  for(var i=0;i<teeth.length;i++){if(_toothZone(teeth[i])==='anterior')return 'anterior';}
+  return 'posterior';
+}
+// Le score n'est utilisé QUE si le labo a paramétré quelque chose (capacités OU préférences).
+// Sinon on garde l'équilibrage simple historique → aucun changement de comportement par défaut.
+function _progScoringActive(){
+  if(!_progCfg)return false;
+  if(Object.keys(_progCfg.dentistPrefs||{}).length)return true;
+  var zp=_progCfg.zonePrefs||{};
+  if(zp.anterior&&((zp.anterior.pref||[]).length||(zp.anterior.avoid||[]).length))return true;
+  if(zp.posterior&&((zp.posterior.pref||[]).length||(zp.posterior.avoid||[]).length))return true;
+  var keys=Object.keys(TECHS||{});
+  for(var k=0;k<keys.length;k++){if(TECHS[keys[k]]&&parseInt(TECHS[keys[k]].capacity,10)>0)return true;}
+  return false;
+}
+// Exécute fn() avec un contexte d'auto-prog actif (cabinet + dents), puis restaure l'état.
+// Les buildTasks imbriqués héritent du contexte (ils ne le modifient pas). Exception-safe.
+function _runWithProgCtx(ctx,fn){
+  var prev=_progPickCtx;_progPickCtx=ctx||null;
+  try{return fn();}finally{_progPickCtx=prev;}
+}
+
+/* ── « Les 10 % » : tri intelligent → ne signale QUE les fiches douteuses ────────
+   On ne demande pas à l'IA de tout comprendre : on reconnaît des combinaisons
+   connues (règles) et on lève un drapeau « à valider » à lire par le manager. ── */
+function _reviewNorm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');}
+function _reviewTypeLabel(typeId){
+  var ct=(typeof customTypes!=='undefined'&&Array.isArray(customTypes))?customTypes.find(function(c){return c.id===typeId;}):null;
+  if(ct&&ct.label)return ct.label;
+  if(typeof TYPE_LABELS!=='undefined'&&TYPE_LABELS[typeId])return TYPE_LABELS[typeId];
+  return typeId||'';
+}
+// Texte analysable d'un travail : libellés de types + étapes + note libre.
+function _jobReviewCorpus(job){
+  if(!job)return '';
+  var parts=[];
+  var items=(job.items&&job.items.length)?job.items:[{type:job.type}];
+  items.forEach(function(it){parts.push(_reviewTypeLabel(it.type));});
+  (job.tasks||[]).forEach(function(t){if(t&&t.label)parts.push(t.label);});
+  if(job.note)parts.push(job.note);
+  return parts.join(' ');
+}
+// Retourne la liste des drapeaux « à valider » pour un travail (vide = programmation sûre).
+function _analyzeJobForReview(job){
+  var out=[];if(!_progCfg||!job)return out;
+  var corpus=_reviewNorm(_jobReviewCorpus(job));
+  (_progCfg.reviewRules||[]).forEach(function(r){
+    if(!r||r.on===false)return;
+    var allOf=(r.allOf||[]).map(_reviewNorm).filter(Boolean);
+    if(!allOf.length)return;
+    if(!allOf.every(function(k){return corpus.indexOf(k)>=0;}))return;
+    var none=(r.noneOf||[]).map(_reviewNorm).filter(Boolean);
+    if(none.some(function(k){return corpus.indexOf(k)>=0;}))return;
+    out.push({ruleId:r.id,label:r.label,reason:r.reason,suggestion:r.suggestion||''});
+  });
+  var b=_progCfg.reviewBuiltins||{};
+  if(b.freeNote!==false&&job.note&&String(job.note).trim()){
+    var noteNorm=_reviewNorm(job.note);
+    var tokens=['voir','attention','svp','special','particulier','retouche','reprise','photo','urgent','rappel'];
+    if(tokens.some(function(tk){var n=_reviewNorm(tk);return n&&noteNorm.indexOf(n)>=0;})){
+      out.push({ruleId:'_freeNote',label:'Consigne libre du cabinet',
+        reason:"La fiche contient une note avec une consigne : à lire avant de lancer, elle peut modifier la fabrication.",
+        suggestion:"Lire la note : « "+String(job.note).slice(0,120)+(String(job.note).length>120?'…':'')+" »"});
+    }
+  }
+  var minSpan=parseInt(b.longSpanMin,10)||4;
+  if(b.longSpan!==false&&Array.isArray(job.teeth)&&job.teeth.length>=minSpan){
+    out.push({ruleId:'_longSpan',label:'Travail étendu',
+      reason:"Travail sur "+job.teeth.length+" dents : un bridge/travail étendu demande souvent un contrôle des piliers et de l'armature.",
+      suggestion:"Vérifier piliers, armature et essais avant de lancer."});
+  }
+  return out;
+}
+// Pose les drapeaux sur un travail (appelé après chaque programmation auto).
+function _attachReviewFlags(job){if(!job)return job;try{job.reviewFlags=_analyzeJobForReview(job);}catch(e){job.reviewFlags=[];}return job;}
+// Travaux actuellement signalés « à valider » (pour le compteur).
+function _reviewFlaggedJobs(){return (typeof jobs!=='undefined'?jobs:[]).filter(function(j){return j&&Array.isArray(j.reviewFlags)&&j.reviewFlags.length&&!j.reviewValidated;});}
+// Le manager marque un travail signalé comme vérifié → le drapeau disparaît.
+function validateJobReview(id){
+  var j=(typeof jobs!=='undefined'?jobs:[]).find(function(x){return String(x.id)===String(id);});
+  if(!j)return;
+  j.reviewValidated=true;j.updatedAt=new Date().toISOString();
+  if(typeof saveJobs==='function')saveJobs();
+  if(typeof render==='function')render();
+  if(typeof showToast==='function')showToast('✓ Travail vérifié','#16a34a',1800);
+}
+
+// ── Rendu de la section Réglages → Programmation intelligente ──
+function renderProgIA(){
+  var host=document.getElementById('progia-body');if(!host)return;
+  var techKeys=Object.keys(TECHS||{});
+  var w=_progCfg.weights;
+  function esc(s){return (typeof escHtml==='function')?escHtml(String(s==null?'':s)):String(s==null?'':s);}
+  function chip(label,active,onclick,danger){
+    var bc=active?(danger?'#dc2626':'#2a6049'):'var(--border)';
+    var bg=active?(danger?'#fee2e2':'#dcfce7'):'var(--surface)';
+    var fg=active?(danger?'#991b1b':'#14532d'):'var(--ink)';
+    return '<button type="button" onclick="'+onclick+'" style="display:inline-flex;align-items:center;gap:4px;border:1.5px solid '+bc+';background:'+bg+';color:'+fg+';border-radius:999px;padding:5px 11px;font-size:.78rem;font-weight:600;cursor:pointer;margin:0 5px 6px 0;">'+(active?(danger?'✕ ':'✓ '):'')+esc(label)+'</button>';
+  }
+  function wslider(which,label,help){
+    return '<div style="margin-bottom:14px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><label style="font-size:.84rem;font-weight:600;color:var(--ink);">'+label+'</label><span style="font-family:monospace;font-weight:700;color:#2a6049;">+<span id="w-val-'+which+'">'+w[which]+'</span> pts</span></div>'+
+      '<input type="range" min="0" max="60" value="'+w[which]+'" oninput="_progSetWeight(\''+which+'\',this.value)" style="width:100%;accent-color:#2a6049;"/>'+
+      '<div style="font-size:.72rem;color:var(--ink-soft);line-height:1.4;">'+help+'</div>'+
+    '</div>';
+  }
+
+  var html='';
+
+  // A — Tutoriel / la politique
+  html+='<div class="card" style="border-left:4px solid #2a6049;">'+
+    '<h2 style="margin-top:0;">🎯 Comment l\'auto-prog choisit le technicien</h2>'+
+    '<p style="font-size:.86rem;line-height:1.6;color:var(--ink);margin:0 0 12px;">Pour <strong>chaque élément</strong> à programmer, le logiciel donne une <strong>note</strong> à chaque technicien disponible et confie le travail au mieux noté. La note se construit à partir de vos réglages ci-dessous :</p>'+
+    '<ul style="font-size:.84rem;line-height:1.65;color:var(--ink);margin:0 0 12px;padding-left:18px;">'+
+      '<li><strong>Préférence du dentiste</strong> — certains cabinets exigent un technicien précis (exigence esthétique, habitude). → bonus de points.</li>'+
+      '<li><strong>Difficulté de la dent</strong> — les dents antérieures (esthétique) et postérieures (accès difficile) demandent un technicien aguerri. → bonus si doué, malus si peu à l\'aise.</li>'+
+      '<li><strong>Charge & productivité</strong> — un apprenti encaisse moins qu\'un sénior. Chacun a une <em>capacité</em> ; plus il se remplit, plus il perd de points → le travail se répartit tout seul.</li>'+
+    '</ul>'+
+    '<div style="background:var(--surface);border-radius:8px;padding:11px 13px;font-size:.8rem;line-height:1.55;color:var(--ink-soft);">'+
+      '<strong style="color:var(--ink);">⚖️ La capacité n\'arrête jamais la production.</strong> Si la demande dépasse la capacité de tout le monde, le moteur continue de programmer (au moins surchargé) et signale le dépassement en <span style="color:#dc2626;font-weight:700;">rouge</span> — il n\'annule rien.<br>'+
+      '<strong style="color:var(--ink);">🧠 Les 10&nbsp;% de cas délicats.</strong> Le moteur programme automatiquement ce qu\'il reconnaît, et n\'envoie en file « à valider » que les fiches douteuses (combinaison inhabituelle, note libre). Le manager ne revoit qu\'une minorité de fiches, et chaque correction peut devenir une règle permanente.'+
+    '</div>'+
+  '</div>';
+
+  // B — Poids du score
+  html+='<div class="card">'+
+    '<h2 style="margin-top:0;">🎚️ Importance de chaque critère</h2>'+
+    '<p style="font-size:.8rem;color:var(--ink-soft);line-height:1.5;margin:0 0 14px;">Tournez les boutons selon la politique de votre laboratoire. La démo juste en dessous se met à jour en direct.</p>'+
+    wslider('dentist','👨‍⚕️ Préférence du dentiste','À fond : le cabinet est toujours servi par son technicien préféré (sauf s\'il est surchargé).')+
+    wslider('tooth','🦷 Compétence sur la dent','À fond : l\'esthétique et les dents difficiles vont systématiquement au technicien aguerri.')+
+    wslider('load','⚖️ Équilibrage de la charge','À fond : on lisse au maximum la charge — quitte à passer outre une préférence quand un technicien se remplit.')+
+  '</div>';
+
+  // C — Démo en direct
+  html+='<div class="card" style="background:linear-gradient(180deg,var(--surface),var(--bg));">'+
+    '<h2 style="margin-top:0;">🧪 Démonstration — qui prend ce travail ?</h2>'+
+    '<p style="font-size:.8rem;color:var(--ink-soft);line-height:1.5;margin:0 0 12px;">Exemple : <strong>une couronne E.max sur une 11</strong> (incisive = dent antérieure esthétique), cabinet <strong>Dr Martin</strong>. Marie est sa préférée et douée en esthétique ; Lucas est apprenti. Bougez les curseurs au-dessus pour voir le choix changer.</p>'+
+    '<div id="progia-demo"></div>'+
+  '</div>';
+
+  // D — Capacité par technicien
+  html+='<div class="card">'+
+    '<h2 style="margin-top:0;">📊 Capacité par technicien <span style="font-weight:400;font-size:.74rem;color:var(--ink-soft);">— éléments/jour avant alerte</span></h2>';
+  if(!techKeys.length){
+    html+='<p style="font-size:.82rem;color:var(--ink-soft);">Ajoutez d\'abord des techniciens dans <strong>Réglages → Équipe et absences</strong>.</p>';
+  }else{
+    techKeys.forEach(function(k){
+      var cap=_techCapacity(k);
+      html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'+
+        '<div style="width:34px;height:34px;border-radius:50%;background:'+(TECHS[k].color||'#888')+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0;">'+esc((TECHS[k].label||k).slice(0,2).toUpperCase())+'</div>'+
+        '<div style="flex:1;"><div style="font-size:.84rem;font-weight:600;margin-bottom:2px;">'+esc(TECHS[k].label||k)+'</div>'+
+          '<input type="range" min="1" max="100" value="'+cap+'" oninput="_progSetCap(\''+k+'\',this.value)" style="width:100%;accent-color:'+(TECHS[k].color||'#2a6049')+';"/></div>'+
+        '<div style="font-family:monospace;font-weight:700;color:var(--ink);width:72px;text-align:right;"><span id="cap-val-'+k+'">'+cap+'</span> él./j</div>'+
+      '</div>';
+    });
+    html+='<div style="font-size:.74rem;color:var(--ink-soft);line-height:1.45;margin-top:4px;">💡 Un apprenti ≈ 3-4 · un sénior ≈ 10-12. Au-delà de la capacité, le travail passe quand même mais s\'affiche en rouge « en surcharge ».</div>';
+  }
+  html+='</div>';
+
+  // E — Préférences dentiste → technicien
+  html+='<div class="card">'+
+    '<h2 style="margin-top:0;">👨‍⚕️ Techniciens préférés par cabinet</h2>'+
+    '<p style="font-size:.8rem;color:var(--ink-soft);line-height:1.5;margin:0 0 12px;">Cliquez les techniciens à privilégier pour chaque cabinet (exigence esthétique, habitude…).</p>';
+  if(!techKeys.length){
+    html+='<p style="font-size:.82rem;color:var(--ink-soft);">Ajoutez des techniciens pour configurer les préférences.</p>';
+  }else if(!Array.isArray(cabinets)||!cabinets.length){
+    html+='<p style="font-size:.82rem;color:var(--ink-soft);">Aucun cabinet enregistré pour l\'instant.</p>';
+  }else{
+    cabinets.forEach(function(c){
+      var sel=_progCfg.dentistPrefs[c.id]||[];
+      html+='<div style="padding:10px 0;border-top:1px solid var(--border-soft);">'+
+        '<div style="font-size:.82rem;font-weight:600;margin-bottom:7px;">'+esc(c.name||c.id)+'</div>'+
+        techKeys.map(function(k){return chip(TECHS[k].label||k,sel.indexOf(k)>=0,'_progToggleDentistPref(\''+c.id+'\',\''+k+'\')',false);}).join('')+
+      '</div>';
+    });
+  }
+  html+='</div>';
+
+  // F — Préférences par dent (zone)
+  html+='<div class="card">'+
+    '<h2 style="margin-top:0;">🦷 Techniciens par type de dent</h2>'+
+    '<p style="font-size:.8rem;color:var(--ink-soft);line-height:1.5;margin:0 0 12px;">Privilégiez ou écartez des techniciens selon la difficulté. <strong>Vert</strong> = à privilégier, <strong>rouge</strong> = à éviter.</p>';
+  if(!techKeys.length){
+    html+='<p style="font-size:.82rem;color:var(--ink-soft);">Ajoutez des techniciens pour configurer les préférences.</p>';
+  }else{
+    [['anterior','Dents antérieures','Incisives & canines — esthétique (sourire)'],['posterior','Dents postérieures','Prémolaires & molaires — accès difficile']].forEach(function(zd){
+      var z=_progCfg.zonePrefs[zd[0]]||{pref:[],avoid:[]};
+      html+='<div style="padding:10px 0;border-top:1px solid var(--border-soft);">'+
+        '<div style="font-size:.82rem;font-weight:600;">'+zd[1]+'</div>'+
+        '<div style="font-size:.72rem;color:var(--ink-soft);margin-bottom:8px;">'+zd[2]+'</div>'+
+        '<div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#14532d;margin-bottom:4px;">À privilégier</div>'+
+        techKeys.map(function(k){return chip(TECHS[k].label||k,(z.pref||[]).indexOf(k)>=0,'_progToggleZone(\''+zd[0]+'\',\'pref\',\''+k+'\')',false);}).join('')+
+        '<div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#991b1b;margin:6px 0 4px;">À éviter</div>'+
+        techKeys.map(function(k){return chip(TECHS[k].label||k,(z.avoid||[]).indexOf(k)>=0,'_progToggleZone(\''+zd[0]+'\',\'avoid\',\''+k+'\')',true);}).join('')+
+      '</div>';
+    });
+  }
+  html+='</div>';
+
+  // G — Vérification intelligente (les 10 %)
+  var rules=_progCfg.reviewRules||[];var bi=_progCfg.reviewBuiltins||{};
+  html+='<div class="card" style="border-left:4px solid #d97706;">'+
+    '<h2 style="margin-top:0;">🧠 Vérification intelligente — « les 10 % »</h2>'+
+    '<p style="font-size:.84rem;line-height:1.6;color:var(--ink);margin:0 0 12px;">90 % des travaux se programment seuls. Pour les 10 % délicats, le logiciel <strong>ne décide pas à votre place</strong> : il programme quand même, mais pose un drapeau <span style="background:#fffbeb;color:#b45309;border:1px solid #fde68a;border-radius:5px;padding:1px 6px;font-size:.78rem;font-weight:600;">⚠ À valider</span> sur le travail, avec la raison. Le manager ne revoit ainsi qu\'une minorité de fiches.</p>'+
+    '<div style="background:var(--surface);border-radius:8px;padding:10px 12px;font-size:.78rem;line-height:1.55;color:var(--ink-soft);margin-bottom:14px;">💡 Chaque règle ci-dessous encode le savoir d\'un technicien expérimenté (ex. <em>« inlay-core sous E.max → à céramiser »</em>). Plus vous en ajoutez, plus la part à vérifier à la main diminue.</div>'+
+    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-muted);margin-bottom:7px;">Vérifications intégrées</div>'+
+    '<label style="display:flex;align-items:center;gap:8px;font-size:.82rem;margin-bottom:7px;cursor:pointer;"><input type="checkbox" '+(bi.freeNote!==false?'checked':'')+' onchange="_progToggleBuiltin(\'freeNote\')" style="width:16px;height:16px;accent-color:#d97706;"/> Note libre du cabinet contenant une consigne (voir, attention, retouche…)</label>'+
+    '<label style="display:flex;align-items:center;gap:8px;font-size:.82rem;margin-bottom:4px;cursor:pointer;"><input type="checkbox" '+(bi.longSpan!==false?'checked':'')+' onchange="_progToggleBuiltin(\'longSpan\')" style="width:16px;height:16px;accent-color:#d97706;"/> Travail étendu à partir de <input type="number" min="2" max="14" value="'+(parseInt(bi.longSpanMin,10)||4)+'" onchange="_progSetLongSpanMin(this.value)" style="width:46px;border:1.5px solid var(--border);border-radius:5px;padding:2px 5px;font-family:monospace;text-align:center;"/> dents (bridge)</label>'+
+    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-muted);margin:16px 0 7px;">Règles métier</div>';
+  if(!rules.length){
+    html+='<p style="font-size:.8rem;color:var(--ink-soft);">Aucune règle. Ajoutez-en une ci-dessous.</p>';
+  }else{
+    rules.forEach(function(r){
+      html+='<div style="border:1px solid var(--border-soft);border-radius:8px;padding:9px 11px;margin-bottom:7px;background:var(--surface);">'+
+        '<div style="display:flex;align-items:center;gap:8px;">'+
+          '<input type="checkbox" '+(r.on!==false?'checked':'')+' onchange="_progToggleRule(\''+esc(r.id)+'\')" style="width:16px;height:16px;accent-color:#d97706;"/>'+
+          '<span style="font-weight:600;font-size:.83rem;flex:1;">'+esc(r.label||r.id)+'</span>'+
+          '<button type="button" onclick="_progDeleteRule(\''+esc(r.id)+'\')" title="Supprimer" style="background:none;border:none;color:#c0392b;cursor:pointer;font-size:.85rem;">✕</button>'+
+        '</div>'+
+        '<div style="font-size:.71rem;color:var(--ink-soft);margin-top:4px;line-height:1.4;">Si la fiche contient : <strong>'+esc((r.allOf||[]).join(' + '))+'</strong>'+((r.noneOf||[]).length?' <span style="color:#b91c1c;">(sauf si : '+esc((r.noneOf||[]).join(', '))+')</span>':'')+'<br>→ '+esc(r.reason||'')+'</div>'+
+      '</div>';
+    });
+  }
+  html+='<div style="border:1px dashed var(--border);border-radius:8px;padding:11px;margin-top:10px;">'+
+    '<div style="font-size:.76rem;font-weight:700;margin-bottom:8px;">➕ Ajouter une règle</div>'+
+    '<input id="pr-new-label" placeholder="Nom (ex. Inlay-core sous E.max)" style="width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:6px;padding:7px 9px;font-size:.8rem;margin-bottom:6px;background:var(--bg);color:var(--ink);"/>'+
+    '<input id="pr-new-all" placeholder="Mots requis, séparés par une virgule (ex. emax, inlay)" style="width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:6px;padding:7px 9px;font-size:.8rem;margin-bottom:6px;background:var(--bg);color:var(--ink);"/>'+
+    '<input id="pr-new-none" placeholder="Mots qui annulent l\'alerte (optionnel, ex. céramisé)" style="width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:6px;padding:7px 9px;font-size:.8rem;margin-bottom:6px;background:var(--bg);color:var(--ink);"/>'+
+    '<input id="pr-new-reason" placeholder="Pourquoi vérifier (message affiché au manager)" style="width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:6px;padding:7px 9px;font-size:.8rem;margin-bottom:6px;background:var(--bg);color:var(--ink);"/>'+
+    '<input id="pr-new-sugg" placeholder="Suggestion (optionnel)" style="width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:6px;padding:7px 9px;font-size:.8rem;margin-bottom:8px;background:var(--bg);color:var(--ink);"/>'+
+    '<button type="button" onclick="_progAddRule()" style="background:#d97706;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:.8rem;font-weight:600;cursor:pointer;">Ajouter la règle</button>'+
+  '</div>'+
+  '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-soft);">'+
+    '<div style="font-size:.76rem;font-weight:700;margin-bottom:6px;">🧪 Tester une fiche</div>'+
+    '<p style="font-size:.74rem;color:var(--ink-soft);margin:0 0 7px;">Collez une description de travail pour voir si elle serait signalée.</p>'+
+    '<textarea id="pr-test-input" oninput="_progTestReview()" placeholder="ex. Inlay core + couronne E.max sur 11" rows="2" style="width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:6px;padding:8px 9px;font-size:.8rem;background:var(--bg);color:var(--ink);resize:vertical;"></textarea>'+
+    '<div id="pr-test-out" style="margin-top:8px;"></div>'+
+  '</div>'+
+  '</div>';
+
+  host.innerHTML=html;
+  _progDemoRecalc();
+  _progTestReview();
+}
+function _progToggleBuiltin(key){_progCfg.reviewBuiltins=_progCfg.reviewBuiltins||{};_progCfg.reviewBuiltins[key]=!(_progCfg.reviewBuiltins[key]!==false);saveProgCfg();}
+function _progSetLongSpanMin(v){_progCfg.reviewBuiltins=_progCfg.reviewBuiltins||{};_progCfg.reviewBuiltins.longSpanMin=Math.max(2,parseInt(v,10)||4);saveProgCfg();}
+function _progToggleRule(id){var r=(_progCfg.reviewRules||[]).find(function(x){return x.id===id;});if(!r)return;r.on=(r.on===false);saveProgCfg();renderProgIA();}
+function _progDeleteRule(id){_progCfg.reviewRules=(_progCfg.reviewRules||[]).filter(function(x){return x.id!==id;});saveProgCfg();renderProgIA();}
+function _progAddRule(){
+  function val(id){var e=document.getElementById(id);return e?e.value.trim():'';}
+  function list(s){return s.split(',').map(function(x){return x.trim();}).filter(Boolean);}
+  var label=val('pr-new-label'),all=list(val('pr-new-all')),reason=val('pr-new-reason');
+  if(!label||!all.length||!reason){if(typeof showToast==='function')showToast('Nom, mots requis et raison sont obligatoires.','#c0392b',3000);return;}
+  _progCfg.reviewRules=_progCfg.reviewRules||[];
+  _progCfg.reviewRules.push({id:'r'+Date.now(),label:label,on:true,allOf:all,noneOf:list(val('pr-new-none')),reason:reason,suggestion:val('pr-new-sugg')});
+  saveProgCfg();renderProgIA();
+  if(typeof showToast==='function')showToast('✅ Règle ajoutée','#2a6049',1800);
+}
+function _progTestReview(){
+  var out=document.getElementById('pr-test-out');if(!out)return;
+  var txt=(document.getElementById('pr-test-input')||{}).value||'';
+  if(!txt.trim()){out.innerHTML='';return;}
+  var flags=_analyzeJobForReview({type:'',items:[],tasks:[],note:txt,teeth:[]});
+  if(!flags.length){
+    out.innerHTML='<div style="background:#dcfce7;border:1px solid #86efac;color:#14532d;border-radius:7px;padding:8px 11px;font-size:.78rem;font-weight:600;">✅ Programmation directe — rien à signaler.</div>';
+  }else{
+    out.innerHTML='<div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:7px;padding:8px 11px;font-size:.77rem;line-height:1.45;">⚠ <strong>À valider</strong><br>'+flags.map(function(f){return '• <strong>'+(typeof escHtml==='function'?escHtml(f.label):f.label)+'</strong> — '+(typeof escHtml==='function'?escHtml(f.reason):f.reason);}).join('<br>')+'</div>';
+  }
+}
+
+function _progSetWeight(which,v){
+  if(!_progCfg.weights.hasOwnProperty(which))return;
+  _progCfg.weights[which]=Math.max(0,parseInt(v,10)||0);
+  var lbl=document.getElementById('w-val-'+which);if(lbl)lbl.textContent=_progCfg.weights[which];
+  saveProgCfg();_progDemoRecalc();
+}
+function _progSetCap(k,v){
+  if(!TECHS[k])return;
+  TECHS[k].capacity=Math.max(1,parseInt(v,10)||1);
+  var lbl=document.getElementById('cap-val-'+k);if(lbl)lbl.textContent=TECHS[k].capacity;
+  if(typeof saveTechs==='function')saveTechs();
+}
+function _progToggleDentistPref(cabId,k){
+  var arr=_progCfg.dentistPrefs[cabId]||[];var i=arr.indexOf(k);
+  if(i>=0)arr.splice(i,1);else arr.push(k);
+  if(arr.length)_progCfg.dentistPrefs[cabId]=arr;else delete _progCfg.dentistPrefs[cabId];
+  saveProgCfg();renderProgIA();
+}
+function _progToggleZone(zone,kind,k){
+  var z=_progCfg.zonePrefs[zone]||{pref:[],avoid:[]};
+  z.pref=z.pref||[];z.avoid=z.avoid||[];
+  var other=kind==='pref'?'avoid':'pref';
+  var oi=z[other].indexOf(k);if(oi>=0)z[other].splice(oi,1); // exclusivité privilégier/éviter
+  var i=z[kind].indexOf(k);if(i>=0)z[kind].splice(i,1);else z[kind].push(k);
+  _progCfg.zonePrefs[zone]=z;
+  saveProgCfg();renderProgIA();
+}
+// Recalcule la démo (Marie sénior / Lucas apprenti) à partir des poids actuels.
+function _progDemoRecalc(){
+  var host=document.getElementById('progia-demo');if(!host)return;
+  var w=_progCfg.weights;
+  var marie={name:'Marie',sub:'prothésiste sénior',color:'#2a6049',load:6,cap:10,parts:[
+    {k:'Préférée du Dr Martin',v:+w.dentist},
+    {k:'Douée en dent antérieure (esthétique)',v:+w.tooth},
+    {k:'Charge du jour (6/10)',v:-Math.round((6/10)*w.load)}
+  ]};
+  var lucas={name:'Lucas',sub:'apprenti',color:'#b45309',load:1,cap:4,parts:[
+    {k:'Pas préféré du Dr Martin',v:0},
+    {k:'Peu à l\'aise sur l\'antérieur',v:-Math.round(w.tooth*0.75)},
+    {k:'Charge du jour (1/4)',v:-Math.round((1/4)*w.load)}
+  ]};
+  function tot(t){return t.parts.reduce(function(a,p){return a+p.v;},0);}
+  var mt=tot(marie),lt=tot(lucas);
+  function card(t,total,win){
+    var rows=t.parts.map(function(p){
+      var col=p.v>0?'#15803d':(p.v<0?'#b91c1c':'var(--ink-soft)');
+      var sign=p.v>0?'+':'';
+      return '<div style="display:flex;justify-content:space-between;font-size:.78rem;padding:2px 0;"><span style="color:var(--ink-soft);">'+p.k+'</span><span style="font-family:monospace;font-weight:700;color:'+col+';">'+sign+p.v+'</span></div>';
+    }).join('');
+    return '<div style="flex:1;min-width:210px;border:2px solid '+(win?'#2a6049':'var(--border)')+';border-radius:11px;padding:13px;background:var(--bg);'+(win?'box-shadow:0 0 0 3px rgba(42,96,73,.12);':'')+'">'+
+      '<div style="display:flex;align-items:center;gap:9px;margin-bottom:9px;">'+
+        '<div style="width:30px;height:30px;border-radius:50%;background:'+t.color+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.74rem;">'+t.name.slice(0,2).toUpperCase()+'</div>'+
+        '<div><div style="font-weight:700;font-size:.86rem;">'+t.name+'</div><div style="font-size:.7rem;color:var(--ink-soft);">'+t.sub+'</div></div>'+
+        (win?'<span style="margin-left:auto;background:#2a6049;color:#fff;font-size:.68rem;font-weight:700;padding:3px 9px;border-radius:999px;">✓ CHOISI</span>':'')+
+      '</div>'+
+      rows+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border-soft);margin-top:8px;padding-top:7px;"><span style="font-size:.78rem;font-weight:600;">Note finale</span><span style="font-family:monospace;font-size:1.15rem;font-weight:800;color:'+(win?'#2a6049':'var(--ink)')+';">'+total+'</span></div>'+
+    '</div>';
+  }
+  var verdict=(mt>=lt)
+    ? 'Malgré une charge plus lourde, <strong>Marie</strong> l\'emporte : sur une dent esthétique attendue par le Dr Martin, c\'est elle qui prend.'
+    : '<strong>Lucas</strong> l\'emporte ici : l\'équilibrage de charge prime sur la préférence. Montez « Préférence du dentiste » ou « Compétence sur la dent » pour rééquilibrer.';
+  host.innerHTML='<div style="display:flex;gap:12px;flex-wrap:wrap;">'+card(marie,mt,mt>=lt)+card(lucas,lt,lt>mt)+'</div>'+
+    '<div style="font-size:.78rem;color:var(--ink-soft);line-height:1.5;margin-top:11px;padding:9px 12px;background:var(--surface);border-radius:8px;">👉 '+verdict+'</div>';
+}
+
 // ── Palier 1 : optimiseur déterministe → liste de suggestions ──
 function _analyzeSchedule(tasks){
   var sugg=[];if(!tasks||!tasks.length)return sugg;
@@ -7581,7 +8051,13 @@ function renderTech(tech){
       ${t.note?`<div class="tnote">📝 ${t.note}</div>`:''}
     </div>`;
   }).join('');
-  el.innerHTML=genHtml+jobHtml;
+  // Surcharge du jour : somme des éléments programmés ce jour pour ce technicien vs sa capacité.
+  const dayLoad=tasks.reduce(function(s,t){return s+(parseInt(t.nb,10)||1);},0);
+  const dayCap=(typeof _techCapacity==='function'?_techCapacity(tech):8);
+  const overHtml=dayLoad>dayCap
+    ? '<div style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;border-radius:7px;padding:5px 8px;font-size:.66rem;font-weight:700;margin-bottom:6px;line-height:1.3;">⚠ Surcharge : '+dayLoad+'/'+dayCap+' éléments (+'+(dayLoad-dayCap)+' au-delà de la capacité)</div>'
+    : '';
+  el.innerHTML=overHtml+genHtml+jobHtml;
 }
 
 // ── Tâches atelier génériques (non liées à un travail) ───────────────────────
@@ -7746,6 +8222,10 @@ function renderTable(){
   }
   const planningOn=typeof isProgActif==='function'&&isProgActif();
   const rows=[];
+  const _flaggedCount=(typeof _reviewFlaggedJobs==='function')?_reviewFlaggedJobs().length:0;
+  if(_flaggedCount){
+    rows.push('<tr><td colspan="6" style="background:#fffbeb;color:#92400e;padding:8px 12px;font-size:.78rem;font-weight:700;border-bottom:1px solid #fde68a;">⚠ '+_flaggedCount+' travail'+(_flaggedCount>1?'aux':'')+' à valider — un point mérite l\'œil d\'un technicien avant lancement (voir les bandeaux ⚠ ci-dessous)</td></tr>');
+  }
   var lastGroup='';
   slice.forEach(j=>{
     var gD=_jobGroupDate(j);
@@ -7764,6 +8244,11 @@ function renderTable(){
       ?'<button onclick="clearJobPendingResponse(\''+j.id+'\')" title="Remettre dans le flux normal" style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px 4px;">▶</button> '
       :'<button onclick="setJobPendingResponse(\''+j.id+'\')" title="En attente de réponse" style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px 4px;">⏸</button> ';
     const ficheBtn=planningOn?`<button type="button" class="btn-print-lab-sheet" data-id="${j.id}" title="Imprimer la fiche labo" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:2px 4px;">🖨️</button> `:'';
+    // ── « À valider » (tri des 10 %) : drapeaux posés par l'analyse à la programmation ──
+    const reviewFlags=Array.isArray(j.reviewFlags)?j.reviewFlags:[];
+    const showReview=reviewFlags.length&&!j.reviewValidated;
+    const reviewBadge=showReview?`<span class="badge" style="background:#fffbeb;color:#b45309;border:1px solid #fde68a;">⚠ À valider</span> `:'';
+    const reviewDetail=showReview?`<div style="font-size:.66rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;margin-top:4px;line-height:1.45;">${reviewFlags.map(function(f){return '⚠ <strong>'+escH2(f.label)+'</strong> — '+escH2(f.reason)+(f.suggestion?' <em>→ '+escH2(f.suggestion)+'</em>':'');}).join('<br>')}<br><button onclick="event.stopPropagation();validateJobReview('${j.id}')" style="margin-top:5px;background:#16a34a;color:#fff;border:none;border-radius:5px;padding:3px 10px;font-size:.66rem;font-weight:600;cursor:pointer;">✓ Vérifié, c'est bon</button></div>`:'';
     if(!planningOn||!j.tasks||!j.tasks.length){
       // Travail simple (mode prog OFF) : une seule ligne sans étapes
       const created=j.createdAt?new Date(j.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'—';
@@ -7775,7 +8260,7 @@ function renderTable(){
       // (y compris ceux issus d'une commande cabinet, qui n'ont pas d'entrée de file).
       const progBtn=planningOn?'<button type="button" class="btn-prog-auto" onclick="programJobAuto(\''+escH2(j.id)+'\')" title="Programmer automatiquement les étapes" style="padding:5px 11px;font-size:.72rem;font-weight:600;margin-right:4px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;">⚡ Programmer</button>':'';
       rows.push(`<tr>
-        <td onclick="openJobDetail('${j.id}')" style="font-weight:500;cursor:pointer;">${j.urgent?'<span class="badge bg-urgent">🔴 URGENT</span> ':''}${pendingRespBadge}${missingBadge}${notProgBadge}${j.patient}${teethHint}${j.note?`<div style="font-size:.65rem;color:var(--ink-soft);font-style:italic;margin-top:2px;">📝 ${j.note}</div>`:''}${j.responseComment?`<div style="font-size:.65rem;color:#a16207;margin-top:2px;">💬 ${(j.responseComment+'').replace(/</g,'&lt;')}</div>`:''}${missing?`<div style="font-size:.65rem;color:#c2410c;margin-top:2px;">❓ ${(missing+'').replace(/</g,'&lt;')}</div>`:''}</td>
+        <td onclick="openJobDetail('${j.id}')" style="font-weight:500;cursor:pointer;">${j.urgent?'<span class="badge bg-urgent">🔴 URGENT</span> ':''}${pendingRespBadge}${missingBadge}${reviewBadge}${notProgBadge}${j.patient}${teethHint}${j.note?`<div style="font-size:.65rem;color:var(--ink-soft);font-style:italic;margin-top:2px;">📝 ${j.note}</div>`:''}${j.responseComment?`<div style="font-size:.65rem;color:#a16207;margin-top:2px;">💬 ${(j.responseComment+'').replace(/</g,'&lt;')}</div>`:''}${missing?`<div style="font-size:.65rem;color:#c2410c;margin-top:2px;">❓ ${(missing+'').replace(/</g,'&lt;')}</div>`:''}${reviewDetail}</td>
         <td><span class="badge bg-type">${getJobTypeLabel(j)}</span></td>
         <td style="color:var(--ink-soft);font-style:italic;">—</td>
         <td style="color:var(--ink-soft);font-style:italic;">—</td>
@@ -7790,10 +8275,11 @@ function renderTable(){
         const late=new Date(t.dueDate)<today;
         rows.push(`<tr>
           ${i===0?`<td rowspan="${j.tasks.length}" onclick="openJobDetail('${j.id}')" style="font-weight:500;border-right:1px solid #e2e8f0;cursor:pointer;">
-            ${j.urgent?'<span class="badge bg-urgent">🔴 URGENT</span> ':''}${pendingRespBadge}${missingBadge}${j.patient}
+            ${j.urgent?'<span class="badge bg-urgent">🔴 URGENT</span> ':''}${pendingRespBadge}${missingBadge}${reviewBadge}${j.patient}
             ${j.note?`<div style="font-size:.65rem;color:var(--ink-soft);font-style:italic;margin-top:2px;">📝 ${j.note}</div>`:''}
             ${j.responseComment?`<div style="font-size:.65rem;color:#a16207;margin-top:2px;">💬 ${(j.responseComment+'').replace(/</g,'&lt;')}</div>`:''}
             ${missing?`<div style="font-size:.65rem;color:#c2410c;margin-top:2px;">❓ ${(missing+'').replace(/</g,'&lt;')}</div>`:''}
+            ${reviewDetail}
           </td>`:''}
           ${i===0?`<td rowspan="${j.tasks.length}" style="border-right:1px solid #e2e8f0;"><span class="badge bg-type">${getJobTypeLabel(j)}</span></td>`:''}
           <td>${t.label}</td>
@@ -8288,16 +8774,20 @@ function renderStats(){
   });
   document.getElementById('s-pie-cabs').innerHTML=makePieChart(pieCabs,PIE_COLORS.slice(2));
 
-  // ── Charge technicien semaine ────────────────────────────────────────────
+  // ── Charge technicien semaine (en ÉLÉMENTS, vs capacité hebdo → surcharge en rouge) ──
   const tc={};Object.keys(TECHS).forEach(function(t){tc[t]=0;});
-  jobs.forEach(function(j){(j.tasks||[]).forEach(function(t){const d=new Date(t.dueDate);if(d>=ws&&d<=we)tc[t.tech]=(tc[t.tech]||0)+1;});});
+  jobs.forEach(function(j){(j.tasks||[]).forEach(function(t){const d=new Date(t.dueDate);if(d>=ws&&d<=we)tc[t.tech]=(tc[t.tech]||0)+(parseInt(t.nb,10)||1);});});
+  // Jours ouvrés affichés dans la semaine → capacité hebdo = capacité/jour × jours ouvrés.
+  let _wdN=0;{const _a=new Date(ws);while(_a<=we){const _dy=_a.getDay();if(_dy!==0&&_dy!==6)_wdN++;_a.setDate(_a.getDate()+1);}}if(!_wdN)_wdN=5;
   const mt=Math.max.apply(null,[1].concat(Object.values(tc)));
   const techKeys=Object.keys(TECHS);
-  document.getElementById('s-tech').innerHTML=techKeys.length?techKeys.map(function(t){return(
-    '<div class="bar-row"><div class="bar-lbl">'+TECHS[t].label+'</div>'+
-    '<div class="bar-track"><div class="bar-fill" style="width:'+((tc[t]||0)/mt*100)+'%;background:'+TECHS[t].color+';"></div></div>'+
-    '<div class="bar-val">'+(tc[t]||0)+'</div></div>'
-  );}).join(''):'<div class="empty" style="font-size:.76rem;color:var(--ink-soft);">'+t('empty.techs')+'</div>';
+  document.getElementById('s-tech').innerHTML=techKeys.length?techKeys.map(function(t){
+    const load=tc[t]||0;const capWeek=(typeof _techCapacity==='function'?_techCapacity(t):8)*_wdN;const over=load>capWeek;
+    return '<div class="bar-row"><div class="bar-lbl">'+TECHS[t].label+'</div>'+
+      '<div class="bar-track"><div class="bar-fill" style="width:'+(load/mt*100)+'%;background:'+(over?'#dc2626':TECHS[t].color)+';"></div></div>'+
+      '<div class="bar-val"'+(over?' style="color:#dc2626;font-weight:700;"':'')+'>'+load+(over?' ⚠':'')+'</div></div>'+
+      (over?'<div style="font-size:.62rem;color:#dc2626;margin:-3px 0 7px 0;line-height:1.3;">Surcharge : +'+(load-capWeek)+' éléments au-delà de la capacité ('+capWeek+'/sem.)</div>':'');
+  }).join(''):'<div class="empty" style="font-size:.76rem;color:var(--ink-soft);">'+t('empty.techs')+'</div>';
 
   // ── Sorties du mois par type ─────────────────────────────────────────────
   const tyMois={};
@@ -9198,9 +9688,10 @@ function renderWaiting(){
 }
 function reprogramJob(id){
   const w=waiting.find(x=>x.id===id);if(!w)return;
-  const tasks=buildTasks(w.type,false,null,false,new Date(),false);
+  const tasks=_runWithProgCtx({cabinetId:w.cabinet||null,teeth:w.teeth||[]},function(){return buildTasks(w.type,false,null,false,new Date(),false);});
   if(!tasks.length){alert(t('alert.unknown_type'));return;}
-  const reprogJob={id:String(Date.now()),patient:w.patient,type:w.type,tasks,nb:w.nb||1,urgent:w.urgent||false,note:w.note||'',cabinet:w.cabinet||'',createdAt:new Date().toISOString(),trackCode:w.trackCode||genTrackCode()};
+  const reprogJob={id:String(Date.now()),patient:w.patient,type:w.type,tasks,nb:w.nb||1,urgent:w.urgent||false,note:w.note||'',cabinet:w.cabinet||'',createdAt:new Date().toISOString(),trackCode:w.trackCode||genTrackCode(),teeth:w.teeth||[],links:w.links||[]};
+  _attachReviewFlags(reprogJob);
   jobs.push(reprogJob);
   waiting=waiting.filter(x=>x.id!==id);saveJobs();saveWaiting();updateWaitingBadge();render();renderWaiting();
   autoPublishCab(reprogJob.cabinet);
@@ -9678,7 +10169,7 @@ function saveCustomType(){
   const newData={label:name,category:cat,phase:phaseVal,steps:validSteps.map(mapStep),stepsEmp:_ctSupportsEmp&&_ctStepsEmp.length?_ctStepsEmp.filter(function(s){return s.label.trim();}).map(mapStep):null};
   if(_ctEditId){
     const idx=customTypes.findIndex(function(t){return t.id===_ctEditId;});
-    if(idx>=0){customTypes[idx]=_stampType(Object.assign({},customTypes[idx],newData));}
+    if(idx>=0){customTypes[idx]=_stampType(Object.assign({},customTypes[idx],newData),customTypes[idx]);}
   } else {
     const id='ct_'+name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,15)+'_'+Date.now();
     customTypes.push(_stampType(Object.assign({id},newData)));
@@ -9885,7 +10376,7 @@ function applyAIConfig(){
     if(idx>=0){
       const upd={label:c.label||customTypes[idx].label,category:c.category||customTypes[idx].category,steps:steps};
       if(stepsEmp){upd.stepsEmp=stepsEmp;upd.supportsEmp=true;}
-      customTypes[idx]=_stampType(Object.assign({},customTypes[idx],upd));
+      customTypes[idx]=_stampType(Object.assign({},customTypes[idx],upd),customTypes[idx]);
     } else{alert('Type introuvable : '+c.id);return;}
   } else {
     const id='ct_ai_'+Date.now();
@@ -12140,6 +12631,7 @@ function _promoteQueueItemToJob(q,tasks){
   const track=q.trackCode||(typeof genTrackCode==='function'?genTrackCode():'');
   const nowIso=new Date().toISOString();
   const payload=applyDeliveryFieldsToObject({id:jobId,patient:q.patient,type:items[0].type,tasks:tasks,nb:items[0].nb||1,items:items,urgent:q.urgent||false,note:q.note||'',cabinet:q.cabinet||'',createdAt:q.createdAt||nowIso,updatedAt:nowIso,trackCode:track,prothesisId:q.prothesisId||'',teeth:q.teeth||[],links:q.links||[],patientSex:q.patientSex||'',attachments:q.attachments||[],orderData:q.orderData||null,needsProg:false,missingInfoItems:q.missingInfoItems},_deliveryFieldsFromSource(q));
+  _attachReviewFlags(payload);
   const existing=jobs.find(function(j){return String(j.id)===String(jobId);});
   if(existing){
     Object.assign(existing,payload);
@@ -12163,7 +12655,7 @@ function programQueueAuto(id){
   _debugAuditLog('H2','Desktop programQueueAuto start',{qid:id,queueSize:(queue||[]).length,patientCodePresent:!!q.patient});
   const items=q.items&&q.items.length?q.items:[{type:q.type,nb:q.nb||1}];
   // Mode au plus tôt (défaut) ou rétro-planning selon la préférence du technicien (_planDeadline).
-  const allTasks=_buildScheduledTasks(items,q.emp||false,(typeof _planDeadline==='function')?_planDeadline(q.labDeliveryDate||q.requestedDeliveryDate||''):'');
+  const allTasks=_runWithProgCtx({cabinetId:q.cabinet||q.cabinetId||null,teeth:q.teeth||[]},function(){return _buildScheduledTasks(items,q.emp||false,(typeof _planDeadline==='function')?_planDeadline(q.labDeliveryDate||q.requestedDeliveryDate||''):'');});
   if(!allTasks.length){alert(t('alert.unknown_type'));return;}
   _promoteQueueItemToJob(q,allTasks);
   if(typeof showToast==='function')showToast('✅ Travail programmé','#2a6049',2200);
@@ -12183,10 +12675,11 @@ function programJobAuto(jobId){
   if(!j){if(typeof showToast==='function')showToast('Travail introuvable','#c0392b');return;}
   const items=(j.items&&j.items.length)?j.items:[{type:j.type,nb:j.nb||1}];
   // Mode au plus tôt (défaut) ou rétro-planning selon la préférence du technicien (_planDeadline).
-  const allTasks=_buildScheduledTasks(items,j.emp||false,(typeof _planDeadline==='function')?_planDeadline(j.labDeliveryDate||j.requestedDeliveryDate||''):'');
+  const allTasks=_runWithProgCtx({cabinetId:j.cabinet||null,teeth:j.teeth||[]},function(){return _buildScheduledTasks(items,j.emp||false,(typeof _planDeadline==='function')?_planDeadline(j.labDeliveryDate||j.requestedDeliveryDate||''):'');});
   if(!allTasks.length){alert(t('alert.unknown_type'));return;}
   j.tasks=allTasks;
   j.needsProg=false;
+  _attachReviewFlags(j);
   j.updatedAt=new Date().toISOString();
   if(typeof saveJobs==='function')saveJobs();
   if(typeof render==='function')render();
@@ -12696,7 +13189,7 @@ function saveTypePriceQuick(typeId){
   const ct=customTypes.find(function(c){return c.id===typeId;});
   if(!input||!ct)return;
   ct.prix=parseFloat(input.value)||0;
-  _stampType(ct);
+  _stampTypeMeta(ct);
   saveCustomTypes();
   syncTarifsFromCustomTypes();
 }
@@ -12706,7 +13199,7 @@ function saveTypePrices(){
     const input=document.getElementById('type-prix-'+ct.id);
     if(!input)return;
     ct.prix=parseFloat(input.value)||0;
-    _stampType(ct);
+    _stampTypeMeta(ct);
   });
   saveCustomTypes();
   syncTarifsFromCustomTypes();
