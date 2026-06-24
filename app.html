@@ -3214,6 +3214,13 @@ const DEFAULT_CUSTOM_TYPES=[
 // Clone les types par défaut (deep copy — évite les mutations de DEFAULT_CUSTOM_TYPES)
 function cloneDefaultTypes(){return DEFAULT_CUSTOM_TYPES.map(function(t){return {id:t.id,label:t.label,category:t.category,steps:t.steps.map(function(s){return {label:s.label,tech:s.tech,dayOffset:s.dayOffset};})};});}
 
+// ── Marqueur de BUILD : permet de confirmer quel code tourne dans CHAQUE onglet.
+//    Ouvrir la console (F12) → taper  LB_BUILD  → Entrée. Si un onglet affiche une
+//    version plus ancienne que celle déployée, c'est lui qui réécrase les réglages :
+//    le fermer et n'en garder qu'un seul à jour.
+window.LB_BUILD='2026-06-24d · prog-intelligente + fix techniciens des types (merge _techRev)';
+try{console.info('%c[LaboSync] build '+window.LB_BUILD,'color:#2a6049;font-weight:700;font-size:13px');}catch(e){}
+
 let customTypes=JSON.parse(localStorage.getItem('lb_custom_types')||'[]');
 // Édition utilisateur de la config des types → on horodate la révision (lb_ct_rev).
 // Sert à résoudre les conflits multi-poste par RÉCENCE (et non par comptage), pour ne
