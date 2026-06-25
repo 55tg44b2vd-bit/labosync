@@ -1528,6 +1528,7 @@ function _mergeRemoteBeforeMobileSave(remote){
   // Fusion PAR TYPE (et non écrasement) → le mobile ne peut jamais effacer les techniciens du desktop.
   if(p.customTypes){customTypes=_mergeCustomTypesByType(customTypes,p.customTypes,_mobReadDelRecs());localStorage.setItem('lb_ct_rev',String(Math.max(_ccr,_lcr)));}
   if(p.progActif!==undefined&&p.progActif!==null)localStorage.setItem('lb_prog_actif',p.progActif);
+  if(p.progConfig&&typeof p.progConfig==='object'){try{localStorage.setItem('lb_prog_config',JSON.stringify(p.progConfig));if(typeof loadProgCfg==='function')_progCfg=loadProgCfg();}catch(e){}}
 }
 async function loadData(){
   if(!currentUser||!_token)return;
@@ -1566,6 +1567,7 @@ async function loadData(){
     if(p.bdc)bdc=p.bdc;
     if(p.fourns)fourns=p.fourns;
     if(p.progActif!==undefined&&p.progActif!==null)localStorage.setItem('lb_prog_actif',p.progActif);
+    if(p.progConfig&&typeof p.progConfig==='object'){try{localStorage.setItem('lb_prog_config',JSON.stringify(p.progConfig));if(typeof loadProgCfg==='function')_progCfg=loadProgCfg();}catch(e){}}
     if(p.laboName)localStorage.setItem('lb_name',p.laboName);
     if(p.laboLogo)localStorage.setItem('lb_logo',p.laboLogo);
     else if(p.laboLogo===null)localStorage.removeItem('lb_logo');
@@ -1630,6 +1632,7 @@ async function saveData(){
       customTypesRev:parseInt(localStorage.getItem('lb_ct_rev')||'0',10),
       deletedRecords:_mobReadDelRecs(),
       progActif:localStorage.getItem('lb_prog_actif')||'0',
+      progConfig:JSON.parse(localStorage.getItem('lb_prog_config')||'null'),
       legalInfo:{
         raison:localStorage.getItem('lb_legal_raison')||'',
         siret:localStorage.getItem('lb_legal_siret')||'',
@@ -1640,6 +1643,8 @@ async function saveData(){
         ce_num:localStorage.getItem('lb_legal_ce_num')||'',
       }
     };
+    // Ne pas pousser progConfig:null (poste sans config) — la fusion conserve alors la valeur serveur.
+    if(payload.progConfig==null)delete payload.progConfig;
     // ── PRÉSERVATION DES CHAMPS GÉRÉS HORS MOBILE ──────────────────────────
     // L'upsert REMPLACE toute la colonne data. Or certains réglages ne sont écrits
     // que côté desktop (billingSettings, techOffDays, deletedJobIds) ou par
@@ -2527,7 +2532,9 @@ async function confirmAcceptOrderMobile(){
   var tasks=[];
   var progOn=localStorage.getItem('lb_prog_actif')==='1';
   if(progOn){
-    validItems.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type,false,it.nb));});
+    var _itemsA=validItems.map(function(it){return{type:it.type,nb:it.nb||1};});
+    var _dlA=_acceptFormMobile.deliveryDate||'';
+    tasks=_runWithProgCtx({cabinetId:cab.id||null,teeth:[]},function(){return _buildScheduledTasksMobile(_itemsA,false,'',{levelDeadline:_dlA});})||[];
   }
 
   var job={
@@ -3790,11 +3797,23 @@ function pick(pool,day,forced){
   var ds=new Date(day).toDateString();
   var c={};active.forEach(function(t){c[t]=0;});
   jobs.forEach(function(j){if(j.tasks)j.tasks.forEach(function(t){if(active.indexOf(t.tech)>=0&&new Date(t.dueDate).toDateString()===ds)c[t.tech]=(c[t.tech]||0)+(parseInt(t.nb,10)||1);});});
-  return active.reduce(function(a,b){return(c[a]||0)<=(c[b]||0)?a:b;});
+  var rank=Math.max(0,_progPickRank|0);
+  // Programmation intelligente (config réglée sur ordinateur, synchronisée) : choix au meilleur score.
+  if(_progPickCtx&&typeof _progScoringActive==='function'&&_progScoringActive()){
+    var ctx=_progPickCtx;
+    var zone=ctx.zone||(typeof _zoneFromTeeth==='function'?_zoneFromTeeth(ctx.teeth):null);
+    var ranked=active.map(function(t){
+      var ratio=c[t]/_techCapacity(t);
+      return {t:t,sc:_scoreTech(t,{cabinetId:ctx.cabinetId,zone:zone,loadRatio:ratio},_progCfg).score,load:c[t]};
+    }).sort(function(a,b){return b.sc-a.sc||a.load-b.load;});
+    if(ranked.length)return ranked[Math.min(rank,ranked.length-1)].t;
+  }
+  var byLoad=active.slice().sort(function(a,b){return (c[a]||0)-(c[b]||0);});
+  return byLoad[Math.min(rank,byLoad.length-1)];
 }
 
-function buildTasksMobile(type,emp,nb){
-  var base=new Date();var tasks=[];var _nb=Math.max(1,parseInt(nb,10)||1);
+function buildTasksMobile(type,emp,nb,startDate){
+  var base=startDate?new Date(startDate):new Date();var tasks=[];var _nb=Math.max(1,parseInt(nb,10)||1);
   // ── PRIORITÉ À LA CONFIG PERSONNALISÉE ──
   // Si l'utilisateur a configuré ce type via l'éditeur de types, utiliser SA
   // config plutôt que les pools hardcodés (qui contiennent des techniciens
@@ -3873,6 +3892,167 @@ function buildTasksMobile(type,emp,nb){
   return tasks;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   PROGRAMMATION INTELLIGENTE — MOBILE (miroir conforme du desktop app.html)
+   Applique la config réglée sur ordinateur (capacités via techs + lb_prog_config
+   synchronisé) : score par technicien, rétro-planning, lissage de charge, variantes.
+   ════════════════════════════════════════════════════════════════════════════ */
+// Helpers de dates manquants côté mobile (addWD existe déjà).
+function subWD(d,n){var r=new Date(d);var a=0;while(a<n){r.setDate(r.getDate()-1);if(r.getDay()!==0&&r.getDay()!==6)a++;}return r;}
+function countWD(from,to){var a=new Date(from);a.setHours(0,0,0,0);var b=new Date(to);b.setHours(0,0,0,0);var n=0;while(a<b){a.setDate(a.getDate()+1);if(a.getDay()!==0&&a.getDay()!==6)n++;}return n;}
+// Phase de fabrication d'un type (1=préparation, 2=parallèle, 3=finition) — miroir desktop.
+var DEFAULT_TYPE_PHASE={inlay_only:1,inlay_armature:1,impression_modele:1,wax_up:1,cire_occlusion:1,cle_schefield:1,guide_chir:1,retouche:3};
+function _typePhase(typeId){var ct=(typeof customTypes!=='undefined'&&customTypes)?customTypes.find(function(c){return c.id===typeId;}):null;if(ct&&ct.phase)return parseInt(ct.phase)||2;return (DEFAULT_TYPE_PHASE[typeId]!=null)?DEFAULT_TYPE_PHASE[typeId]:2;}
+// Config de prog intelligente (synchronisée depuis l'ordinateur). Défauts alignés sur le desktop.
+function loadProgCfg(){
+  var d={weights:{dentist:30,tooth:20,load:40},dentistPrefs:{},zonePrefs:{anterior:{pref:[],avoid:[]},posterior:{pref:[],avoid:[]}},loadLeveling:true};
+  try{var c=JSON.parse(localStorage.getItem('lb_prog_config')||'{}');
+    if(c&&c.weights){['dentist','tooth','load'].forEach(function(k){if(c.weights[k]!=null)d.weights[k]=Math.max(0,parseInt(c.weights[k],10)||0);});}
+    if(c&&c.dentistPrefs&&typeof c.dentistPrefs==='object')d.dentistPrefs=c.dentistPrefs;
+    if(c&&c.zonePrefs){['anterior','posterior'].forEach(function(z){if(c.zonePrefs[z]){d.zonePrefs[z]={pref:Array.isArray(c.zonePrefs[z].pref)?c.zonePrefs[z].pref:[],avoid:Array.isArray(c.zonePrefs[z].avoid)?c.zonePrefs[z].avoid:[]};}});}
+    if(c&&typeof c.loadLeveling!=='undefined')d.loadLeveling=c.loadLeveling!==false;
+  }catch(e){}
+  return d;
+}
+var _progCfg=loadProgCfg();
+function _techCapacity(k){var c=(TECHS[k]&&parseInt(TECHS[k].capacity,10));return c>0?c:8;}
+function _toothZone(fdi){var n=Math.abs(parseInt(fdi,10))%10;return (n>=1&&n<=3)?'anterior':'posterior';}
+function _zoneFromTeeth(teeth){if(!Array.isArray(teeth)||!teeth.length)return null;for(var i=0;i<teeth.length;i++){if(_toothZone(teeth[i])==='anterior')return 'anterior';}return 'posterior';}
+function _scoreTech(techKey,ctx,cfg){
+  cfg=cfg||_progCfg;var w=cfg.weights;var score=0;
+  if(ctx.cabinetId&&(cfg.dentistPrefs[ctx.cabinetId]||[]).indexOf(techKey)>=0)score+=w.dentist;
+  if(ctx.zone){var z=cfg.zonePrefs[ctx.zone]||{pref:[],avoid:[]};
+    if((z.pref||[]).indexOf(techKey)>=0)score+=w.tooth;
+    else if((z.avoid||[]).indexOf(techKey)>=0)score-=Math.round(w.tooth*0.75);}
+  if(ctx.loadRatio!=null)score-=Math.round(ctx.loadRatio*w.load);
+  return {score:score};
+}
+function _progScoringActive(){
+  if(!_progCfg)return false;
+  if(Object.keys(_progCfg.dentistPrefs||{}).length)return true;
+  var zp=_progCfg.zonePrefs||{};
+  if(zp.anterior&&((zp.anterior.pref||[]).length||(zp.anterior.avoid||[]).length))return true;
+  if(zp.posterior&&((zp.posterior.pref||[]).length||(zp.posterior.avoid||[]).length))return true;
+  var keys=Object.keys(TECHS||{});
+  for(var k=0;k<keys.length;k++){if(TECHS[keys[k]]&&parseInt(TECHS[keys[k]].capacity,10)>0)return true;}
+  return false;
+}
+var _progPickCtx=null,_progPickRank=0;
+function _runWithProgCtx(ctx,fn){var prev=_progPickCtx;_progPickCtx=ctx||null;try{return fn();}finally{_progPickCtx=prev;}}
+// Lissage de charge (miroir conforme du desktop) — repousse les paliers surchargés vers un jour calme.
+function _loadLevelingActive(){return typeof _progScoringActive==='function'&&_progScoringActive()&&(!_progCfg||_progCfg.loadLeveling!==false);}
+function _levelTasksLoad(tasks,levelDeadlineISO,excludeJobId){
+  if(!Array.isArray(tasks)||!tasks.length)return tasks;
+  if(!_loadLevelingActive())return tasks;
+  if(!levelDeadlineISO)return tasks;
+  var deadline=new Date(String(levelDeadlineISO).slice(0,10)+'T00:00:00');
+  if(isNaN(deadline))return tasks;
+  var today=new Date();today.setHours(0,0,0,0);
+  if(deadline<=today)return tasks;
+  var ds=function(d){return new Date(d).toDateString();};
+  var norm=function(d){var x=new Date(d);x.setHours(0,0,0,0);return x;};
+  var baseLoad={};
+  (typeof jobs!=='undefined'?jobs:[]).forEach(function(j){
+    if(excludeJobId!=null&&String(j.id)===String(excludeJobId))return;
+    (j.tasks||[]).forEach(function(t){if(!t||!t.tech||!t.dueDate)return;(baseLoad[t.tech]=baseLoad[t.tech]||{});var day=ds(t.dueDate);baseLoad[t.tech][day]=(baseLoad[t.tech][day]||0)+(parseInt(t.nb,10)||1);});
+  });
+  var jobLoad={};
+  function loadAt(tech,dayStr){return (baseLoad[tech]&&baseLoad[tech][dayStr]||0)+(jobLoad[tech]&&jobLoad[tech][dayStr]||0);}
+  function addJobLoad(tech,dayStr,nb){(jobLoad[tech]=jobLoad[tech]||{});jobLoad[tech][dayStr]=(jobLoad[tech][dayStr]||0)+nb;}
+  var byDay={},dayKeys=[];
+  tasks.forEach(function(t){var dk=norm(t.dueDate).getTime();if(!byDay[dk]){byDay[dk]=[];dayKeys.push(dk);}byDay[dk].push(t);});
+  dayKeys.sort(function(a,b){return a-b;});
+  var stages=dayKeys.map(function(dk){return {origDue:new Date(dk),tasks:byDay[dk]};});
+  var n=stages.length;
+  var minGap=new Array(n).fill(0);
+  for(var i=1;i<n;i++)minGap[i]=Math.max(1,countWD(stages[i-1].origDue,stages[i].origDue));
+  var tailGap=new Array(n).fill(0);
+  for(var j2=n-2;j2>=0;j2--)tailGap[j2]=tailGap[j2+1]+minGap[j2+1];
+  var placedPrev=null;
+  for(var s=0;s<n;s++){
+    var stage=stages[s];
+    var lower=norm(stage.origDue);
+    if(s>0){var minAfterPrev=norm(addWD(placedPrev,minGap[s]));if(minAfterPrev>lower)lower=minAfterPrev;}
+    var upper=norm(subWD(deadline,tailGap[s]));
+    if(upper<lower)upper=new Date(lower);
+    var stageLoads={};
+    stage.tasks.forEach(function(t){if(t.tech)stageLoads[t.tech]=(stageLoads[t.tech]||0)+(parseInt(t.nb,10)||1);});
+    var techs=Object.keys(stageLoads);
+    var overloadCost=function(dayStr){var cost=0;techs.forEach(function(tk){var cap=_techCapacity(tk);var after=loadAt(tk,dayStr)+stageLoads[tk];if(after>cap)cost+=(after-cap);});return cost;};
+    var chosen=new Date(lower),bestCost=Infinity;
+    var cur=new Date(lower);
+    while(cur<=upper){if(cur.getDay()!==0&&cur.getDay()!==6){var c=overloadCost(cur.toDateString());if(c<bestCost){bestCost=c;chosen=new Date(cur);if(c===0)break;}}cur.setDate(cur.getDate()+1);}
+    chosen.setHours(0,0,0,0);
+    var chosenStr=chosen.toDateString();
+    stage.tasks.forEach(function(t){var old=new Date(t.dueDate);var nd=new Date(chosen);nd.setHours(old.getHours(),old.getMinutes(),old.getSeconds(),old.getMilliseconds());t.dueDate=nd.toISOString();if(t.tech)addJobLoad(t.tech,chosenStr,parseInt(t.nb,10)||1);});
+    placedPrev=chosen;
+  }
+  return tasks;
+}
+// Fusion multi-types par phases (miroir desktop buildMergedStepList).
+function buildMergedStepListMobile(items,emp){
+  var tmpBase=new Date();tmpBase.setHours(0,0,0,0);
+  var byPhase={};
+  items.forEach(function(item){var p=_typePhase(item.type);(byPhase[p]=byPhase[p]||[]).push(item);});
+  var phases=Object.keys(byPhase).map(Number).sort(function(a,b){return a-b;});
+  var seenLabels={};var out=[];var cumWD=0;
+  phases.forEach(function(p){
+    var phaseMax=0;
+    byPhase[p].forEach(function(item){
+      var tasks=buildTasksMobile(item.type,emp,item.nb||1,tmpBase)||[];
+      tasks.forEach(function(tk){
+        var off=Math.max(1,countWD(tmpBase,tk.dueDate));
+        if(off>phaseMax)phaseMax=off;
+        if(seenLabels[tk.label])return;seenLabels[tk.label]=1;
+        out.push({label:tk.label,tech:tk.tech,wd:cumWD+off,nb:tk.nb||1});
+      });
+    });
+    cumWD+=phaseMax;
+  });
+  out.sort(function(a,b){return a.wd-b.wd;});
+  return out;
+}
+// Construit les étapes planifiées (rétro-planning + lissage) — miroir desktop _buildScheduledTasks.
+function _buildScheduledTasksMobile(items,emp,deadlineISO,opts){
+  function buildAt(base){
+    if(items.length===1)return buildTasksMobile(items[0].type,emp,items[0].nb||1,base);
+    var steps=buildMergedStepListMobile(items,emp);
+    return steps.map(function(s){return {label:s.label,tech:s.tech,dueDate:addWD(base,s.wd||1).toISOString(),done:false,nb:s.nb||1};});
+  }
+  var today=new Date();today.setHours(0,0,0,0);
+  var tasks=buildAt(today);
+  if(!tasks.length)return tasks;
+  if(deadlineISO){
+    var deadline=new Date(String(deadlineISO).slice(0,10)+'T00:00:00');
+    if(!isNaN(deadline)&&deadline>today){
+      var maxDue=today;
+      tasks.forEach(function(t){var d=new Date(t.dueDate);d.setHours(0,0,0,0);if(d>maxDue)maxDue=d;});
+      var spanWD=countWD(today,maxDue);
+      var retroBase=subWD(deadline,spanWD);retroBase.setHours(0,0,0,0);
+      if(retroBase>today)tasks=buildAt(retroBase);
+    }
+  }
+  opts=opts||{};
+  var levelDeadline=opts.levelDeadline||deadlineISO||'';
+  if(levelDeadline&&typeof _levelTasksLoad==='function'){try{tasks=_levelTasksLoad(tasks,levelDeadline,opts.excludeJobId)||tasks;}catch(e){}}
+  return tasks;
+}
+// Préférence de planification (au plus tôt par défaut). Sur mobile on reste « au plus tôt » + lissage.
+function _planDeadlineMobile(){return '';}
+// Générateur de variantes mobile (miroir desktop _altSchedule).
+function _altSchedule(items,ctx,variantIndex){
+  ctx=ctx||{};var v=((variantIndex%4)+4)%4;var raw=ctx.deadline||'';
+  return _runWithProgCtx({cabinetId:ctx.cabinetId||null,teeth:ctx.teeth||[]},function(){
+    var prevRank=_progPickRank;_progPickRank=0;
+    try{
+      if(v===1)return _buildScheduledTasksMobile(items,ctx.emp||false,'',{levelDeadline:'',excludeJobId:ctx.excludeJobId});
+      if(v===2)return _buildScheduledTasksMobile(items,ctx.emp||false,raw,{levelDeadline:'',excludeJobId:ctx.excludeJobId});
+      if(v===3)_progPickRank=1;
+      return _buildScheduledTasksMobile(items,ctx.emp||false,'',{levelDeadline:raw,excludeJobId:ctx.excludeJobId});
+    }finally{_progPickRank=prevRank;}
+  });
+}
+
 var _mjItems=[];
 function getAllJobTypes(){
   var allTypes=Object.keys(TYPE_LABELS).map(function(k){return{id:k,label:TYPE_LABELS[k]};});
@@ -3945,13 +4125,13 @@ document.getElementById('btn-add-job').addEventListener('click',async function()
   var lbl=totalNb>1?patient+' ('+totalNb+' éléments)':patient;
   var tasks=[];
   if(localStorage.getItem('lb_prog_actif')==='1'){
-    items.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type,false,it.nb));});
+    tasks=_runWithProgCtx({cabinetId:cab||null,teeth:[]},function(){return _buildScheduledTasksMobile(items,false,'',{levelDeadline:delivery||''});})||[];
   }
   var job={
     id:String(Date.now()),patient:lbl,type:items[0].type,tasks:tasks,nb:totalNb,items:items,
     urgent:urgent,note:note,deliveryDate:delivery,cabinet:cab,
     createdAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId:'',
-    needsProg:localStorage.getItem('lb_prog_actif')==='1'
+    needsProg:localStorage.getItem('lb_prog_actif')==='1'&&!tasks.length
   };
   if(missingItems.length){job.missingInfoItems=missingItems;}
   jobs.push(job);
@@ -4237,7 +4417,8 @@ function openJobDetailMobile(id){
       '</div>'+
       // Programmation
       '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;margin-bottom:2px;">🗓️ Programmation</div>'+
-      '<div style="margin-bottom:14px;">'+stepsHtml+'</div>'+
+      '<div style="margin-bottom:8px;">'+stepsHtml+'</div>'+
+      (localStorage.getItem('lb_prog_actif')==='1'?'<button onclick="document.getElementById(\'jobdetail-overlay\').remove();openScheduleEditorMobile(\''+esc(String(j.id))+'\')" style="width:100%;background:#dcfce7;color:#14532d;border:1px solid #a7f3d0;border-radius:9px;padding:11px;font-size:.86rem;font-weight:700;cursor:pointer;margin-bottom:14px;min-height:44px;">🗓️ '+(total?'Modifier la programmation':'Programmer ce travail')+'</button>':'')+
       // Infos clés
       '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;margin-bottom:2px;">Détails</div>'+
       '<div style="margin-bottom:8px;">'+
@@ -4249,10 +4430,161 @@ function openJobDetailMobile(id){
         row('Bon de livraison', bl?('✅ '+esc(bl.num||'émis')):'—')+
       '</div>'+
       (j.note?'<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;margin:8px 0 4px;">Note</div><div style="background:#fef9c3;border-left:3px solid #facc15;border-radius:0 6px 6px 0;padding:10px 12px;font-size:.83rem;color:#1e293b;white-space:pre-wrap;line-height:1.5;">'+esc(j.note)+'</div>':'')+
-      '<div style="font-size:.72rem;color:var(--ink-soft);text-align:center;margin-top:16px;">Pour modifier la programmation, utilisez l\'ordinateur.</div>'+
     '</div>';
   document.body.appendChild(ov);
   ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+}
+
+/* ── ÉDITEUR DE PROGRAMMATION MOBILE (« Modifier la programmation ») ──────────
+   Édite job.tasks : date/technicien/libellé, ajout/suppression d'étapes,
+   « Autre proposition » (variantes instantanées + IA). Miroir du desktop. */
+var _schedEditMob=null;
+function _schedMobNorm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');}
+function _schedMobVariantName(v){return ['lissé','au plus tôt','calé sur l\'échéance','autres techniciens'][((v%4)+4)%4];}
+function _schedMobSig(steps){return steps.map(function(s){return (s.label||'')+'|'+String(s.dueDate||'').slice(0,10)+'|'+(s.tech||'');}).join(';');}
+function _schedEditMobCtx(){
+  var job=jobs.find(function(x){return String(x.id)===String(_schedEditMob&&_schedEditMob.jobId);});
+  if(!job)return null;
+  var items=(job.items&&job.items.length)?job.items:[{type:job.type,nb:job.nb||1}];
+  var raw=job.labDeliveryDate||job.deliveryDate||job.requestedDeliveryDate||'';
+  return {job:job,items:items,ctx:{cabinetId:job.cabinet||null,teeth:job.teeth||[],emp:job.emp||false,deadline:raw,excludeJobId:job.id}};
+}
+function _schedEditMobActive(){return (_schedEditMob?_schedEditMob.steps:[]).filter(function(s){return !s._deleted;});}
+function openScheduleEditorMobile(jobId){
+  var job=jobs.find(function(x){return String(x.id)===String(jobId);});
+  if(!job){toast('Travail introuvable','var(--red)');return;}
+  _schedEditMob={jobId:String(jobId),variant:0,steps:(job.tasks||[]).map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate||addWD(new Date(),1).toISOString(),nb:parseInt(t.nb,10)||1,done:!!t.done,_deleted:false};})};
+  // Travail pas encore programmé → générer une première proposition automatiquement.
+  if(!_schedEditMob.steps.length){
+    var info0=_schedEditMobCtx();
+    if(info0){try{var t0=_altSchedule(info0.items,info0.ctx,0)||[];_schedEditMob.steps=t0.map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate,nb:parseInt(t.nb,10)||1,done:false,_deleted:false};});}catch(e){}}
+  }
+  var ex=document.getElementById('schededit-mob-overlay');if(ex)ex.remove();
+  var ov=document.createElement('div');
+  ov.id='schededit-mob-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5400;display:flex;align-items:flex-end;justify-content:center;';
+  ov.innerHTML='<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding:18px 18px calc(20px + env(safe-area-inset-bottom));">'+
+    '<div style="width:36px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 14px;"></div>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'+
+      '<div style="font-size:1.05rem;font-weight:700;color:#1e293b;">🗓️ Modifier la programmation</div>'+
+      '<button onclick="_schedEditMobClose()" style="background:none;border:none;font-size:1.6rem;line-height:1;color:var(--ink-soft);cursor:pointer;">×</button>'+
+    '</div>'+
+    '<div style="font-size:.78rem;color:var(--ink-soft);margin-bottom:12px;">'+esc(job.patient||'')+' · '+esc(getJobTypeLabel(job))+'</div>'+
+    '<div id="schededit-mob-rows" style="display:flex;flex-direction:column;gap:7px;"></div>'+
+    '<button onclick="_schedEditMobAdd()" style="margin-top:10px;width:100%;background:var(--bg);border:1px dashed #94a3b8;border-radius:9px;padding:11px;font-size:.84rem;font-weight:600;color:#475569;cursor:pointer;min-height:44px;">＋ Ajouter une étape</button>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;border-top:1px dashed var(--border);padding-top:12px;">'+
+      '<button onclick="_schedEditMobRegen()" style="flex:1;min-width:130px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:9px;padding:11px;font-size:.84rem;font-weight:700;cursor:pointer;min-height:44px;">🔁 Autre proposition</button>'+
+      '<button onclick="_schedEditMobAi()" style="flex:1;min-width:90px;background:#ede9fe;color:#6b21a8;border:1px solid #c4b5fd;border-radius:9px;padding:11px;font-size:.84rem;font-weight:700;cursor:pointer;min-height:44px;">🤖 IA</button>'+
+    '</div>'+
+    '<div id="schededit-mob-ai" style="margin-top:10px;"></div>'+
+    '<button onclick="_schedEditMobSave()" style="width:100%;background:var(--green,#2a6049);color:#fff;border:none;border-radius:9px;padding:13px;font-size:.9rem;font-weight:700;cursor:pointer;margin-top:12px;min-height:48px;">✓ Enregistrer la programmation</button>'+
+  '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)_schedEditMobClose();});
+  _schedEditMobRender();
+}
+function _schedEditMobClose(){var o=document.getElementById('schededit-mob-overlay');if(o)o.remove();_schedEditMob=null;}
+function _schedEditMobRender(){
+  var host=document.getElementById('schededit-mob-rows');if(!host||!_schedEditMob)return;
+  var techKeys=Object.keys(TECHS||{});
+  host.innerHTML=_schedEditMob.steps.map(function(s,i){
+    if(s._deleted){
+      return '<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px dashed var(--border);border-radius:9px;padding:9px 11px;opacity:.6;">'+
+        '<span style="flex:1;font-size:.84rem;text-decoration:line-through;color:var(--ink-soft);">'+esc(s.label)+'</span>'+
+        '<button onclick="_schedEditMobToggleDel('+i+')" style="background:none;border:none;color:#1d4ed8;cursor:pointer;font-size:.8rem;">↩</button>'+
+      '</div>';
+    }
+    var _dd=new Date(s.dueDate);var iso=isNaN(_dd.getTime())?'':fmtISO(_dd);
+    var techOpts='<option value="auto"'+(!s.tech||s.tech==='auto'?' selected':'')+'>Auto</option>'+techKeys.map(function(k){return '<option value="'+esc(k)+'"'+(k===s.tech?' selected':'')+'>'+esc((TECHS[k]&&TECHS[k].label)||k)+'</option>';}).join('');
+    var dot=(TECHS[s.tech]&&TECHS[s.tech].color)||'#94a3b8';
+    return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 11px;">'+
+      '<div style="display:flex;align-items:center;gap:7px;margin-bottom:7px;">'+
+        '<span style="width:9px;height:9px;border-radius:50%;background:'+dot+';flex-shrink:0;"></span>'+
+        '<input type="text" value="'+esc(s.label)+'" onchange="_schedEditMobSet('+i+',\'label\',this.value)" placeholder="Libellé" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:.84rem;background:var(--surface);color:#1e293b;outline:none;"/>'+
+        '<button onclick="_schedEditMobToggleDel('+i+')" style="background:none;border:none;color:#c0392b;cursor:pointer;font-size:.9rem;padding:2px 4px;">✕</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:7px;">'+
+        '<input type="date" value="'+iso+'" onchange="_schedEditMobSet('+i+',\'dueDate\',this.value)" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:.8rem;background:var(--surface);color:#1e293b;outline:none;"/>'+
+        '<select onchange="_schedEditMobSet('+i+',\'tech\',this.value)" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:.8rem;background:var(--surface);color:#1e293b;outline:none;">'+techOpts+'</select>'+
+      '</div>'+
+    '</div>';
+  }).join('')||'<div style="font-size:.82rem;color:var(--ink-soft);font-style:italic;padding:6px 0;">Aucune étape — ajoutez-en une ou demandez une proposition.</div>';
+}
+function _schedEditMobSet(i,field,val){
+  if(!_schedEditMob||!_schedEditMob.steps[i])return;
+  if(field==='dueDate'){var d=new Date(val+'T12:00:00');if(!isNaN(d.getTime()))_schedEditMob.steps[i].dueDate=d.toISOString();}
+  else _schedEditMob.steps[i][field]=val;
+  _schedEditMobRender();
+}
+function _schedEditMobToggleDel(i){if(!_schedEditMob||!_schedEditMob.steps[i])return;_schedEditMob.steps[i]._deleted=!_schedEditMob.steps[i]._deleted;_schedEditMobRender();}
+function _schedEditMobAdd(){
+  if(!_schedEditMob)return;
+  var act=_schedEditMobActive();var last=act.length?act[act.length-1].dueDate:null;var base=last?new Date(last):new Date();
+  _schedEditMob.steps.push({label:'Nouvelle étape',tech:'auto',dueDate:addWD(base,1).toISOString(),nb:1,done:false,_deleted:false});
+  _schedEditMobRender();
+}
+function _schedEditMobRegen(){
+  if(!_schedEditMob||typeof _altSchedule!=='function')return;
+  var info=_schedEditMobCtx();if(!info)return;
+  var sig=_schedMobSig(_schedEditMobActive());var tasks=null;
+  for(var k=0;k<4;k++){_schedEditMob.variant=(_schedEditMob.variant+1)%4;var cand=_altSchedule(info.items,info.ctx,_schedEditMob.variant)||[];if(cand.length&&_schedMobSig(cand)!==sig){tasks=cand;break;}}
+  if(!tasks)tasks=_altSchedule(info.items,info.ctx,_schedEditMob.variant)||[];
+  if(!tasks.length){toast('Impossible de générer une autre proposition','var(--red)');return;}
+  _schedEditMob.steps=tasks.map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate,nb:parseInt(t.nb,10)||1,done:false,_deleted:false};});
+  _schedEditMobRender();
+  toast('🔁 '+_schedMobVariantName(_schedEditMob.variant),'var(--accent)');
+}
+async function _schedEditMobAi(){
+  if(!_schedEditMob)return;
+  var info=_schedEditMobCtx();if(!info)return;
+  var wrap=document.getElementById('schededit-mob-ai');
+  var steps=_schedEditMobActive();
+  if(!steps.length){if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">Ajoutez au moins une étape.</div>';return;}
+  if(wrap)wrap.innerHTML='<div style="font-size:.82rem;color:#6b21a8;">🤖 L\'IA réfléchit…</div>';
+  try{
+    var techList=Object.keys(TECHS||{}).map(function(k){return k+' ('+((TECHS[k]&&TECHS[k].label)||k)+', capacité '+_techCapacity(k)+'/j)';}).join(', ')||'(aucun)';
+    var congesStr=(typeof conges!=='undefined'&&conges&&conges.length)?conges.join(', '):'aucun';
+    var stepsStr=steps.map(function(t,i){return (i+1)+'. '+t.label+' | '+String(t.dueDate||'').slice(0,10)+' | tech:'+(t.tech||'?');}).join('\n');
+    var prompt='Laboratoire de prothèse dentaire. Aujourd\'hui : '+fmtISO(new Date())+'.\n'+
+      'Travail : '+(info.job.patient||'?')+(info.job.urgent?' — URGENT':'')+'. Échéance : '+(info.ctx.deadline||'non précisée')+'.\n'+
+      'Techniciens : '+techList+'.\nJours de fermeture : '+congesStr+'.\n\n'+
+      'PROGRAMMATION ACTUELLE :\n'+stepsStr+'\n\n'+
+      'Optimise comme un chef de production : respecte l\'ordre de fabrication et les délais entre étapes, ne dépasse pas l\'échéance, lisse la charge (évite de surcharger un technicien un même jour), n\'affecte pas un technicien un jour de fermeture. Garde exactement les mêmes libellés et le même nombre d\'étapes.\n'+
+      'Réponds en JSON pur sans markdown : {"explication":"2-3 phrases","risques":["alerte courte"],"plan":[{"label":"<libellé EXACT>","date":"YYYY-MM-DD","tech":"<clé technicien>"}]}.';
+    var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},body:JSON.stringify({
+      model:'claude-sonnet-4-6',max_tokens:1500,
+      system:'Tu es un chef de production d\'un laboratoire de prothèse dentaire. Tu optimises la programmation (ordre, délais, charge, disponibilités). Réponds UNIQUEMENT en JSON valide, sans markdown.',
+      messages:[{role:'user',content:prompt}]
+    })});
+    var data=await resp.json();
+    if(!data||!data.content||!data.content[0])throw new Error(data&&data.error&&data.error.message?data.error.message:'réponse invalide');
+    var raw=(data.content[0].text||'{}').replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+    var out=JSON.parse(raw);var plan=Array.isArray(out.plan)?out.plan:[];
+    plan.forEach(function(pp){var t=_schedEditMob.steps.find(function(x){return !x._deleted&&_schedMobNorm(x.label)===_schedMobNorm(pp.label);});if(t){if(pp.date)t.dueDate=new Date(pp.date+'T12:00:00').toISOString();if(pp.tech&&TECHS[pp.tech])t.tech=pp.tech;}});
+    _schedEditMobRender();
+    var risks=Array.isArray(out.risques)?out.risques.filter(Boolean):[];
+    if(wrap)wrap.innerHTML='<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px 12px;">'+
+      '<div style="font-size:.82rem;color:#6b21a8;font-weight:600;margin-bottom:6px;">🤖 Proposition IA appliquée</div>'+
+      '<div style="font-size:.8rem;color:#475569;line-height:1.5;white-space:pre-wrap;">'+esc(out.explication||'')+'</div>'+
+      (risks.length?'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:7px 10px;margin-top:8px;">'+risks.map(function(r){return '<div style="font-size:.76rem;color:#9a3412;">⚠️ '+esc(r)+'</div>';}).join('')+'</div>':'')+
+    '</div>';
+  }catch(e){if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">⚠️ IA indisponible ('+esc(e.message||'erreur')+'). Les variantes « 🔁 » restent utilisables.</div>';}
+}
+async function _schedEditMobSave(){
+  if(!_schedEditMob)return;
+  var job=jobs.find(function(x){return String(x.id)===String(_schedEditMob.jobId);});
+  if(!job){_schedEditMobClose();return;}
+  var active=_schedEditMobActive().filter(function(s){return s.dueDate;});
+  job.tasks=active.map(function(s){return {label:s.label||'Étape',tech:s.tech||'auto',dueDate:s.dueDate,nb:parseInt(s.nb,10)||1,done:!!s.done};});
+  job.needsProg=!job.tasks.length;
+  job.updatedAt=new Date().toISOString();
+  var jid=job.id,cabId=job.cabinet;
+  _schedEditMobClose();
+  toast('✅ Programmation enregistrée','var(--green)');
+  try{await saveData();}catch(e){}
+  if(cabId){var cabObj=cabinets.find(function(c){return c.id===cabId;});if(cabObj)publishPortal(cabObj);}
+  renderAll();
+  openJobDetailMobile(jid);
 }
 
 /* ── MESSAGES LIST ── */
@@ -5064,7 +5396,8 @@ function openQuickJobSheet(){
     }
     var tasks=[];
     if(localStorage.getItem('lb_prog_actif')==='1'){
-      items.forEach(function(it){tasks=tasks.concat(buildTasksMobile(it.type,emp,it.nb));});
+      var _dlQ=labDelivery||delivery||'';
+      tasks=_runWithProgCtx({cabinetId:cab||null,teeth:(teethD&&teethD.teeth)||[]},function(){return _buildScheduledTasksMobile(items,emp,'',{levelDeadline:_dlQ});})||[];
     }
     var job={
       id:String(Date.now()),patient:lbl,type:items[0].type,tasks:tasks,nb:totalNb,items:items,
