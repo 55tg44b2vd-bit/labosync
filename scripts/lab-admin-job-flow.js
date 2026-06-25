@@ -123,6 +123,16 @@
 
   function commitAdminJob(pending, delivery, autoProgram) {
     var job = pending.job;
+    // Garde anti-doublon : si un travail identique (même patient + mêmes types) a été créé il y a
+    // quelques secondes, on ignore (double-clic / « refait » répété). Évite les travaux en double.
+    if (typeof global._isRecentDuplicateJob === 'function') {
+      var _items = (job.items && job.items.length) ? job.items : [{ type: job.type, nb: job.nb || 1 }];
+      var _existsById = (jobsList() || []).some(function (j) { return String(j.id) === String(job.id); });
+      if (!_existsById && global._isRecentDuplicateJob(job.patient, _items)) {
+        if (typeof global.showToast === 'function') global.showToast('⚠️ Ce travail vient d\'être créé — doublon évité', '#d97706', 3500);
+        return;
+      }
+    }
     if (typeof global.applyDeliveryFieldsToObject === 'function') {
       global.applyDeliveryFieldsToObject(job, delivery);
     } else {
@@ -154,7 +164,9 @@
       if (job.missingInfoItems) qItem.missingInfoItems = job.missingInfoItems;
       var q = queueList();
       if (q && typeof q.push === 'function') {
-        q.push(qItem);
+        // Idempotent : ne pas empiler deux entrées de file pour le même travail (jobId).
+        var dupQ = q.find(function (x) { return String(x.id) === String(qItem.id) || (x.jobId && String(x.jobId) === String(job.id)); });
+        if (dupQ) Object.assign(dupQ, qItem); else q.push(qItem);
         if (typeof global.saveQueue === 'function') global.saveQueue();
         if (typeof global.updateQueueBadge === 'function') global.updateQueueBadge();
         if (typeof global.renderQueueMain === 'function') global.renderQueueMain();
@@ -162,7 +174,9 @@
     } else {
       var list = jobsList();
       if (list && typeof list.push === 'function') {
-        list.push(job);
+        // Idempotent : ne pas pousser deux fois le même travail (même id).
+        var existingDirect = list.find(function (j) { return String(j.id) === String(job.id); });
+        if (existingDirect) Object.assign(existingDirect, job); else list.push(job);
         if (typeof global.saveJobs === 'function') global.saveJobs();
       }
     }

@@ -6209,6 +6209,13 @@ async function _autoFillTypesFromRequest(force){
   }
 }
 
+// Contexte de programmation intelligente pour une acceptation de commande cabinet :
+// cabinet (par portalId) + dents de la commande → lu par pick() pour le score.
+function _acceptScoringCtx(){
+  var cabId=null;try{var c=cabinets.find(function(x){return x.portalId===_acceptForm.portalId;});if(c)cabId=c.id;}catch(e){}
+  var teeth=[];try{var o=_findOrder(_acceptForm.portalId,_acceptForm.caseId);if(o&&Array.isArray(o.teeth))teeth=o.teeth;}catch(e){}
+  return {cabinetId:cabId,teeth:teeth};
+}
 /* ── APERÇU DE LA PROGRAMMATION dans la modale d'acceptation ───────────────────
    Affiche, avant validation, COMMENT le travail sera programmé (mêmes étapes/dates/
    techniciens que « Travaux en cours »), et permet de les ajuster. Recalculé en
@@ -6221,7 +6228,10 @@ function _recomputeAcceptSchedule(){
     if(!validItems.length||typeof _buildScheduledTasks!=='function'){_acceptForm.plannedTasks=[];_renderAcceptSchedule();return;}
     var _rawDeadlineA=_acceptForm.labDeliveryDate||_acceptForm.requestedDeliveryDate||'';
     var deadline=(typeof _planDeadline==='function')?_planDeadline(_rawDeadlineA):'';
-    var sched=_buildScheduledTasks(validItems.map(function(it){return{type:it.type,nb:it.nb||1};}),false,deadline,{levelDeadline:_rawDeadlineA})||[];
+    // Contexte de score (cabinet + dents) pour que l'aperçu applique les préférences dentiste/dent
+    // comme la vraie programmation — sinon l'aperçu propose un autre technicien que celui affecté.
+    var _accCtx=_acceptScoringCtx();
+    var sched=((typeof _runWithProgCtx==='function')?_runWithProgCtx(_accCtx,function(){return _buildScheduledTasks(validItems.map(function(it){return{type:it.type,nb:it.nb||1};}),false,deadline,{levelDeadline:_rawDeadlineA});}):_buildScheduledTasks(validItems.map(function(it){return{type:it.type,nb:it.nb||1};}),false,deadline,{levelDeadline:_rawDeadlineA}))||[];
     _acceptForm.plannedTasks=sched.map(function(t){return{label:t.label,tech:t.tech,dueDate:t.dueDate,sameTechAsLabel:t.sameTechAsLabel};});
     _enforceTechLinks(_acceptForm.plannedTasks);
     _acceptForm.scheduleEdited=false;
@@ -7316,7 +7326,9 @@ async function confirmAcceptOrder(){
       // en mode « au plus tôt » (défaut), elle renvoie '' → étapes planifiées dès maintenant.
       const _rawDeadlineC=_acceptForm.labDeliveryDate||_acceptForm.requestedDeliveryDate||'';
       const _deadline=(typeof _planDeadline==='function')?_planDeadline(_rawDeadlineC):'';
-      const _sched=_buildScheduledTasks(validItems.map(function(it){return{type:it.type,nb:it.nb||1};}),false,_deadline,{levelDeadline:_rawDeadlineC});
+      // Contexte de score (cabinet + dents) → applique les préférences dentiste/dent à la création.
+      const _accCtxC=_acceptScoringCtx();
+      const _sched=(typeof _runWithProgCtx==='function')?_runWithProgCtx(_accCtxC,function(){return _buildScheduledTasks(validItems.map(function(it){return{type:it.type,nb:it.nb||1};}),false,_deadline,{levelDeadline:_rawDeadlineC});}):_buildScheduledTasks(validItems.map(function(it){return{type:it.type,nb:it.nb||1};}),false,_deadline,{levelDeadline:_rawDeadlineC});
       if(_sched&&_sched.length)tasks.push.apply(tasks,_sched);
     }catch(e){console.warn('confirmAcceptOrder schedule',e);}
   } else if(progOn&&typeof buildTasks==='function'){
@@ -12741,7 +12753,12 @@ function openQueueDetail(id){
       return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:.84rem;">'+
         '<strong>'+escH2(lbl)+'</strong><span style="color:var(--ink-soft);">x '+(it.nb||1)+'</span></div>';
     }).join('')+'</div>';
-  const tasksPreview=buildMergedStepList(items,q.emp||false);
+  // Aperçu « si Auto » : on applique le MÊME contexte (cabinet + dents) que la vraie programmation
+  // auto, sinon le score ne joue pas et l'aperçu propose un technicien différent de ce qui sera
+  // réellement affecté (ex. kat au lieu du préféré kris sur une dent antérieure).
+  const tasksPreview=(typeof _runWithProgCtx==='function')
+    ?_runWithProgCtx({cabinetId:q.cabinet||q.cabinetId||null,teeth:toothD.teeth||[]},function(){return buildMergedStepList(items,q.emp||false);})
+    :buildMergedStepList(items,q.emp||false);
   const plannedHtml=tasksPreview.length?'<div style="margin-top:12px;"><div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:6px;">Étapes prévues si Auto</div>'+
     tasksPreview.map(function(s,i){
       var tech='';try{tech=getTech(s.tech).label||s.tech||'Auto';}catch(e){tech=s.tech||'Auto';}
@@ -12866,6 +12883,28 @@ function _readMissingItems(){
   return _readMissingItemsFromSaisie();
 }
 
+// ── Garde anti-doublon de création ───────────────────────────────────────────
+// Empêche qu'un même travail (même patient + mêmes types) soit créé plusieurs fois
+// en quelques secondes (double-clic, clics répétés pendant une latence, « refait »).
+// Ne bloque pas une création légitime identique : il suffit d'attendre quelques secondes.
+function _jobContentSig(patient,items){
+  var its=(items&&items.length)?items:[];
+  return String(patient||'').trim().toLowerCase()+'|'+its.map(function(i){return (i.type||'')+':'+(parseInt(i.nb,10)||1);}).join(',');
+}
+function _isRecentDuplicateJob(patient,items,windowMs){
+  var sig=_jobContentSig(patient,items);
+  var cutoff=Date.now()-(windowMs||6000);
+  function scan(arr){
+    return (arr||[]).some(function(o){
+      if(!o||!o.createdAt)return false;
+      var t=new Date(o.createdAt).getTime();
+      if(isNaN(t)||t<cutoff)return false;
+      var oi=(o.items&&o.items.length)?o.items:[{type:o.type,nb:o.nb||1}];
+      return _jobContentSig(o.patient,oi)===sig;
+    });
+  }
+  return scan(typeof jobs!=='undefined'?jobs:[])||scan(typeof queue!=='undefined'?queue:[]);
+}
 function addToQueue(){
   const name=document.getElementById('saisie-ip').value.trim();
   const type=document.getElementById('saisie-it').value;
@@ -12878,6 +12917,7 @@ function addToQueue(){
   const missingItems=_readMissingItems();
   if(!name){alert(t('alert.enter_patient'));return;}
   const allItems=getSaisieItems(type,nb);
+  if(_isRecentDuplicateJob(name,allItems)){if(typeof showToast==='function')showToast('⚠️ Ce travail vient d\'être ajouté — doublon évité','#d97706',3500);return;}
   var patientSex=typeof readSaisiePatientSex==='function'?readSaisiePatientSex():'';var patientAge=((document.getElementById('saisie-iage')||{}).value||'').trim();
   var toothD=_readSaisieTeethFields();
   const jobId=String(Date.now());
@@ -12921,6 +12961,7 @@ function addDirect(){
   const missingItems=_readMissingItems();
   if(!name){alert(t('alert.enter_patient'));return;}
   const allItems=getSaisieItems(type,nb);
+  if(_isRecentDuplicateJob(name,allItems)){if(typeof showToast==='function')showToast('⚠️ Ce travail vient d\'être ajouté — doublon évité','#d97706',3500);return;}
   var patientSex=typeof readSaisiePatientSex==='function'?readSaisiePatientSex():'';var patientAge=((document.getElementById('saisie-iage')||{}).value||'').trim();
   var toothD=_readSaisieTeethFields();const job=applyDeliveryFieldsToObject({id:String(Date.now()),patient:name,type:allItems[0].type,tasks:[],nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,createdAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId:'',teeth:toothD.teeth,links:toothD.links,patientSex:patientSex,patientAge:patientAge},deliv);
   if(missingItems.length){job.missingInfoItems=missingItems;}
@@ -13002,6 +13043,13 @@ function _promoteQueueItemToJob(q,tasks){
     jobs.push(payload);
   }
   removeFromQueue(q.id,{programmed:true});
+  // Défensif : retirer d'éventuelles entrées de file EN DOUBLE pour ce même travail (jobId),
+  // pour qu'un doublon de file ne puisse pas être re-programmé en un second travail.
+  if(jobId&&typeof queue!=='undefined'&&Array.isArray(queue)){
+    var _before=queue.length;
+    queue=queue.filter(function(x){return !(x&&x.jobId&&String(x.jobId)===String(jobId));});
+    if(queue.length!==_before){saveQueue();if(typeof updateQueueBadge==='function')updateQueueBadge();if(typeof renderQueueMain==='function')renderQueueMain();}
+  }
   saveJobs();
   render();
   autoPublishCab(q.cabinet||'',{silent:true});
@@ -13072,10 +13120,18 @@ function openManualModal(id){
     const typeLabel=ct?ct.label:(TYPE_LABELS[item.type]||item.type);
     mmItems.push({type:item.type,nb:item.nb||1,typeLabel:typeLabel});
   });
-  // Construire les étapes (fusionnées si multi-types), avec un numéro de jour par défaut
-  const rawSteps=items.length===1
-    ?buildTasks(items[0].type,q.emp||false,null).map(function(t,i){return{label:t.label,tech:t.tech,typeIdx:0,day:i+1};})
-    :buildMergedStepList(items,q.emp||false).map(function(s,i){return Object.assign({},s,{day:s.wd||(i+1)});});
+  // Construire les étapes (fusionnées si multi-types), avec un numéro de jour par défaut.
+  // Dans le contexte de programmation (cabinet + dents) pour que le technicien proposé par défaut
+  // soit le choix INTELLIGENT (score) et non un simple équilibrage — cohérent avec « Programmer auto ».
+  const _mmTeeth=q.teeth&&q.teeth.length?q.teeth:((typeof _jobTeethArrays==='function'?_jobTeethArrays(q).teeth:[])||[]);
+  const _mmBuild=function(){
+    return items.length===1
+      ?buildTasks(items[0].type,q.emp||false,null).map(function(t,i){return{label:t.label,tech:t.tech,typeIdx:0,day:i+1};})
+      :buildMergedStepList(items,q.emp||false).map(function(s,i){return Object.assign({},s,{day:s.wd||(i+1)});});
+  };
+  const rawSteps=(typeof _runWithProgCtx==='function')
+    ?_runWithProgCtx({cabinetId:q.cabinet||q.cabinetId||null,teeth:_mmTeeth},_mmBuild)
+    :_mmBuild();
   if(!rawSteps.length){alert(t('alert.unknown_type'));return;}
   mmSteps=rawSteps.map(function(s){return Object.assign({},s,{deleted:false});});
   document.getElementById('mm-title').textContent=q.patient;
