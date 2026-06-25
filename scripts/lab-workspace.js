@@ -516,6 +516,9 @@
     var cabEl = document.getElementById('saisie-icab');
     var cab = cabEl ? cabEl.value : '';
     var urg = document.getElementById('saisie-iurg').checked;
+    // Empreinte numérique (workflow « emp ») : la case était ignorée ici → le travail était
+    // programmé avec le workflow NON-numérique (ex. inlay core générique au lieu du workflow scan/CAO).
+    var emp = (document.getElementById('saisie-iemp') || {}).checked || false;
     var patientSex = readSaisiePatientSex();
     var patientAge = (((global.document.getElementById('saisie-iage') || {}).value) || '').trim();
     var missingItems =
@@ -548,6 +551,7 @@
       needsProg: isProgEnabled(),
       patientSex: patientSex,
       patientAge: patientAge,
+      emp: emp,
     };
     if (missingItems.length) job.missingInfoItems = missingItems;
     if (isProgEnabled() && typeof global.promptAdminJobFinish === 'function') {
@@ -567,6 +571,7 @@
         jobId: job.id,
         patientSex: patientSex,
       patientAge: patientAge,
+        emp: emp,
       };
       if (missingItems.length) queueItem.missingInfoItems = missingItems;
       global.promptAdminJobFinish({ job: job, queueItem: queueItem });

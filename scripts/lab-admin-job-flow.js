@@ -143,6 +143,43 @@
     var qItem = pending.queueItem;
     var progOn = typeof global.isProgEnabled === 'function' && global.isProgEnabled();
 
+    // ── AUTO-PROG : aperçu éditable AVANT création (création différée) ──────────────────
+    // On NE crée PAS encore le travail : on ouvre l'éditeur de programmation en mode brouillon
+    // (proposition + édition manuelle + « 🤖 IA » + « 🔁 Autre proposition »). Le travail n'est
+    // créé/programmé et la fiche générée QU'À la validation finale (onCommit). Ainsi, les
+    // aller-retours d'essai (voir la prog, revenir, changer) ne créent aucun travail en double.
+    if (autoProgram && progOn && typeof global.openScheduleEditor === 'function' && typeof global._altSchedule === 'function') {
+      var _items2 = (job.items && job.items.length) ? job.items : [{ type: job.type, nb: job.nb || 1 }];
+      var _dl = job.labDeliveryDate || job.requestedDeliveryDate || '';
+      global.openScheduleEditor(null, {
+        confirmLabel: '✓ Valider et générer la fiche',
+        draft: {
+          patient: job.patient,
+          typeLabel: (typeof global.getJobTypeLabel === 'function') ? global.getJobTypeLabel(job) : '',
+          items: _items2.map(function (it) { return { type: it.type, nb: it.nb || 1 }; }),
+          ctx: { cabinetId: job.cabinet || null, teeth: job.teeth || [], emp: !!job.emp, deadline: _dl, excludeJobId: job.id },
+        },
+        onCommit: function (finalTasks) {
+          job.tasks = finalTasks || [];
+          job.needsProg = false;
+          job.updatedAt = new Date().toISOString();
+          var l = jobsList();
+          if (l && typeof l.push === 'function') {
+            var ex = l.find(function (j) { return String(j.id) === String(job.id); });
+            if (ex) { Object.assign(ex, job); ex.tasks = job.tasks; } else l.push(job);
+          }
+          if (typeof global._attachReviewFlags === 'function') { try { global._attachReviewFlags(job); } catch (e) {} }
+          if (typeof global._recordScheduleToProfile === 'function') { try { global._recordScheduleToProfile(job.tasks, { weight: 2 }); } catch (e) {} }
+          if (typeof global.saveJobs === 'function') global.saveJobs();
+          if (typeof global.render === 'function') global.render();
+          showLabSheetForJob(job);
+          if (typeof global.autoPublishCab === 'function') { try { global.autoPublishCab(job.cabinet || '', { silent: true }); } catch (e) {} }
+          if (typeof global.cloudSave === 'function') global.cloudSave();
+        },
+      });
+      return;
+    }
+
     if (progOn && qItem) {
       var list = jobsList();
       if (list && typeof list.push === 'function') {
@@ -181,21 +218,10 @@
       }
     }
 
-    // Programmation automatique immédiate (1 geste) : génère les étapes (rétro-planifiées sur
-    // l'échéance) avant d'afficher la fiche, pour que le travail ne reste pas « à programmer ».
+    // Repli (éditeur indisponible) : programmation automatique immédiate avant la fiche, pour que
+    // le travail ne reste pas « à programmer ». Le cas normal passe par l'éditeur brouillon ci-dessus.
     if (autoProgram && progOn && typeof global.programJobAuto === 'function') {
       try { global.programJobAuto(job.id); } catch (e) { /* on garde le travail même si la prog échoue */ }
-      // APERÇU ÉDITABLE AVANT LA FICHE : présente la programmation proposée (édition manuelle,
-      // « 🤖 IA », « 🔁 Autre proposition »). La fiche ne s'ouvre qu'après validation.
-      if (typeof global.openScheduleEditor === 'function') {
-        if (typeof global.render === 'function') global.render();
-        if (typeof global.cloudSave === 'function') global.cloudSave();
-        global.openScheduleEditor(job.id, {
-          confirmLabel: '✓ Valider et générer la fiche',
-          afterSave: function (j) { showLabSheetForJob(j || job); },
-        });
-        return;
-      }
     }
 
     if (typeof global.render === 'function') global.render();

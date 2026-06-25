@@ -4546,7 +4546,10 @@ function buildTasks(type,emp,forced,startDate,nb){
   // pools hardcodés. Sinon les techniciens fantômes (jc, litcha, fabien…) qui
   // n'existent plus dans les nouveaux comptes seraient assignés à tort.
   const customDef=Array.isArray(customTypes)?customTypes.find(function(c){return c.id===type;}):null;
-  const hasCustomSteps=customDef&&Array.isArray(customDef.steps)&&customDef.steps.length>0;
+  // Un type est « personnalisé » s'il a un workflow standard OU un workflow numérique (stepsEmp).
+  // Sans la partie stepsEmp, un type configuré UNIQUEMENT en numérique retombait sur le workflow
+  // intégré (ex. inlay core générique « marie ») — workflow numérique ignoré.
+  const hasCustomSteps=customDef&&((Array.isArray(customDef.steps)&&customDef.steps.length>0)||(emp&&Array.isArray(customDef.stepsEmp)&&customDef.stepsEmp.length>0));
   const PM=['jc','lilou','litcha','tom'];
   const PF=['jc','litcha'];
   const PO=['marie','tom'];
@@ -7086,7 +7089,13 @@ function _applyAiPlan(){
 var _schedEdit=null; // {jobId, steps:[{label,tech,dueDate,nb,sameTechAsLabel,done,_deleted}], variant}
 function _schedVariantName(v){return ['lissé','au plus tôt','calé sur l\'échéance','autres techniciens'][((v%4)+4)%4];}
 function _schedSig(steps){return steps.map(function(s){return (s.label||'')+'|'+String(s.dueDate||'').slice(0,10)+'|'+(s.tech||'');}).join(';');}
+// Contexte de l'éditeur : depuis un travail existant OU depuis un BROUILLON (création différée :
+// on visualise/édite la programmation AVANT que le travail ne soit créé/validé).
 function _schedEditCtx(){
+  if(_schedEdit&&_schedEdit.draft){
+    var d=_schedEdit.draft;
+    return {job:null,items:(d.items&&d.items.length)?d.items:[],ctx:d.ctx||{}};
+  }
   var job=(typeof jobs!=='undefined'?jobs:[]).find(function(j){return String(j.id)===String(_schedEdit&&_schedEdit.jobId);});
   if(!job)return null;
   var items=(job.items&&job.items.length)?job.items:[{type:job.type,nb:job.nb||1}];
@@ -7096,14 +7105,17 @@ function _schedEditCtx(){
 function _schedEditActiveSteps(){return (_schedEdit?_schedEdit.steps:[]).filter(function(s){return !s._deleted;});}
 function openScheduleEditor(jobId,opts){
   opts=opts||{};
-  var job=(typeof jobs!=='undefined'?jobs:[]).find(function(j){return String(j.id)===String(jobId);});
-  if(!job){if(typeof showToast==='function')showToast('Travail introuvable','#c0392b');return;}
-  _schedEdit={jobId:String(jobId),variant:0,opts:opts,steps:(job.tasks||[]).map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate||addWD(new Date(),1).toISOString(),nb:parseInt(t.nb,10)||1,sameTechAsLabel:t.sameTechAsLabel,done:!!t.done,_deleted:false};})};
-  // Travail pas encore programmé → générer une première proposition automatiquement.
+  var draft=opts.draft||null;
+  var job=jobId?(typeof jobs!=='undefined'?jobs:[]).find(function(j){return String(j.id)===String(jobId);}):null;
+  if(!job&&!draft){if(typeof showToast==='function')showToast('Travail introuvable','#c0392b');return;}
+  _schedEdit={jobId:job?String(jobId):null,draft:draft,variant:0,opts:opts,steps:((job&&job.tasks)?job.tasks:[]).map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate||addWD(new Date(),1).toISOString(),nb:parseInt(t.nb,10)||1,sameTechAsLabel:t.sameTechAsLabel,done:!!t.done,_deleted:false};})};
+  // Pas d'étapes (travail neuf ou brouillon) → générer une première proposition automatiquement.
   if(!_schedEdit.steps.length&&typeof _altSchedule==='function'){
     var info0=_schedEditCtx();
-    if(info0){try{var t0=_altSchedule(info0.items,info0.ctx,0)||[];_schedEdit.steps=t0.map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate,nb:parseInt(t.nb,10)||1,sameTechAsLabel:t.sameTechAsLabel,done:false,_deleted:false};});}catch(e){}}
+    if(info0&&info0.items&&info0.items.length){try{var t0=_altSchedule(info0.items,info0.ctx,0)||[];_schedEdit.steps=t0.map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate,nb:parseInt(t.nb,10)||1,sameTechAsLabel:t.sameTechAsLabel,done:false,_deleted:false};});}catch(e){}}
   }
+  var _titlePatient=job?formatJobPatientLabel(job):((draft&&draft.patient)||'Nouveau travail');
+  var _titleType=job?getJobTypeLabel(job):((draft&&draft.typeLabel)||'');
   var existing=document.getElementById('sched-edit-overlay');if(existing)existing.remove();
   var overlay=document.createElement('div');
   overlay.id='sched-edit-overlay';
@@ -7113,7 +7125,7 @@ function openScheduleEditor(jobId,opts){
       '<div style="font-weight:700;font-size:1.1rem;">🗓️ Modifier la programmation</div>'+
       '<button onclick="_schedEditClose()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.8rem;">✕ Fermer</button>'+
     '</div>'+
-    '<div style="font-size:.78rem;color:var(--ink-soft);margin-bottom:12px;">'+escH2(formatJobPatientLabel(job))+' · '+escH2(getJobTypeLabel(job))+'</div>'+
+    '<div style="font-size:.78rem;color:var(--ink-soft);margin-bottom:12px;">'+escH2(_titlePatient)+(_titleType?' · '+escH2(_titleType):'')+'</div>'+
     '<div id="sched-edit-rows" style="display:flex;flex-direction:column;gap:7px;"></div>'+
     '<button onclick="_schedEditAddStep()" style="margin-top:10px;background:#f1f5f9;border:1px dashed #94a3b8;border-radius:8px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer;color:#475569;width:100%;">＋ Ajouter une étape</button>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;border-top:1px dashed var(--border);padding-top:12px;">'+
@@ -7214,10 +7226,21 @@ async function _schedEditAi(){
 }
 function _schedEditSave(){
   if(!_schedEdit)return;
+  var active=_schedEditActiveSteps().filter(function(s){return s.dueDate;});
+  var finalTasks=active.map(function(s){return {label:s.label||'Étape',tech:s.tech||'auto',dueDate:s.dueDate,nb:parseInt(s.nb,10)||1,done:!!s.done,sameTechAsLabel:s.sameTechAsLabel};});
+  if(typeof _enforceTechLinks==='function')_enforceTechLinks(finalTasks);
+  // ── MODE BROUILLON : le travail n'existe pas encore. On délègue la CRÉATION à onCommit, qui
+  // n'est appelé QU'À CET INSTANT (validation finale) → aller-retours/essais ne créent rien. ──
+  if(_schedEdit.draft&&_schedEdit.opts&&typeof _schedEdit.opts.onCommit==='function'){
+    var onCommit=_schedEdit.opts.onCommit;
+    _schedEditClose();
+    if(typeof showToast==='function')showToast('✅ Programmation validée','#2a6049');
+    try{onCommit(finalTasks);}catch(e){console.warn('schedEdit onCommit',e);}
+    return;
+  }
   var job=(typeof jobs!=='undefined'?jobs:[]).find(function(j){return String(j.id)===String(_schedEdit.jobId);});
   if(!job){_schedEditClose();return;}
-  var active=_schedEditActiveSteps().filter(function(s){return s.dueDate;});
-  job.tasks=active.map(function(s){return {label:s.label||'Étape',tech:s.tech||'auto',dueDate:s.dueDate,nb:parseInt(s.nb,10)||1,done:!!s.done,sameTechAsLabel:s.sameTechAsLabel};});
+  job.tasks=finalTasks.map(function(s){return {label:s.label,tech:s.tech,dueDate:s.dueDate,nb:s.nb,done:s.done,sameTechAsLabel:s.sameTechAsLabel};});
   if(typeof _enforceTechLinks==='function')_enforceTechLinks(job.tasks);
   job.needsProg=false;
   job.updatedAt=new Date().toISOString();
@@ -12922,7 +12945,7 @@ function addToQueue(){
   var toothD=_readSaisieTeethFields();
   const jobId=String(Date.now());
   const trackCode=typeof genTrackCode==='function'?genTrackCode():'';
-  const baseJob=applyDeliveryFieldsToObject({id:jobId,patient:name,type:allItems[0].type,tasks:[],nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,createdAt:new Date().toISOString(),trackCode:trackCode,prothesisId:'',teeth:toothD.teeth,links:toothD.links,patientSex:patientSex,patientAge:patientAge,needsProg:true},deliv);
+  const baseJob=applyDeliveryFieldsToObject({id:jobId,patient:name,type:allItems[0].type,tasks:[],nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,emp:emp||false,createdAt:new Date().toISOString(),trackCode:trackCode,prothesisId:'',teeth:toothD.teeth,links:toothD.links,patientSex:patientSex,patientAge:patientAge,needsProg:true},deliv);
   const queueItem=applyDeliveryFieldsToObject({id:jobId+'_q',jobId:jobId,patient:name,type:allItems[0].type,nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,emp:emp||false,createdAt:baseJob.createdAt,trackCode:trackCode,teeth:toothD.teeth,links:toothD.links,patientSex:patientSex,patientAge:patientAge},deliv);
   if(missingItems.length){queueItem.missingInfoItems=missingItems;}
   if(missingItems.length){baseJob.missingInfoItems=missingItems;}
@@ -13030,7 +13053,7 @@ function _promoteQueueItemToJob(q,tasks){
   const jobId=q.jobId||String(Date.now());
   const track=q.trackCode||(typeof genTrackCode==='function'?genTrackCode():'');
   const nowIso=new Date().toISOString();
-  const payload=applyDeliveryFieldsToObject({id:jobId,patient:q.patient,type:items[0].type,tasks:tasks,nb:items[0].nb||1,items:items,urgent:q.urgent||false,note:q.note||'',cabinet:q.cabinet||'',createdAt:q.createdAt||nowIso,updatedAt:nowIso,trackCode:track,prothesisId:q.prothesisId||'',teeth:q.teeth||[],links:q.links||[],patientSex:q.patientSex||'',attachments:q.attachments||[],orderData:q.orderData||null,needsProg:false,missingInfoItems:q.missingInfoItems},_deliveryFieldsFromSource(q));
+  const payload=applyDeliveryFieldsToObject({id:jobId,patient:q.patient,type:items[0].type,tasks:tasks,nb:items[0].nb||1,items:items,urgent:q.urgent||false,emp:q.emp||false,note:q.note||'',cabinet:q.cabinet||'',createdAt:q.createdAt||nowIso,updatedAt:nowIso,trackCode:track,prothesisId:q.prothesisId||'',teeth:q.teeth||[],links:q.links||[],patientSex:q.patientSex||'',attachments:q.attachments||[],orderData:q.orderData||null,needsProg:false,missingInfoItems:q.missingInfoItems},_deliveryFieldsFromSource(q));
   _attachReviewFlags(payload);
   const existing=jobs.find(function(j){return String(j.id)===String(jobId);});
   if(existing){
