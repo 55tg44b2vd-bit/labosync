@@ -171,6 +171,17 @@
     // l'échéance) avant d'afficher la fiche, pour que le travail ne reste pas « à programmer ».
     if (autoProgram && progOn && typeof global.programJobAuto === 'function') {
       try { global.programJobAuto(job.id); } catch (e) { /* on garde le travail même si la prog échoue */ }
+      // APERÇU ÉDITABLE AVANT LA FICHE : présente la programmation proposée (édition manuelle,
+      // « 🤖 IA », « 🔁 Autre proposition »). La fiche ne s'ouvre qu'après validation.
+      if (typeof global.openScheduleEditor === 'function') {
+        if (typeof global.render === 'function') global.render();
+        if (typeof global.cloudSave === 'function') global.cloudSave();
+        global.openScheduleEditor(job.id, {
+          confirmLabel: '✓ Valider et générer la fiche',
+          afterSave: function (j) { showLabSheetForJob(j || job); },
+        });
+        return;
+      }
     }
 
     if (typeof global.render === 'function') global.render();

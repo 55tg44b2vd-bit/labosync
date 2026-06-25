@@ -7084,10 +7084,11 @@ function _schedEditCtx(){
   return {job:job,items:items,ctx:{cabinetId:job.cabinet||null,teeth:job.teeth||[],emp:job.emp||false,deadline:raw,excludeJobId:job.id}};
 }
 function _schedEditActiveSteps(){return (_schedEdit?_schedEdit.steps:[]).filter(function(s){return !s._deleted;});}
-function openScheduleEditor(jobId){
+function openScheduleEditor(jobId,opts){
+  opts=opts||{};
   var job=(typeof jobs!=='undefined'?jobs:[]).find(function(j){return String(j.id)===String(jobId);});
   if(!job){if(typeof showToast==='function')showToast('Travail introuvable','#c0392b');return;}
-  _schedEdit={jobId:String(jobId),variant:0,steps:(job.tasks||[]).map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate||addWD(new Date(),1).toISOString(),nb:parseInt(t.nb,10)||1,sameTechAsLabel:t.sameTechAsLabel,done:!!t.done,_deleted:false};})};
+  _schedEdit={jobId:String(jobId),variant:0,opts:opts,steps:(job.tasks||[]).map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate||addWD(new Date(),1).toISOString(),nb:parseInt(t.nb,10)||1,sameTechAsLabel:t.sameTechAsLabel,done:!!t.done,_deleted:false};})};
   // Travail pas encore programmé → générer une première proposition automatiquement.
   if(!_schedEdit.steps.length&&typeof _altSchedule==='function'){
     var info0=_schedEditCtx();
@@ -7109,7 +7110,7 @@ function openScheduleEditor(jobId){
       '<button onclick="_schedEditRegen()" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:8px;padding:8px 14px;font-size:.82rem;font-weight:700;cursor:pointer;">🔁 Autre proposition</button>'+
       '<button onclick="_schedEditAi()" style="background:#ede9fe;color:#6b21a8;border:1px solid #c4b5fd;border-radius:8px;padding:8px 14px;font-size:.82rem;font-weight:700;cursor:pointer;">🤖 IA</button>'+
       '<div style="flex:1;"></div>'+
-      '<button onclick="_schedEditSave()" style="background:#2a6049;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:.82rem;font-weight:700;cursor:pointer;">✓ Enregistrer</button>'+
+      '<button onclick="_schedEditSave()" style="background:#2a6049;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:.82rem;font-weight:700;cursor:pointer;">'+escH2(opts.confirmLabel||'✓ Enregistrer')+'</button>'+
     '</div>'+
     '<div id="sched-edit-ai" style="margin-top:10px;"></div>'+
   '</div>';
@@ -7217,9 +7218,12 @@ function _schedEditSave(){
   if(typeof cloudSave==='function')cloudSave();
   if(typeof render==='function')render();
   var jid=job.id;
+  var afterSave=(_schedEdit.opts&&typeof _schedEdit.opts.afterSave==='function')?_schedEdit.opts.afterSave:null;
   _schedEditClose();
   if(typeof showToast==='function')showToast('✅ Programmation enregistrée','#2a6049');
-  if(typeof openJobDetail==='function')openJobDetail(jid);
+  // Flux de création : enchaîner sur la fiche (afterSave) ; sinon rouvrir le détail du travail.
+  if(afterSave){try{afterSave(job);}catch(e){if(typeof openJobDetail==='function')openJobDetail(jid);}}
+  else if(typeof openJobDetail==='function')openJobDetail(jid);
 }
 
 var _acceptingInProgress=false;
