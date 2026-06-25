@@ -85,6 +85,23 @@ rootFiles.forEach(copyFile);
   }
 })();
 
+// 1c) Empreinte de build : tamponne window.LB_BUILD dans app.html + labo-mobile.html
+// (copies deploy/) et écrit version.txt. Les pages comparent leur LB_BUILD à /version.txt :
+// après un déploiement, les onglets ouverts proposent de recharger et convergent vers le
+// même code → un onglet périmé ne peut plus réécraser en silence les réglages des autres.
+const BUILD_ID = new Date().toISOString().replace(/[:.]/g, '-');
+['app.html', 'labo-mobile.html'].forEach(function (f) {
+  const p = path.join(OUT, f);
+  if (!fs.existsSync(p)) return;
+  let s = fs.readFileSync(p, 'utf8');
+  const before = s;
+  s = s.replace(/window\.LB_BUILD\s*=\s*'[^']*'/, "window.LB_BUILD='" + BUILD_ID + "'");
+  if (s !== before) fs.writeFileSync(p, s);
+  else console.warn('⚠️  LB_BUILD introuvable dans ' + f + ' (détecteur de version non tamponné)');
+});
+fs.writeFileSync(path.join(OUT, 'version.txt'), BUILD_ID);
+console.log('   • build ' + BUILD_ID + ' tamponné (LB_BUILD) + version.txt');
+
 // 2) Dossiers publics
 const nVendor = copyDir('vendor');
 const nFns = copyDir(path.join('netlify', 'functions'));

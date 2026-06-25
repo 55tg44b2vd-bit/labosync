@@ -780,6 +780,31 @@ let jobs=[], archive=[], cabinets=[], bdl=[], documents=[], tarifs=[];
 let waiting=[], queue=[], conges=[], absences=[];
 let TECHS={}, customTypes=[], syns=[], scanHist=[], fourns=[], bdc=[];
 window.__labMobileState=function(){return{jobs:jobs,archive:archive,cabinets:cabinets,bdl:bdl,documents:documents,tarifs:tarifs,waiting:waiting,queue:queue,conges:conges,absences:absences,TECHS:TECHS,customTypes:customTypes,syns:syns,scanHist:scanHist,fourns:fourns,bdc:bdc};};
+// ── Marqueur de build + détecteur de nouvelle version (voir app.html). ───────────
+window.LB_BUILD='dev';
+var _lbUpdateShown=false;
+async function _checkAppVersion(){
+  try{
+    if(!window.LB_BUILD||window.LB_BUILD==='dev')return;
+    var r=await fetch('/version.txt?ts='+Date.now(),{cache:'no-store'});
+    if(!r.ok)return;
+    var v=(await r.text()).trim();
+    if(v&&v!==window.LB_BUILD)_showUpdateBanner();
+  }catch(e){}
+}
+function _showUpdateBanner(){
+  if(_lbUpdateShown||!document.body)return;_lbUpdateShown=true;
+  var b=document.createElement('div');
+  b.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:#1e293b;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;font-size:.88rem;box-shadow:0 -2px 14px rgba(0,0,0,.3);';
+  var span=document.createElement('span');span.textContent='🔄 Nouvelle version disponible. Rechargez.';
+  var btn=document.createElement('button');btn.textContent='Recharger';
+  btn.style.cssText='background:#2a6049;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-weight:700;cursor:pointer;';
+  btn.onclick=function(){try{location.reload(true);}catch(e){location.reload();}};
+  b.appendChild(span);b.appendChild(btn);document.body.appendChild(b);
+}
+setTimeout(_checkAppVersion,10000);
+setInterval(_checkAppVersion,180000);
+try{window.addEventListener('focus',_checkAppVersion);}catch(e){}
 
 let _currentCabId=null;
 let _chatCabId=null;
