@@ -13020,32 +13020,54 @@ function removeFromQueue(id,opts){
 // - Les phases s'enchaînent : la phase n+1 démarre après la fin (jour max) de la phase n.
 // - À l'intérieur d'un type, les J+N configurés sont respectés (lus via buildTasks).
 // Retourne [{label, tech, wd}], où wd = nombre de jours ouvrés depuis le départ du travail.
+// ── Fusion multi-types par FAMILLE d'étapes ──────────────────────────────────
+// Pour un travail à plusieurs types, on ne concatène plus bêtement chaque workflow
+// (ce qui produisait 2 empreintes, 2 impressions de modèle, et des étapes qui
+// devraient être faites EN MÊME TEMPS placées l'une après l'autre). On regroupe par
+// FAMILLE de poste : une seule prise d'empreinte/scan, une seule impression de modèle,
+// et les étapes de même famille (ex. modélisation inlay core + modélisation chappe) le
+// MÊME jour (en parallèle). Le dédoublonnage est insensible aux variantes de libellé
+// (« récupération empreinte » ≈ « récupération des empreintes »).
+// Copie conforme dans labo-mobile.html (buildMergedStepListMobile) — voir tests/merge-multitype.
+function _mergeStepsByFamily(items,buildOne){
+  var FAM=[
+    {id:'empreinte',o:1,kw:['empreinte','scan','recup','numeris','stereo','fichier optique']},
+    {id:'pilier',o:2,kw:['inlay core','inlay-core','pilier','tenon','faux moignon','moignon']},
+    {id:'cao',o:2,kw:['modelis','cao','design','wax','maquette','conception']},
+    {id:'usinage',o:3,kw:['usinage','fraisage','frittage','impression','imprim','decoupe']},
+    {id:'coulee',o:3,kw:['coulee','chape','armature','alliage','fonte']},
+    {id:'montage',o:4,kw:['montage','cosmet','ceram','stratif','maquill','emaill']},
+    {id:'cuisson',o:5,kw:['cuisson','biscuit','four']},
+    {id:'finition',o:6,kw:['glacage','finition','polissage','glaze','ebavur']}
+  ];
+  function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
+  function orderOf(label){var n=norm(label);for(var i=0;i<FAM.length;i++){for(var j=0;j<FAM[i].kw.length;j++){if(n.indexOf(norm(FAM[i].kw[j]))>=0)return FAM[i].o;}}return 3;}
+  function isScan(l){var n=norm(l);return n.indexOf('empreinte')>=0||n.indexOf('scan')>=0||n.indexOf('recup')>=0;}
+  function isModelPrint(l){var n=norm(l);return n.indexOf('impression')>=0&&(n.indexOf('model')>=0||n.indexOf('modele')>=0);}
+  var all=[];
+  items.forEach(function(it){
+    (buildOne(it)||[]).forEach(function(tk){
+      all.push({label:tk.label,tech:tk.tech,nb:tk.nb||1,sameTechAsLabel:tk.sameTechAsLabel,
+        order:orderOf(tk.label),shared:isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null)});
+    });
+  });
+  // Étapes « partagées » (empreinte, impression de modèle) → une seule pour tout le travail.
+  var out=[],seen={};
+  all.forEach(function(s){
+    if(s.shared){if(seen[s.shared]){seen[s.shared].nb+=s.nb;return;}seen[s.shared]=s;out.push(s);}
+    else out.push(s);
+  });
+  // Jours consécutifs par ordre de famille distinct → étapes de même famille le même jour.
+  var orders=[];out.forEach(function(s){if(orders.indexOf(s.order)<0)orders.push(s.order);});
+  orders.sort(function(a,b){return a-b;});
+  var dayOf={};orders.forEach(function(o,i){dayOf[o]=i+1;});
+  out.forEach(function(s){s.wd=dayOf[s.order];});
+  out.sort(function(a,b){return a.wd-b.wd;});
+  return out.map(function(s){return {label:s.label,tech:s.tech,wd:s.wd,sameTechAsLabel:s.sameTechAsLabel,nb:s.nb};});
+}
 function buildMergedStepList(items,emp){
   const tmpBase=new Date();tmpBase.setHours(0,0,0,0);
-  // Regrouper les types par phase, en conservant l'ordre de saisie à l'intérieur d'une phase.
-  const byPhase={};
-  items.forEach(function(item){const p=_typePhase(item.type);(byPhase[p]=byPhase[p]||[]).push(item);});
-  const phases=Object.keys(byPhase).map(Number).sort(function(a,b){return a-b;});
-  const seenLabels=new Set();
-  const out=[];
-  let cumWD=0; // jours ouvrés déjà consommés par les phases précédentes
-  phases.forEach(function(p){
-    let phaseMax=0;
-    byPhase[p].forEach(function(item){
-      const tasks=buildTasks(item.type,emp,null,tmpBase,item.nb||1)||[];
-      tasks.forEach(function(tk){
-        // Offset relatif de l'étape DANS son type (J+N), reconstitué depuis la date produite.
-        const off=Math.max(1,countWD(tmpBase,tk.dueDate));
-        if(off>phaseMax)phaseMax=off;
-        if(seenLabels.has(tk.label))return;
-        seenLabels.add(tk.label);
-        out.push({label:tk.label,tech:tk.tech,wd:cumWD+off,sameTechAsLabel:tk.sameTechAsLabel,nb:tk.nb||1});
-      });
-    });
-    cumWD+=phaseMax;
-  });
-  out.sort(function(a,b){return a.wd-b.wd;});
-  return out;
+  return _mergeStepsByFamily(items,function(it){return buildTasks(it.type,emp,null,tmpBase,it.nb||1)||[];});
 }
 
 function _promoteQueueItemToJob(q,tasks){

@@ -3989,28 +3989,45 @@ function _levelTasksLoad(tasks,levelDeadlineISO,excludeJobId){
   }
   return tasks;
 }
-// Fusion multi-types par phases (miroir desktop buildMergedStepList).
+// Fusion multi-types par FAMILLE d'étapes (copie conforme du desktop _mergeStepsByFamily) :
+// une seule empreinte, une seule impression de modèle, étapes de même famille le même jour.
+function _mergeStepsByFamily(items,buildOne){
+  var FAM=[
+    {id:'empreinte',o:1,kw:['empreinte','scan','recup','numeris','stereo','fichier optique']},
+    {id:'pilier',o:2,kw:['inlay core','inlay-core','pilier','tenon','faux moignon','moignon']},
+    {id:'cao',o:2,kw:['modelis','cao','design','wax','maquette','conception']},
+    {id:'usinage',o:3,kw:['usinage','fraisage','frittage','impression','imprim','decoupe']},
+    {id:'coulee',o:3,kw:['coulee','chape','armature','alliage','fonte']},
+    {id:'montage',o:4,kw:['montage','cosmet','ceram','stratif','maquill','emaill']},
+    {id:'cuisson',o:5,kw:['cuisson','biscuit','four']},
+    {id:'finition',o:6,kw:['glacage','finition','polissage','glaze','ebavur']}
+  ];
+  function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
+  function orderOf(label){var n=norm(label);for(var i=0;i<FAM.length;i++){for(var j=0;j<FAM[i].kw.length;j++){if(n.indexOf(norm(FAM[i].kw[j]))>=0)return FAM[i].o;}}return 3;}
+  function isScan(l){var n=norm(l);return n.indexOf('empreinte')>=0||n.indexOf('scan')>=0||n.indexOf('recup')>=0;}
+  function isModelPrint(l){var n=norm(l);return n.indexOf('impression')>=0&&(n.indexOf('model')>=0||n.indexOf('modele')>=0);}
+  var all=[];
+  items.forEach(function(it){
+    (buildOne(it)||[]).forEach(function(tk){
+      all.push({label:tk.label,tech:tk.tech,nb:tk.nb||1,sameTechAsLabel:tk.sameTechAsLabel,
+        order:orderOf(tk.label),shared:isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null)});
+    });
+  });
+  var out=[],seen={};
+  all.forEach(function(s){
+    if(s.shared){if(seen[s.shared]){seen[s.shared].nb+=s.nb;return;}seen[s.shared]=s;out.push(s);}
+    else out.push(s);
+  });
+  var orders=[];out.forEach(function(s){if(orders.indexOf(s.order)<0)orders.push(s.order);});
+  orders.sort(function(a,b){return a-b;});
+  var dayOf={};orders.forEach(function(o,i){dayOf[o]=i+1;});
+  out.forEach(function(s){s.wd=dayOf[s.order];});
+  out.sort(function(a,b){return a.wd-b.wd;});
+  return out.map(function(s){return {label:s.label,tech:s.tech,wd:s.wd,sameTechAsLabel:s.sameTechAsLabel,nb:s.nb};});
+}
 function buildMergedStepListMobile(items,emp){
   var tmpBase=new Date();tmpBase.setHours(0,0,0,0);
-  var byPhase={};
-  items.forEach(function(item){var p=_typePhase(item.type);(byPhase[p]=byPhase[p]||[]).push(item);});
-  var phases=Object.keys(byPhase).map(Number).sort(function(a,b){return a-b;});
-  var seenLabels={};var out=[];var cumWD=0;
-  phases.forEach(function(p){
-    var phaseMax=0;
-    byPhase[p].forEach(function(item){
-      var tasks=buildTasksMobile(item.type,emp,item.nb||1,tmpBase)||[];
-      tasks.forEach(function(tk){
-        var off=Math.max(1,countWD(tmpBase,tk.dueDate));
-        if(off>phaseMax)phaseMax=off;
-        if(seenLabels[tk.label])return;seenLabels[tk.label]=1;
-        out.push({label:tk.label,tech:tk.tech,wd:cumWD+off,nb:tk.nb||1});
-      });
-    });
-    cumWD+=phaseMax;
-  });
-  out.sort(function(a,b){return a.wd-b.wd;});
-  return out;
+  return _mergeStepsByFamily(items,function(it){return buildTasksMobile(it.type,emp,it.nb||1,tmpBase)||[];});
 }
 // Construit les étapes planifiées (rétro-planning + lissage) — miroir desktop _buildScheduledTasks.
 function _buildScheduledTasksMobile(items,emp,deadlineISO,opts){
