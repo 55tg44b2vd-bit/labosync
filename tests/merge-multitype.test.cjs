@@ -17,9 +17,18 @@ function extractFn(src,name){
   }
   throw new Error('accolade non fermée: '+name);
 }
+// Registre de catégories injecté (comme le ferait _progCfg.stepCats côté app).
+const CATS=[
+  {id:'empreinte',label:'Empreinte',order:1,shared:true},
+  {id:'cao',label:'CAO',order:2,shared:false},
+  {id:'impression_modele',label:'Impression modèle',order:3,shared:true},
+  {id:'montage',label:'Montage',order:4,shared:false}
+];
 function load(path){
   const code=extractFn(fs.readFileSync(path,'utf8'),'_mergeStepsByFamily');
-  const ctx={String:String,Array:Array,Object:Object};vm.createContext(ctx);vm.runInContext(code,ctx);
+  const ctx={String:String,Array:Array,Object:Object};
+  ctx._stepCatById=function(id){return CATS.find(c=>c.id===id)||null;};
+  vm.createContext(ctx);vm.runInContext(code,ctx);
   return ctx._mergeStepsByFamily;
 }
 const D=load('app.html');
@@ -86,5 +95,32 @@ ok('parité desktop ↔ mobile');
 const print=prints[0];
 assert.ok(print.sameTechAsLabel&&/empreinte/i.test(print.sameTechAsLabel),'lien tech de l\'impression conservé');
 ok('lien « même technicien que » conservé');
+
+// 8) MODE CATÉGORIES : libellés exotiques (autre labo) mais fusion correcte grâce à step.cat
+function buildCat(it){
+  if(it.type==='A')return [
+    {label:'Scan TRIOS',tech:'a',nb:1,cat:'empreinte'},
+    {label:'Design moignon',tech:'b',nb:1,cat:'cao'},
+    {label:'Sortie usineuse',tech:'a',nb:1,cat:'impression_modele'}
+  ];
+  return [
+    {label:'Numérisation bouche',tech:'a',nb:1,cat:'empreinte'},
+    {label:'Conception couronne',tech:'c',nb:1,cat:'cao'},
+    {label:'Print du master',tech:'a',nb:1,cat:'impression_modele'},
+    {label:'Maquillage',tech:'d',nb:1,cat:'montage'}
+  ];
+}
+const dc=D([{type:'A'},{type:'B'}],buildCat);
+// une seule empreinte (cat empreinte shared) malgré « Scan TRIOS » vs « Numérisation bouche »
+assert.strictEqual(dc.filter(s=>/scan|numeris/i.test(s.label)).length,1,'1 seule empreinte via catégorie');
+// une seule impression de modèle (cat impression_modele shared) malgré libellés différents
+assert.strictEqual(dc.filter(s=>s.cat==='impression_modele').length,1,'1 seule impression via catégorie');
+// les 2 CAO (cat cao) en parallèle
+const caos=dc.filter(s=>s.cat==='cao');
+assert.strictEqual(caos.length,2,'2 étapes CAO conservées');
+assert.strictEqual(caos[0].wd,caos[1].wd,'CAO en parallèle (même jour) via catégorie');
+// parité desktop ↔ mobile en mode catégories
+assert.strictEqual(sig(dc),sig(M([{type:'A'},{type:'B'}],buildCat)),'parité catégories desktop↔mobile');
+ok('catégories explicites : fusion correcte malgré libellés exotiques + parité');
 
 console.log('\n'+passed+' tests fusion multi-types passés ✅');

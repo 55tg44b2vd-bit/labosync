@@ -3854,6 +3854,8 @@ function buildTasksMobile(type,emp,nb,startDate){
         techKey=(TECHS&&TECHS[step.tech])?step.tech:(allTechKeys.length?pick(allTechKeys,d):'auto');
       }
       push(step.label,techKey,d);
+      if(step.cat)tasks[tasks.length-1].cat=step.cat;
+      if(step.sameAs!==null&&step.sameAs!==undefined&&tasks[step.sameAs]){tasks[tasks.length-1].sameTechAsLabel=tasks[step.sameAs].label;}
     });
     return tasks;
   }
@@ -3886,6 +3888,7 @@ function buildTasksMobile(type,emp,nb,startDate){
         else if(Array.isArray(step.tech)){var pool=step.tech.filter(function(k){return TECHS[k];});techKey=pool.length?pick(pool,d):(allTechKeys.length?pick(allTechKeys,d):'auto');}
         else{techKey=step.tech;}
         push(step.label||'Étape',techKey,d);
+        if(step.cat)tasks[tasks.length-1].cat=step.cat;
       });
     }
   }
@@ -3904,17 +3907,34 @@ function countWD(from,to){var a=new Date(from);a.setHours(0,0,0,0);var b=new Dat
 var DEFAULT_TYPE_PHASE={inlay_only:1,inlay_armature:1,impression_modele:1,wax_up:1,cire_occlusion:1,cle_schefield:1,guide_chir:1,retouche:3};
 function _typePhase(typeId){var ct=(typeof customTypes!=='undefined'&&customTypes)?customTypes.find(function(c){return c.id===typeId;}):null;if(ct&&ct.phase)return parseInt(ct.phase)||2;return (DEFAULT_TYPE_PHASE[typeId]!=null)?DEFAULT_TYPE_PHASE[typeId]:2;}
 // Config de prog intelligente (synchronisée depuis l'ordinateur). Défauts alignés sur le desktop.
+function _stepCatsDefault(){
+  return [
+    {id:'empreinte',label:'Empreinte / Scan',order:1,shared:true},
+    {id:'pilier',label:'Inlay-core / Pilier',order:2,shared:false},
+    {id:'cao',label:'Modélisation (CAO)',order:2,shared:false},
+    {id:'impression_modele',label:'Impression du modèle',order:3,shared:true},
+    {id:'usinage',label:'Usinage / Fraisage',order:3,shared:false},
+    {id:'coulee',label:'Coulée / Armature',order:3,shared:false},
+    {id:'montage',label:'Montage / Cosmétique',order:4,shared:false},
+    {id:'cuisson',label:'Cuisson',order:5,shared:false},
+    {id:'finition',label:'Finition / Glaçage',order:6,shared:false},
+    {id:'autre',label:'Autre',order:3,shared:false}
+  ];
+}
 function loadProgCfg(){
-  var d={weights:{dentist:30,tooth:20,load:40},dentistPrefs:{},zonePrefs:{anterior:{pref:[],avoid:[]},posterior:{pref:[],avoid:[]}},loadLeveling:true};
+  var d={weights:{dentist:30,tooth:20,load:40},dentistPrefs:{},zonePrefs:{anterior:{pref:[],avoid:[]},posterior:{pref:[],avoid:[]}},loadLeveling:true,stepCats:_stepCatsDefault()};
   try{var c=JSON.parse(localStorage.getItem('lb_prog_config')||'{}');
     if(c&&c.weights){['dentist','tooth','load'].forEach(function(k){if(c.weights[k]!=null)d.weights[k]=Math.max(0,parseInt(c.weights[k],10)||0);});}
     if(c&&c.dentistPrefs&&typeof c.dentistPrefs==='object')d.dentistPrefs=c.dentistPrefs;
     if(c&&c.zonePrefs){['anterior','posterior'].forEach(function(z){if(c.zonePrefs[z]){d.zonePrefs[z]={pref:Array.isArray(c.zonePrefs[z].pref)?c.zonePrefs[z].pref:[],avoid:Array.isArray(c.zonePrefs[z].avoid)?c.zonePrefs[z].avoid:[]};}});}
     if(c&&typeof c.loadLeveling!=='undefined')d.loadLeveling=c.loadLeveling!==false;
+    if(c&&Array.isArray(c.stepCats)&&c.stepCats.length){d.stepCats=c.stepCats.map(function(x){return {id:String(x.id||''),label:String(x.label||x.id||''),order:Math.max(1,parseInt(x.order,10)||3),shared:!!x.shared};}).filter(function(x){return x.id;});}
   }catch(e){}
   return d;
 }
 var _progCfg=loadProgCfg();
+function _progStepCats(){return (_progCfg&&Array.isArray(_progCfg.stepCats)&&_progCfg.stepCats.length)?_progCfg.stepCats:_stepCatsDefault();}
+function _stepCatById(id){if(!id)return null;var l=_progStepCats();for(var i=0;i<l.length;i++){if(String(l[i].id)===String(id))return l[i];}return null;}
 function _techCapacity(k){var c=(TECHS[k]&&parseInt(TECHS[k].capacity,10));return c>0?c:8;}
 function _toothZone(fdi){var n=Math.abs(parseInt(fdi,10))%10;return (n>=1&&n<=3)?'anterior':'posterior';}
 function _zoneFromTeeth(teeth){if(!Array.isArray(teeth)||!teeth.length)return null;for(var i=0;i<teeth.length;i++){if(_toothZone(teeth[i])==='anterior')return 'anterior';}return 'posterior';}
@@ -4006,11 +4026,20 @@ function _mergeStepsByFamily(items,buildOne){
   function orderOf(label){var n=norm(label);for(var i=0;i<FAM.length;i++){for(var j=0;j<FAM[i].kw.length;j++){if(n.indexOf(norm(FAM[i].kw[j]))>=0)return FAM[i].o;}}return 3;}
   function isScan(l){var n=norm(l);return n.indexOf('empreinte')>=0||n.indexOf('scan')>=0||n.indexOf('recup')>=0;}
   function isModelPrint(l){var n=norm(l);return n.indexOf('impression')>=0&&(n.indexOf('model')>=0||n.indexOf('modele')>=0);}
+  function resolve(tk){
+    var cat=(tk.cat&&typeof _stepCatById==='function')?_stepCatById(tk.cat):null;
+    if(cat){
+      var sk=cat.shared?((cat.id==='empreinte')?'scan':(cat.id==='impression_modele')?'print':('cat:'+cat.id)):null;
+      return {order:cat.order||3,shared:sk};
+    }
+    return {order:orderOf(tk.label),shared:isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null)};
+  }
   var all=[];
   items.forEach(function(it){
     (buildOne(it)||[]).forEach(function(tk){
-      all.push({label:tk.label,tech:tk.tech,nb:tk.nb||1,sameTechAsLabel:tk.sameTechAsLabel,
-        order:orderOf(tk.label),shared:isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null)});
+      var r=resolve(tk);
+      all.push({label:tk.label,tech:tk.tech,nb:tk.nb||1,sameTechAsLabel:tk.sameTechAsLabel,cat:tk.cat||null,
+        order:r.order,shared:r.shared});
     });
   });
   var out=[],seen={};
@@ -4023,7 +4052,7 @@ function _mergeStepsByFamily(items,buildOne){
   var dayOf={};orders.forEach(function(o,i){dayOf[o]=i+1;});
   out.forEach(function(s){s.wd=dayOf[s.order];});
   out.sort(function(a,b){return a.wd-b.wd;});
-  return out.map(function(s){return {label:s.label,tech:s.tech,wd:s.wd,sameTechAsLabel:s.sameTechAsLabel,nb:s.nb};});
+  return out.map(function(s){return {label:s.label,tech:s.tech,wd:s.wd,sameTechAsLabel:s.sameTechAsLabel,nb:s.nb,cat:s.cat||null};});
 }
 function buildMergedStepListMobile(items,emp){
   var tmpBase=new Date();tmpBase.setHours(0,0,0,0);

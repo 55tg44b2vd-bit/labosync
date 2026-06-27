@@ -4587,7 +4587,8 @@ function buildTasks(type,emp,forced,startDate,nb){
         techKey=TECHS[step.tech]?step.tech:(allTechKeys.length?pick(allTechKeys,d,forced):'auto');
       }
       push(step.label,techKey,d);
-      // Porter le lien « même technicien que » sur la tâche (survit au merge / aux optimisations).
+      // Catégorie de poste (pour la fusion multi-types intelligente) + lien « même technicien que ».
+      if(step.cat)tasks[tasks.length-1].cat=step.cat;
       if(step.sameAs!==null&&step.sameAs!==undefined&&tasks[step.sameAs]){tasks[tasks.length-1].sameTechAsLabel=tasks[step.sameAs].label;}
     });
     return tasks;
@@ -4665,6 +4666,7 @@ function buildTasks(type,emp,forced,startDate,nb){
           techKey=step.tech;
         }
         push(step.label||'Étape',techKey,d);
+        if(step.cat)tasks[tasks.length-1].cat=step.cat;
         if(step.sameAs!==null&&step.sameAs!==undefined&&tasks[step.sameAs]){tasks[tasks.length-1].sameTechAsLabel=tasks[step.sameAs].label;}
       });
     }
@@ -6434,12 +6436,30 @@ function _reviewRulesDefault(){
      suggestion:"Vérifier l'alignement des teintes et prévoir un essai si nécessaire."}
   ];
 }
+// Catégories de poste (pour la fusion multi-types). Chaque labo peut les éditer/ajouter/supprimer.
+// order = position dans le pipeline (les étapes de même order tombent le même jour = parallèle).
+// shared = poste fait UNE SEULE FOIS pour tout le travail (empreinte, impression du modèle).
+function _stepCatsDefault(){
+  return [
+    {id:'empreinte',label:'Empreinte / Scan',order:1,shared:true},
+    {id:'pilier',label:'Inlay-core / Pilier',order:2,shared:false},
+    {id:'cao',label:'Modélisation (CAO)',order:2,shared:false},
+    {id:'impression_modele',label:'Impression du modèle',order:3,shared:true},
+    {id:'usinage',label:'Usinage / Fraisage',order:3,shared:false},
+    {id:'coulee',label:'Coulée / Armature',order:3,shared:false},
+    {id:'montage',label:'Montage / Cosmétique',order:4,shared:false},
+    {id:'cuisson',label:'Cuisson',order:5,shared:false},
+    {id:'finition',label:'Finition / Glaçage',order:6,shared:false},
+    {id:'autre',label:'Autre',order:3,shared:false}
+  ];
+}
 function _progCfgDefault(){
   return {weights:{dentist:30,tooth:20,load:40},
           dentistPrefs:{},
           zonePrefs:{anterior:{pref:[],avoid:[]},posterior:{pref:[],avoid:[]}},
           reviewRules:_reviewRulesDefault(),
           reviewBuiltins:{freeNote:true,longSpan:true,longSpanMin:4},
+          stepCats:_stepCatsDefault(),
           // Lissage de charge : repousser les étapes surchargées vers des jours plus calmes
           // quand le délai le permet (cf. _levelTasksLoad). Actif par défaut.
           loadLeveling:true};
@@ -6454,9 +6474,13 @@ function loadProgCfg(){
     if(c&&Array.isArray(c.reviewRules))d.reviewRules=c.reviewRules;
     if(c&&c.reviewBuiltins&&typeof c.reviewBuiltins==='object'){d.reviewBuiltins.freeNote=c.reviewBuiltins.freeNote!==false;d.reviewBuiltins.longSpan=c.reviewBuiltins.longSpan!==false;if(c.reviewBuiltins.longSpanMin)d.reviewBuiltins.longSpanMin=parseInt(c.reviewBuiltins.longSpanMin,10)||4;}
     if(c&&typeof c.loadLeveling!=='undefined')d.loadLeveling=c.loadLeveling!==false;
+    if(c&&Array.isArray(c.stepCats)&&c.stepCats.length){d.stepCats=c.stepCats.map(function(x){return {id:String(x.id||''),label:String(x.label||x.id||''),order:Math.max(1,parseInt(x.order,10)||3),shared:!!x.shared};}).filter(function(x){return x.id;});}
   }catch(e){}
   return d;
 }
+// Registre des catégories de poste (toujours non vide). Helpers de lecture.
+function _progStepCats(){return (_progCfg&&Array.isArray(_progCfg.stepCats)&&_progCfg.stepCats.length)?_progCfg.stepCats:_stepCatsDefault();}
+function _stepCatById(id){if(!id)return null;var l=_progStepCats();for(var i=0;i<l.length;i++){if(String(l[i].id)===String(id))return l[i];}return null;}
 var _progCfg=loadProgCfg();
 function saveProgCfg(){try{localStorage.setItem('lb_prog_config',JSON.stringify(_progCfg));}catch(e){}if(typeof scheduleSave==='function')scheduleSave();}
 // Capacité de confort d'un technicien (éléments/jour) — seuil d'alerte, jamais un blocage.
@@ -6845,9 +6869,55 @@ function renderProgIA(){
   '</div>'+
   '</div>';
 
+  // H — Catégories de poste (fusion multi-types)
+  var _cats=(typeof _progStepCats==='function')?_progStepCats():[];
+  html+='<div class="card">'+
+    '<h2 style="margin-top:0;">🏷️ Catégories de poste <span style="font-weight:400;font-size:.74rem;color:var(--ink-soft);">— pour les travaux à plusieurs types</span></h2>'+
+    '<p style="font-size:.82rem;line-height:1.55;color:var(--ink);margin:0 0 6px;">Quand un travail combine plusieurs types (ex. couronne + inlay core), le logiciel fusionne intelligemment grâce à ces catégories : <strong>une seule</strong> empreinte et <strong>une seule</strong> impression de modèle, et les étapes de <strong>même ordre faites le même jour</strong> (en parallèle).</p>'+
+    '<p style="font-size:.76rem;color:var(--ink-soft);line-height:1.5;margin:0 0 12px;">Dans chaque type (Réglages → Travail → vos types), choisissez la catégorie de chaque étape. <strong>Ordre</strong> = position dans la chaîne (même ordre = même jour). <strong>1×</strong> = fait une seule fois pour tout le travail.</p>'+
+    '<div style="display:grid;grid-template-columns:1fr 70px 60px 32px;gap:8px;align-items:center;font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:6px;">'+
+      '<span>Catégorie</span><span style="text-align:center;">Ordre</span><span style="text-align:center;">1×</span><span></span>'+
+    '</div>'+
+    _cats.map(function(c){
+      return '<div style="display:grid;grid-template-columns:1fr 70px 60px 32px;gap:8px;align-items:center;margin-bottom:6px;">'+
+        '<input type="text" value="'+escHtml(c.label)+'" onchange="_progSetCatField(\''+escHtml(c.id)+'\',\'label\',this.value)" style="border:1.5px solid var(--border);border-radius:7px;padding:6px 9px;font-size:.82rem;background:var(--surface);color:var(--ink);outline:none;"/>'+
+        '<input type="number" min="1" max="20" value="'+(parseInt(c.order,10)||3)+'" onchange="_progSetCatField(\''+escHtml(c.id)+'\',\'order\',this.value)" style="border:1.5px solid var(--border);border-radius:7px;padding:6px;font-size:.82rem;text-align:center;background:var(--surface);color:var(--ink);outline:none;"/>'+
+        '<label style="display:flex;justify-content:center;cursor:pointer;"><input type="checkbox" '+(c.shared?'checked':'')+' onchange="_progSetCatField(\''+escHtml(c.id)+'\',\'shared\',this.checked)" style="width:17px;height:17px;accent-color:#2a6049;cursor:pointer;"/></label>'+
+        '<button type="button" onclick="_progDeleteCat(\''+escHtml(c.id)+'\')" title="Supprimer" style="background:none;border:none;color:#c0392b;cursor:pointer;font-size:.9rem;">✕</button>'+
+      '</div>';
+    }).join('')+
+    '<div style="display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-soft);">'+
+      '<input type="text" id="prog-newcat" placeholder="Nouvelle catégorie (ex. Soudure)" style="flex:1;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:.82rem;background:var(--bg);color:var(--ink);outline:none;"/>'+
+      '<button type="button" onclick="_progAddCat()" style="background:#2a6049;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Ajouter</button>'+
+    '</div>'+
+  '</div>';
+
   host.innerHTML=html;
   _progDemoRecalc();
   _progTestReview();
+}
+// ── Gestion des catégories de poste (éditables par labo) ──
+function _progSetCatField(id,field,val){
+  var c=(typeof _stepCatById==='function')?_stepCatById(id):null;if(!c)return;
+  if(field==='label')c.label=String(val||'').trim()||c.id;
+  else if(field==='order')c.order=Math.max(1,parseInt(val,10)||3);
+  else if(field==='shared')c.shared=!!val;
+  saveProgCfg();
+}
+function _progAddCat(){
+  var el=document.getElementById('prog-newcat');var name=el?el.value.trim():'';
+  if(!name){if(typeof showToast==='function')showToast('Nom de catégorie requis','#c0392b');return;}
+  _progCfg.stepCats=(_progCfg.stepCats&&_progCfg.stepCats.length)?_progCfg.stepCats:_stepCatsDefault();
+  var id='cat_'+name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'').slice(0,16)+'_'+Date.now().toString(36).slice(-4);
+  var maxOrder=_progCfg.stepCats.reduce(function(m,c){return Math.max(m,parseInt(c.order,10)||0);},0);
+  _progCfg.stepCats.push({id:id,label:name,order:maxOrder+1,shared:false});
+  saveProgCfg();renderProgIA();
+}
+function _progDeleteCat(id){
+  if(!_progCfg||!Array.isArray(_progCfg.stepCats))return;
+  if(typeof confirm==='function'&&!confirm('Supprimer cette catégorie ? Les étapes qui l\'utilisent repasseront en détection automatique.'))return;
+  _progCfg.stepCats=_progCfg.stepCats.filter(function(c){return String(c.id)!==String(id);});
+  saveProgCfg();renderProgIA();
 }
 function _progToggleBuiltin(key){_progCfg.reviewBuiltins=_progCfg.reviewBuiltins||{};_progCfg.reviewBuiltins[key]=!(_progCfg.reviewBuiltins[key]!==false);saveProgCfg();}
 function _progSetLongSpanMin(v){_progCfg.reviewBuiltins=_progCfg.reviewBuiltins||{};_progCfg.reviewBuiltins.longSpanMin=Math.max(2,parseInt(v,10)||4);saveProgCfg();}
@@ -10508,12 +10578,18 @@ function renderCtSteps(isEmp){
         '<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;">'+autoPill+techPills+(linkBtn?'<span style="width:100%;"></span>'+linkBtn:'')+'</div>';
     }
     const arrRef=isEmp?'_ctStepsEmp':'_ctSteps';
+    const catOpts='<option value="">— Catégorie : auto (deviné) —</option>'+(typeof _progStepCats==='function'?_progStepCats():[]).map(function(c){return '<option value="'+escHtml(c.id)+'"'+(s.cat===c.id?' selected':'')+'>'+escHtml(c.label)+(c.shared?' · 1× / travail':'')+'</option>';}).join('');
+    const catRow='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'+
+      '<span style="font-size:.65rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;font-weight:600;white-space:nowrap;">🏷️ Poste</span>'+
+      '<select onchange="'+arrRef+'['+i+'].cat=this.value||null" title="Catégorie de poste — sert à fusionner intelligemment les travaux multi-types (1 seule empreinte, étapes simultanées…)" style="flex:1;font-size:.75rem;border:1px solid var(--border);border-radius:6px;padding:5px 8px;background:var(--surface);color:var(--ink);cursor:pointer;">'+catOpts+'</select>'+
+    '</div>';
     return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;">'+
       '<div style="display:grid;grid-template-columns:1fr 80px auto;gap:8px;align-items:center;margin-bottom:8px;">'+
         '<input type="text" placeholder="Nom de l\'étape (ex: Modélisation)" value="'+s.label+'" oninput="'+arrRef+'['+i+'].label=this.value" style="border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-family:Inter,sans-serif;font-size:.82rem;background:var(--surface);color:var(--ink);outline:none;"/>'+
         '<div style="display:flex;align-items:center;gap:4px;"><span style="font-size:.7rem;color:var(--ink-soft);white-space:nowrap;">Jour J+</span><input type="number" min="1" max="30" value="'+s.dayOffset+'" oninput="'+arrRef+'['+i+'].dayOffset=parseInt(this.value)||1" style="width:48px;border:1.5px solid var(--border);border-radius:7px;padding:7px 6px;font-family:Inter,sans-serif;font-size:.82rem;background:var(--surface);color:var(--ink);outline:none;"/></div>'+
         '<button onclick="removeCtStep('+i+e+')" style="background:none;border:none;cursor:pointer;color:#c0392b;font-size:.9rem;padding:4px;">✕</button>'+
       '</div>'+
+      catRow+
       techSection+
     '</div>';
   }).join('');
@@ -10545,7 +10621,7 @@ function saveCustomType(){
   if(_ctSteps.length>0&&validSteps.length<_ctSteps.length){
     if(!confirm('Certaines étapes n\'ont pas de nom et seront ignorées. Continuer ?'))return;
   }
-  const mapStep=function(s){return{label:s.label.trim(),tech:s.tech,dayOffset:Math.max(1,s.dayOffset),sameAs:s.sameAs!==null&&s.sameAs!==undefined?s.sameAs:null};};
+  const mapStep=function(s){return{label:s.label.trim(),tech:s.tech,dayOffset:Math.max(1,s.dayOffset),sameAs:s.sameAs!==null&&s.sameAs!==undefined?s.sameAs:null,cat:s.cat||null};};
   var phaseEl=document.getElementById('ct-phase');
   var phaseVal=phaseEl?(parseInt(phaseEl.value)||2):2;
   const newData={label:name,category:cat,phase:phaseVal,steps:validSteps.map(mapStep),stepsEmp:_ctSupportsEmp&&_ctStepsEmp.length?_ctStepsEmp.filter(function(s){return s.label.trim();}).map(mapStep):null};
@@ -13044,11 +13120,22 @@ function _mergeStepsByFamily(items,buildOne){
   function orderOf(label){var n=norm(label);for(var i=0;i<FAM.length;i++){for(var j=0;j<FAM[i].kw.length;j++){if(n.indexOf(norm(FAM[i].kw[j]))>=0)return FAM[i].o;}}return 3;}
   function isScan(l){var n=norm(l);return n.indexOf('empreinte')>=0||n.indexOf('scan')>=0||n.indexOf('recup')>=0;}
   function isModelPrint(l){var n=norm(l);return n.indexOf('impression')>=0&&(n.indexOf('model')>=0||n.indexOf('modele')>=0);}
+  // Résout {order, clé de partage} d'une étape : par CATÉGORIE explicite si renseignée
+  // (step.cat → registre éditable du labo), sinon repli sur la détection par mots-clés.
+  function resolve(tk){
+    var cat=(tk.cat&&typeof _stepCatById==='function')?_stepCatById(tk.cat):null;
+    if(cat){
+      var sk=cat.shared?((cat.id==='empreinte')?'scan':(cat.id==='impression_modele')?'print':('cat:'+cat.id)):null;
+      return {order:cat.order||3,shared:sk};
+    }
+    return {order:orderOf(tk.label),shared:isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null)};
+  }
   var all=[];
   items.forEach(function(it){
     (buildOne(it)||[]).forEach(function(tk){
-      all.push({label:tk.label,tech:tk.tech,nb:tk.nb||1,sameTechAsLabel:tk.sameTechAsLabel,
-        order:orderOf(tk.label),shared:isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null)});
+      var r=resolve(tk);
+      all.push({label:tk.label,tech:tk.tech,nb:tk.nb||1,sameTechAsLabel:tk.sameTechAsLabel,cat:tk.cat||null,
+        order:r.order,shared:r.shared});
     });
   });
   // Étapes « partagées » (empreinte, impression de modèle) → une seule pour tout le travail.
@@ -13063,7 +13150,7 @@ function _mergeStepsByFamily(items,buildOne){
   var dayOf={};orders.forEach(function(o,i){dayOf[o]=i+1;});
   out.forEach(function(s){s.wd=dayOf[s.order];});
   out.sort(function(a,b){return a.wd-b.wd;});
-  return out.map(function(s){return {label:s.label,tech:s.tech,wd:s.wd,sameTechAsLabel:s.sameTechAsLabel,nb:s.nb};});
+  return out.map(function(s){return {label:s.label,tech:s.tech,wd:s.wd,sameTechAsLabel:s.sameTechAsLabel,nb:s.nb,cat:s.cat||null};});
 }
 function buildMergedStepList(items,emp){
   const tmpBase=new Date();tmpBase.setHours(0,0,0,0);
