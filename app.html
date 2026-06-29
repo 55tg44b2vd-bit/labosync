@@ -7104,7 +7104,10 @@ async function _requestAiSchedule(meta){
     '2. N\'affecte une étape qu\'à un technicien AUTORISÉ pour elle, et JAMAIS un jour où il est absent / ne travaille pas / le labo est fermé.\n'+
     '3. Respecte l\'ordre de fabrication (préparation → réalisation → finition) et les délais J+ entre étapes ; ne dépasse pas l\'échéance.\n'+
     'Puis OPTIMISE : a) regroupe les étapes d\'un même poste sur le même jour/technicien (un seul scan, une seule session CAO pour tout le travail, une seule cuisson…) pour éviter les doublons ; b) lisse la charge en tenant compte des autres travaux déjà programmés (évite de surcharger un technicien un jour donné) ; c) garde la cohérence métier (ex. essai métal avant cosmétique, inlay-core/pilier avant la couronne) ; d) si urgent, priorise sans casser les contraintes.\n'+
-    'Réponds en JSON pur, sans markdown : {"explication":"2-3 phrases sur ton raisonnement et les regroupements faits","risques":["alerte courte si délai tendu / technicien surchargé / contrainte impossible"],"plan":[{"label":"<libellé EXACT>","date":"YYYY-MM-DD","tech":"<clé technicien>","raison":"pourquoi ce jour/ce technicien"}]}. Garde exactement les mêmes libellés et le même nombre d\'étapes.';
+    (meta.merge
+      ? 'CE TRAVAIL COMBINE PLUSIEURS TYPES : FUSIONNE-LES en UN SEUL planning cohérent. Règles de fusion : UNE SEULE prise d\'empreinte/scan pour tout le travail ; UN SEUL tirage/impression de modèle ; mets le MÊME JOUR (en parallèle) les étapes qui peuvent l\'être (ex. modélisation de l\'inlay-core ET de la couronne) ; supprime les doublons de poste. Tu PEUX réduire le nombre d\'étapes et reformuler les libellés pour obtenir un planning propre.\n'
+        +'Réponds en JSON pur, sans markdown : {"explication":"2-3 phrases","risques":["alerte courte"],"plan":[{"label":"<libellé de l\'étape fusionnée>","date":"YYYY-MM-DD","tech":"<clé technicien>"}]}. Le "plan" est la LISTE FUSIONNÉE COMPLÈTE des étapes (dans l\'ordre).'
+      : 'Réponds en JSON pur, sans markdown : {"explication":"2-3 phrases sur ton raisonnement et les regroupements faits","risques":["alerte courte si délai tendu / technicien surchargé / contrainte impossible"],"plan":[{"label":"<libellé EXACT>","date":"YYYY-MM-DD","tech":"<clé technicien>","raison":"pourquoi ce jour/ce technicien"}]}. Garde exactement les mêmes libellés et le même nombre d\'étapes.');
   var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:_aiApiHeaders(),body:JSON.stringify({
     model:'claude-sonnet-4-6',
     max_tokens:2000,
@@ -7186,6 +7189,7 @@ function openScheduleEditor(jobId,opts){
   }
   var _titlePatient=job?formatJobPatientLabel(job):((draft&&draft.patient)||'Nouveau travail');
   var _titleType=job?getJobTypeLabel(job):((draft&&draft.typeLabel)||'');
+  var _ctx0=_schedEditCtx();var _isMulti=!!(_ctx0&&_ctx0.items&&_ctx0.items.length>1);
   var existing=document.getElementById('sched-edit-overlay');if(existing)existing.remove();
   var overlay=document.createElement('div');
   overlay.id='sched-edit-overlay';
@@ -7199,6 +7203,7 @@ function openScheduleEditor(jobId,opts){
     '<div id="sched-edit-rows" style="display:flex;flex-direction:column;gap:7px;"></div>'+
     '<button onclick="_schedEditAddStep()" style="margin-top:10px;background:#f1f5f9;border:1px dashed #94a3b8;border-radius:8px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer;color:#475569;width:100%;">＋ Ajouter une étape</button>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;border-top:1px dashed var(--border);padding-top:12px;">'+
+      (_isMulti?'<button onclick="_schedEditAiMerge()" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:8px;padding:8px 14px;font-size:.82rem;font-weight:700;cursor:pointer;">✨ Fusionner proprement (IA)</button>':'')+
       '<button onclick="_schedEditRegen()" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:8px;padding:8px 14px;font-size:.82rem;font-weight:700;cursor:pointer;">🔁 Autre proposition</button>'+
       '<button onclick="_schedEditAi()" style="background:#ede9fe;color:#6b21a8;border:1px solid #c4b5fd;border-radius:8px;padding:8px 14px;font-size:.82rem;font-weight:700;cursor:pointer;">🤖 IA</button>'+
       '<div style="flex:1;"></div>'+
@@ -7268,6 +7273,12 @@ function _schedEditRegen(){
   _schedEditRender();
   if(typeof showToast==='function')showToast('🔁 Proposition : '+_schedVariantName(_schedEdit.variant),'#2563eb');
 }
+// Méta pour l'IA — fonctionne aussi en mode brouillon (pas de job existant).
+function _schedEditMeta(tasks){
+  var info=_schedEditCtx()||{};var job=info.job;var d=_schedEdit&&_schedEdit.draft;
+  return {patient:job?job.patient:((d&&d.patient)||''),urgent:job?!!job.urgent:false,
+    deadline:(info.ctx&&info.ctx.deadline)||'',items:info.items||[],tasks:tasks||[]};
+}
 async function _schedEditAi(){
   if(!_schedEdit||typeof _requestAiSchedule!=='function')return;
   var info=_schedEditCtx();if(!info)return;
@@ -7276,7 +7287,7 @@ async function _schedEditAi(){
   if(!steps.length){if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">Ajoutez au moins une étape.</div>';return;}
   if(wrap)wrap.innerHTML='<div style="font-size:.82rem;color:#7c3aed;">🤖 L\'IA analyse la programmation…</div>';
   try{
-    var out=await _requestAiSchedule({patient:info.job.patient,urgent:info.job.urgent,deadline:info.ctx.deadline,items:info.items,tasks:steps});
+    var out=await _requestAiSchedule(_schedEditMeta(steps));
     var plan=Array.isArray(out.plan)?out.plan:[];
     plan.forEach(function(pp){
       var t=_schedEdit.steps.find(function(x){return !x._deleted&&_normTxt(x.label)===_normTxt(pp.label);});
@@ -7292,6 +7303,37 @@ async function _schedEditAi(){
     '</div>';
   }catch(e){
     if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">⚠️ IA indisponible ('+escH2(e.message||'erreur')+'). Les variantes « 🔁 » restent utilisables.</div>';
+  }
+}
+// Fusion IA : pour un travail multi-types, l'IA RÉÉCRIT la liste (1 empreinte, 1 impression,
+// étapes en parallèle). Remplace entièrement les étapes par la version fusionnée.
+async function _schedEditAiMerge(){
+  if(!_schedEdit||typeof _requestAiSchedule!=='function')return;
+  var wrap=document.getElementById('sched-edit-ai');
+  var steps=_schedEditActiveSteps();
+  if(!steps.length){if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">Ajoutez au moins une étape.</div>';return;}
+  if(wrap)wrap.innerHTML='<div style="font-size:.82rem;color:#92400e;">✨ L\'IA fusionne les étapes…</div>';
+  try{
+    var meta=_schedEditMeta(steps);meta.merge=true;
+    var out=await _requestAiSchedule(meta);
+    var plan=Array.isArray(out.plan)?out.plan:[];
+    if(!plan.length)throw new Error('réponse vide');
+    _schedEdit.steps=plan.map(function(pp){
+      var tech=(pp.tech&&TECHS[pp.tech])?pp.tech:'auto';
+      var dd=pp.date?new Date(pp.date+'T12:00:00'):new Date();if(isNaN(dd.getTime()))dd=new Date();
+      return {label:pp.label||'Étape',tech:tech,dueDate:dd.toISOString(),nb:1,done:false,_deleted:false};
+    });
+    if(typeof _enforceTechLinks==='function')_enforceTechLinks(_schedEdit.steps);
+    _schedEditRender();
+    var risks=Array.isArray(out.risques)?out.risques.filter(Boolean):[];
+    if(wrap)wrap.innerHTML='<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;">'+
+      '<div style="font-size:.82rem;color:#92400e;font-weight:600;margin-bottom:6px;">✨ Étapes fusionnées</div>'+
+      '<div style="font-size:.8rem;color:#475569;line-height:1.5;white-space:pre-wrap;">'+escH2(out.explication||'')+'</div>'+
+      (risks.length?'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:7px 10px;margin-top:8px;">'+risks.map(function(r){return '<div style="font-size:.76rem;color:#9a3412;">⚠️ '+escH2(r)+'</div>';}).join('')+'</div>':'')+
+      '<div style="font-size:.74rem;color:var(--ink-soft);margin-top:6px;">Vérifie puis « Valider ». Tu peux encore ajuster à la main.</div>'+
+    '</div>';
+  }catch(e){
+    if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">⚠️ Fusion IA indisponible ('+escH2(e.message||'erreur')+'). Tu peux fusionner à la main (supprimer les doublons, même date pour les étapes simultanées).</div>';
   }
 }
 function _schedEditSave(){

@@ -4505,6 +4505,8 @@ function openScheduleEditorMobile(jobId){
     var info0=_schedEditMobCtx();
     if(info0){try{var t0=_altSchedule(info0.items,info0.ctx,0)||[];_schedEditMob.steps=t0.map(function(t){return {label:t.label||'Étape',tech:t.tech||'auto',dueDate:t.dueDate,nb:parseInt(t.nb,10)||1,done:false,_deleted:false};});}catch(e){}}
   }
+  var _mobItems=(job.items&&job.items.length)?job.items:[{type:job.type,nb:job.nb||1}];
+  var _isMultiMob=_mobItems.length>1;
   var ex=document.getElementById('schededit-mob-overlay');if(ex)ex.remove();
   var ov=document.createElement('div');
   ov.id='schededit-mob-overlay';
@@ -4519,6 +4521,7 @@ function openScheduleEditorMobile(jobId){
     '<div id="schededit-mob-rows" style="display:flex;flex-direction:column;gap:7px;"></div>'+
     '<button onclick="_schedEditMobAdd()" style="margin-top:10px;width:100%;background:var(--bg);border:1px dashed #94a3b8;border-radius:9px;padding:11px;font-size:.84rem;font-weight:600;color:#475569;cursor:pointer;min-height:44px;">＋ Ajouter une étape</button>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;border-top:1px dashed var(--border);padding-top:12px;">'+
+      (_isMultiMob?'<button onclick="_schedEditMobAiMerge()" style="flex:1 1 100%;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:9px;padding:11px;font-size:.84rem;font-weight:700;cursor:pointer;min-height:44px;">✨ Fusionner proprement (IA)</button>':'')+
       '<button onclick="_schedEditMobRegen()" style="flex:1;min-width:130px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:9px;padding:11px;font-size:.84rem;font-weight:700;cursor:pointer;min-height:44px;">🔁 Autre proposition</button>'+
       '<button onclick="_schedEditMobAi()" style="flex:1;min-width:90px;background:#ede9fe;color:#6b21a8;border:1px solid #c4b5fd;border-radius:9px;padding:11px;font-size:.84rem;font-weight:700;cursor:pointer;min-height:44px;">🤖 IA</button>'+
     '</div>'+
@@ -4615,6 +4618,44 @@ async function _schedEditMobAi(){
       (risks.length?'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:7px 10px;margin-top:8px;">'+risks.map(function(r){return '<div style="font-size:.76rem;color:#9a3412;">⚠️ '+esc(r)+'</div>';}).join('')+'</div>':'')+
     '</div>';
   }catch(e){if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">⚠️ IA indisponible ('+esc(e.message||'erreur')+'). Les variantes « 🔁 » restent utilisables.</div>';}
+}
+// Fusion IA (travail multi-types) : l'IA réécrit la liste (1 empreinte, 1 impression, parallèle).
+async function _schedEditMobAiMerge(){
+  if(!_schedEditMob)return;
+  var info=_schedEditMobCtx();if(!info)return;
+  var wrap=document.getElementById('schededit-mob-ai');
+  var steps=_schedEditMobActive();
+  if(!steps.length){if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">Ajoutez au moins une étape.</div>';return;}
+  if(wrap)wrap.innerHTML='<div style="font-size:.82rem;color:#92400e;">✨ L\'IA fusionne les étapes…</div>';
+  try{
+    var techList=Object.keys(TECHS||{}).map(function(k){return k+' ('+((TECHS[k]&&TECHS[k].label)||k)+', capacité '+_techCapacity(k)+'/j)';}).join(', ')||'(aucun)';
+    var congesStr=(typeof conges!=='undefined'&&conges&&conges.length)?conges.join(', '):'aucun';
+    var stepsStr=steps.map(function(t,i){return (i+1)+'. '+t.label+' | '+String(t.dueDate||'').slice(0,10)+' | tech:'+(t.tech||'?');}).join('\n');
+    var prompt='Laboratoire de prothèse dentaire. Aujourd\'hui : '+fmtISO(new Date())+'.\n'+
+      'Travail : '+((info.job&&info.job.patient)||'?')+'. Échéance : '+(info.ctx.deadline||'non précisée')+'.\n'+
+      'Techniciens : '+techList+'.\nJours de fermeture : '+congesStr+'.\n\n'+
+      'PROGRAMMATION ACTUELLE (plusieurs types collés) :\n'+stepsStr+'\n\n'+
+      'CE TRAVAIL COMBINE PLUSIEURS TYPES : FUSIONNE en UN SEUL planning. Règles : UNE SEULE prise d\'empreinte/scan ; UN SEUL tirage/impression de modèle ; mets le MÊME JOUR (parallèle) les étapes qui peuvent l\'être (ex. modélisations) ; supprime les doublons de poste ; respecte l\'ordre de fabrication et l\'échéance. Tu PEUX réduire le nombre d\'étapes et reformuler les libellés.\n'+
+      'Réponds en JSON pur sans markdown : {"explication":"2-3 phrases","risques":["alerte courte"],"plan":[{"label":"<étape fusionnée>","date":"YYYY-MM-DD","tech":"<clé technicien>"}]}. Le "plan" est la LISTE FUSIONNÉE COMPLÈTE (dans l\'ordre).';
+    var resp=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_token},body:JSON.stringify({
+      model:'claude-sonnet-4-6',max_tokens:1500,
+      system:'Tu es un chef de production d\'un laboratoire de prothèse dentaire. Tu fusionnes des workflows multi-types en un planning unique cohérent. Réponds UNIQUEMENT en JSON valide, sans markdown.',
+      messages:[{role:'user',content:prompt}]
+    })});
+    var data=await resp.json();
+    if(!data||!data.content||!data.content[0])throw new Error(data&&data.error&&data.error.message?data.error.message:'réponse invalide');
+    var raw=(data.content[0].text||'{}').replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+    var out=JSON.parse(raw);var plan=Array.isArray(out.plan)?out.plan:[];
+    if(!plan.length)throw new Error('réponse vide');
+    _schedEditMob.steps=plan.map(function(pp){var tech=(pp.tech&&TECHS[pp.tech])?pp.tech:'auto';var dd=pp.date?new Date(pp.date+'T12:00:00'):new Date();if(isNaN(dd.getTime()))dd=new Date();return {label:pp.label||'Étape',tech:tech,dueDate:dd.toISOString(),nb:1,done:false,_deleted:false};});
+    _schedEditMobRender();
+    var risks=Array.isArray(out.risques)?out.risques.filter(Boolean):[];
+    if(wrap)wrap.innerHTML='<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;">'+
+      '<div style="font-size:.82rem;color:#92400e;font-weight:600;margin-bottom:6px;">✨ Étapes fusionnées</div>'+
+      '<div style="font-size:.8rem;color:#475569;line-height:1.5;white-space:pre-wrap;">'+esc(out.explication||'')+'</div>'+
+      (risks.length?'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:7px 10px;margin-top:8px;">'+risks.map(function(r){return '<div style="font-size:.76rem;color:#9a3412;">⚠️ '+esc(r)+'</div>';}).join('')+'</div>':'')+
+    '</div>';
+  }catch(e){if(wrap)wrap.innerHTML='<div style="font-size:.8rem;color:#c0392b;">⚠️ Fusion IA indisponible ('+esc(e.message||'erreur')+'). Tu peux fusionner à la main.</div>';}
 }
 async function _schedEditMobSave(){
   if(!_schedEditMob)return;
