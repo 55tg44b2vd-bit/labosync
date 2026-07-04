@@ -77,6 +77,8 @@ button{font-family:inherit;}
 .done-line{font-size:.68rem;font-weight:700;color:var(--green);margin-top:7px;}
 .note-line{background:#fff8bf;border-left:3px solid #facc15;border-radius:0 7px 7px 0;padding:5px 8px;font-size:.7rem;margin-top:7px;white-space:pre-wrap;}
 .mynote-line{background:#eef6ff;border-left:3px solid #3b82f6;border-radius:0 7px 7px 0;padding:5px 8px;font-size:.7rem;margin-top:7px;white-space:pre-wrap;}
+.pnote-line{background:#f1f5f9;border-left:3px solid #64748b;border-radius:0 7px 7px 0;padding:5px 8px;font-size:.7rem;margin-top:7px;white-space:pre-wrap;color:#334155;}
+.due-line{font-size:.68rem;font-weight:700;color:var(--red);margin-top:4px;}
 .check-btn{width:46px;height:46px;border-radius:12px;border:2px solid var(--border);background:var(--bg);font-size:1.25rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:transparent;transition:all .15s;}
 .check-btn.on{background:var(--green);border-color:var(--green);color:#fff;}
 .chain-dots{display:flex;gap:4px;margin-top:8px;align-items:center;flex-wrap:wrap;}
@@ -187,6 +189,12 @@ button{font-family:inherit;}
   </div>
   <button class="btn btn-a" id="sj-save-note">Enregistrer la note</button>
   <div style="height:10px;"></div>
+  <div class="field">
+    <label for="sj-pnote">🔒 Note perso (visible uniquement par vous)</label>
+    <textarea id="sj-pnote" maxlength="500" placeholder="ex : penser à recuire, vérifier l'occlusion demain…"></textarea>
+  </div>
+  <button class="btn" id="sj-save-pnote" style="background:#0f172a;color:#fff;">🔒 Enregistrer ma note perso</button>
+  <div style="height:10px;"></div>
   <button class="btn" id="sj-toggle" style="background:var(--green);color:#fff;">✓ Marquer mon étape faite</button>
 </div>
 
@@ -224,7 +232,7 @@ var POLL_MS=20000;
 
 var S={
   token:'', tech:null, labName:'',
-  graph:null, graphAt:null, live:{checks:{},gtChecks:{},notes:{},added:[]},
+  graph:null, graphAt:null, live:{checks:{},gtChecks:{},notes:{},added:[],myNotes:{}},
   day:new Date(), pollTimer:null, sheetJob:null, sheetIdx:-1
 };
 
@@ -376,7 +384,10 @@ function myLateSteps(todayKey){
     var steps=effectiveSteps(job);
     steps.forEach(function(s){
       var k=_tpDayKey(s.dueDate);
-      if(s.tech===me&&!s.done&&k&&k<todayKey)list.push({job:job,steps:steps,step:s});
+      if(s.tech!==me||!k||k>=todayKey)return;
+      // Une étape en retard cochée AUJOURD'HUI reste affichée (barrée) : un
+      // miss-click ne doit pas la faire disparaître — on peut la décocher.
+      if(!s.done||(s.doneAt&&_tpDayKey(s.doneAt)===todayKey))list.push({job:job,steps:steps,step:s});
     });
   });
   return list;
@@ -387,8 +398,11 @@ var STATE_UI={
   late:{cls:'st-late',line:'late'},
   done:{cls:'st-done'}
 };
-function cardHtml(entry,todayKey){
+function cardHtml(entry,todayKey,shownKey){
   var job=entry.job,s=entry.step;
+  // Étape affichée hors de son jour (section « En retard ») : rappelle sa date prévue.
+  var dueLine=(shownKey&&_tpDayKey(s.dueDate)!==shownKey&&s.dueDate)
+    ?'<div class="due-line">📅 Était prévue le '+new Date(s.dueDate).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})+'</div>':'';
   var st=_techChainStatus(entry.steps,s.i,todayKey);
   var ui=STATE_UI[st.state]||STATE_UI.ready;
   var stLine='';
@@ -403,13 +417,14 @@ function cardHtml(entry,todayKey){
       '<div class="tcard-main">'+
         '<div class="tcard-patient">'+escH(job.patient||'—')+(job.urgent?'<span class="badge-urgent">URGENT</span>':'')+((s.nb||1)>1?'<span class="badge-nb">×'+s.nb+' élts</span>':'')+'</div>'+
         '<div class="tcard-step">'+escH(s.label)+'</div>'+
-        '<div class="tcard-type">'+escH(job.type||'')+(job.trackCode?' · '+escH(job.trackCode):'')+'</div>'+
+        '<div class="tcard-type">'+escH(job.type||'')+(job.trackCode?' · '+escH(job.trackCode):'')+'</div>'+dueLine+
       '</div>'+
       '<button class="check-btn'+(s.done?' on':'')+'" data-check="'+escH(job.id)+'|'+s.i+'" aria-label="'+(s.done?'Marquer à refaire':'Marquer fait')+'">✓</button>'+
     '</div>'+
     '<div class="chain-dots">'+dots+'<span class="chain-lbl">'+doneCount+'/'+entry.steps.length+' étapes du travail</span></div>'+
     (job.note?'<div class="note-line">📝 '+escH(job.note)+'</div>':'')+
     (s.techNote&&s.techNote.text?'<div class="mynote-line">💬 '+escH(s.techNote.text)+'</div>':'')+
+    (function(){var pn=(S.live.myNotes||{})[job.id+'|'+s.i];return pn&&pn.text?'<div class="pnote-line">🔒 '+escH(pn.text)+'</div>':'';})()+
     stLine+doneLine+
   '</div>';
 }
@@ -417,26 +432,28 @@ function renderAll(){
   if(!S.tech)return;
   var todayKey=_tpDayKey(new Date());
   var dayKey=_tpDayKey(S.day);
+  var wknd=S.day.getDay()===0||S.day.getDay()===6;
   var lbl=S.day.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
-  $('date-label').textContent=(dayKey===todayKey?'Aujourd\'hui · ':'')+lbl;
+  $('date-label').textContent=(dayKey===todayKey?'Aujourd\'hui · ':'')+lbl+(wknd?' · 🛌':'');
   $('btn-today').style.display=dayKey===todayKey?'none':'inline';
 
   // En retard (visible seulement en vue « aujourd'hui »)
   var late=dayKey===todayKey?myLateSteps(todayKey):[];
   $('sec-late').style.display=late.length?'block':'none';
-  $('list-late').innerHTML=late.map(function(e){return cardHtml(e,todayKey);}).join('');
+  $('list-late').innerHTML=late.map(function(e){return cardHtml(e,todayKey,dayKey);}).join('');
 
-  // Mes travaux du jour — non faits d'abord (urgents puis bloqués/prêts), faits à la fin
+  // Mes travaux du jour — une étape cochée GARDE SA PLACE (rang du groupe « prêt »),
+  // barrée et en transparence : elle ne saute pas en bas de liste (miss-click visible).
   var entries=myStepsForDay(dayKey);
-  var order={late:0,ready:1,waiting:2,done:3};
+  var order={late:0,ready:1,waiting:2,done:1};
   entries.sort(function(a,b){
     var sa=_techChainStatus(a.steps,a.step.i,todayKey).state,sb=_techChainStatus(b.steps,b.step.i,todayKey).state;
     if(order[sa]!==order[sb])return order[sa]-order[sb];
     if(!!a.job.urgent!==!!b.job.urgent)return a.job.urgent?-1:1;
     return String(a.job.patient||'').localeCompare(String(b.job.patient||''));
   });
-  $('list-tasks').innerHTML=entries.length?entries.map(function(e){return cardHtml(e,todayKey);}).join(''):
-    '<div class="empty">'+(S.graph?'Aucun travail programmé pour vous ce jour. 🎉':'La prog n\'a pas encore été publiée par le laboratoire.')+'</div>';
+  $('list-tasks').innerHTML=entries.length?entries.map(function(e){return cardHtml(e,todayKey,dayKey);}).join(''):
+    '<div class="empty">'+(S.graph?(wknd?'Labo fermé ce jour — rien de programmé. 🛌':'Aucun travail programmé pour vous ce jour. 🎉'):'La prog n\'a pas encore été publiée par le laboratoire.')+'</div>';
 
   // Tâches atelier du jour (les miennes)
   var me=S.tech.key;
@@ -527,7 +544,11 @@ function openJobSheet(jobId,idx,keepOpen){
       '<div class="step-meta">'+escH(meta.join(' · '))+'</div></div>'+
     '</div>';
   }).join('');
-  if(!keepOpen)$('sj-note').value=(me.techNote&&me.techNote.text)||'';
+  if(!keepOpen){
+    $('sj-note').value=(me.techNote&&me.techNote.text)||'';
+    var pn=(S.live.myNotes||{})[jobId+'|'+idx];
+    $('sj-pnote').value=(pn&&pn.text)||'';
+  }
   var btn=$('sj-toggle');
   btn.textContent=me.done?'↩ Marquer mon étape à refaire':'✓ Marquer mon étape faite';
   btn.style.background=me.done?'#e2e8f0':'var(--green)';
@@ -611,6 +632,18 @@ $('sj-save-note').addEventListener('click',async function(){
     if(j.live)S.live=j.live;
     renderAll();
     toastMsg('💬 Note enregistrée');
+  }catch(e){toastMsg('❌ '+e.message);}
+  finally{this.disabled=false;}
+});
+$('sj-save-pnote').addEventListener('click',async function(){
+  if(!S.sheetJob)return;
+  var text=$('sj-pnote').value.trim();
+  this.disabled=true;
+  try{
+    var j=await api('POST',{action:'pnote',jobId:S.sheetJob,idx:S.sheetIdx,text:text});
+    if(j.live)S.live=j.live;
+    renderAll();
+    toastMsg('🔒 Note perso enregistrée');
   }catch(e){toastMsg('❌ '+e.message);}
   finally{this.disabled=false;}
 });

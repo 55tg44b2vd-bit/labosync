@@ -8740,10 +8740,18 @@ function copyTechAccess(k){
 function _buildTechGraph(){
   var today=new Date();today.setHours(0,0,0,0);
   var horizon=new Date(today);horizon.setDate(horizon.getDate()-14);
+  var lateCap=new Date(today);lateCap.setDate(lateCap.getDate()-30);
   var out=[];
   (jobs||[]).forEach(function(j){
     if(!j||!Array.isArray(j.tasks)||!j.tasks.length)return;
-    var keep=j.tasks.some(function(t){return !t.done||new Date(t.dueDate)>=horizon;});
+    // Travail PARTI (un bon de livraison existe) : sa prog ne concerne plus l'atelier.
+    if((bdl||[]).some(function(b){return String(b.jobId)===String(j.id);}))return;
+    // Étapes récentes (faites ou non) OU étapes non cochées < 30 j : au-delà, c'est
+    // un reliquat de l'époque papier — on ne pollue pas « En retard » avec.
+    var keep=j.tasks.some(function(t){
+      var d=new Date(t.dueDate);
+      return d>=horizon||(!t.done&&d>=lateCap);
+    });
     if(!keep)return;
     var dl=null;
     try{dl=(typeof _deliveryDeadline==='function'&&_deliveryDeadline(j))?_deliveryDeadline(j).toISOString():null;}catch(e){}

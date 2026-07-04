@@ -182,4 +182,31 @@ for(let c=0;c<200;c++){
   assert.strictEqual(eff[1].done,false,'événement antérieur à la publication ignoré (le labo a repris la main)');
 }
 
-console.log('✅ tech-portal.test.cjs — statuts de chaîne, parité, coches live : OK');
+// ── 4. Desktop : filtre de publication (_buildTechGraph) — travaux partis et zombies exclus ──
+{
+  const code=extractFn(appSrc,'_buildTechGraph');
+  const now=new Date();
+  const iso=(days)=>{const d=new Date(now);d.setDate(d.getDate()+days);return d.toISOString();};
+  const mkJob=(id,taskDays,done)=>({id,patient:id,tasks:taskDays.map((dd,i)=>({label:'S'+i,tech:'t',dueDate:iso(dd),nb:1,done:!!done}))});
+  const ctx={
+    Date:Date,String:String,Object:Object,Array:Array,parseInt:parseInt,
+    localStorage:{getItem:()=>null},
+    TECHS:{t:{label:'Tech',color:'#123'}},
+    genericTasks:[],
+    jobs:[
+      mkJob('actif',[0,1],false),          // étapes aujourd'hui → publié
+      mkJob('parti',[0,1],false),          // BL existant → exclu
+      mkJob('zombie',[-60,-45],false),     // non cochées mais > 30 j → exclu
+      mkJob('recent-fini',[-3,-2],true),   // tout coché récemment → publié (visible barré)
+      mkJob('vieux-fini',[-60,-45],true)   // tout coché il y a longtemps → exclu
+    ],
+    bdl:[{jobId:'parti',num:'BL-1'}]
+  };
+  vm.createContext(ctx);
+  vm.runInContext(code,ctx,{filename:'buildTechGraph'});
+  const ids=vm.runInContext('_buildTechGraph()',ctx).jobs.map(j=>j.id).sort();
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(ids)),['actif','recent-fini'],
+    'publiés = actifs récents uniquement (ni BL, ni zombies > 30 j)');
+}
+
+console.log('✅ tech-portal.test.cjs — statuts de chaîne, parité, coches live, filtre de publication : OK');

@@ -55,7 +55,7 @@ async function upsertRow(rowId, data, serviceKey) {
 }
 
 function emptyLive(labUserId) {
-  return { labUserId, checks: {}, gtChecks: {}, notes: {}, added: [] };
+  return { labUserId, checks: {}, gtChecks: {}, notes: {}, added: [], pnotes: {} };
 }
 
 function normalizeLive(raw, labUserId) {
@@ -66,6 +66,19 @@ function normalizeLive(raw, labUserId) {
     gtChecks: live.gtChecks && typeof live.gtChecks === 'object' ? live.gtChecks : {},
     notes: live.notes && typeof live.notes === 'object' ? live.notes : {},
     added: Array.isArray(live.added) ? live.added : [],
+    // Notes personnelles, cloisonnées par technicien : { techKey: { "jobId|idx": {text,at,rev} } }
+    pnotes: live.pnotes && typeof live.pnotes === 'object' ? live.pnotes : {},
+  };
+}
+
+/** Vue renvoyée à UN technicien : ses notes perso uniquement (celles des autres restent privées). */
+function liveForTech(live, techKey) {
+  return {
+    checks: live.checks,
+    gtChecks: live.gtChecks,
+    notes: live.notes,
+    added: live.added,
+    myNotes: (live.pnotes && live.pnotes[techKey]) || {},
   };
 }
 
@@ -125,6 +138,7 @@ exports.handler = async (event) => {
     if (!auth) return fail(401, 'Session expirée — reconnectez-vous.');
     try {
       const bundle = await stateBundle(auth.labUserId, SERVICE_KEY);
+      bundle.live = liveForTech(bundle.live, auth.techKey);
       return ok(bundle);
     } catch (e) {
       return fail(500, e.message || 'Lecture impossible');
@@ -156,6 +170,7 @@ exports.handler = async (event) => {
 
       const labUserId = String(d.labUserId);
       const bundle = await stateBundle(labUserId, SERVICE_KEY);
+      bundle.live = liveForTech(bundle.live, d.techKey);
       const techs = bundle.graph && bundle.graph.techs ? bundle.graph.techs : {};
       const techInfo = techs[d.techKey] || {};
       return ok(
@@ -183,7 +198,7 @@ exports.handler = async (event) => {
   const labUserId = auth.labUserId;
   const rowId = 'techlive_' + labUserId;
 
-  const writeActions = ['check', 'gtcheck', 'note', 'addtask', 'deltask'];
+  const writeActions = ['check', 'gtcheck', 'note', 'pnote', 'addtask', 'deltask'];
   if (!writeActions.includes(action)) return fail(400, 'Action inconnue');
 
   try {
@@ -209,6 +224,14 @@ exports.handler = async (event) => {
       if (!jobId || !(idx >= 0)) return fail(400, 'Données manquantes');
       live.notes[jobId + '|' + idx] = { text: clampStr(body.text, MAX_TEXT), by, at: new Date().toISOString(), rev };
       pruneMap(live.notes, MAX_KEYS);
+    } else if (action === 'pnote') {
+      // Note personnelle : visible uniquement par SON auteur (cloisonnée par techKey).
+      const jobId = clampStr(body.jobId, 80);
+      const idx = parseInt(body.idx, 10);
+      if (!jobId || !(idx >= 0)) return fail(400, 'Données manquantes');
+      if (!live.pnotes[by] || typeof live.pnotes[by] !== 'object') live.pnotes[by] = {};
+      live.pnotes[by][jobId + '|' + idx] = { text: clampStr(body.text, MAX_TEXT), at: new Date().toISOString(), rev };
+      pruneMap(live.pnotes[by], MAX_KEYS);
     } else if (action === 'addtask') {
       const label = clampStr(body.label, MAX_LABEL).trim();
       if (!label) return fail(400, 'Libellé requis');
@@ -230,7 +253,7 @@ exports.handler = async (event) => {
     }
 
     await upsertRow(rowId, live, SERVICE_KEY);
-    return ok({ ok: true, rev, live });
+    return ok({ ok: true, rev, live: liveForTech(live, by) });
   } catch (e) {
     return fail(500, e.message || 'Écriture impossible');
   }
