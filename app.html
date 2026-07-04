@@ -7357,6 +7357,7 @@ function _schedEditSave(){
   if(!job){_schedEditClose();return;}
   job.tasks=finalTasks.map(function(s){return {label:s.label,tech:s.tech,dueDate:s.dueDate,nb:s.nb,done:s.done,sameTechAsLabel:s.sameTechAsLabel};});
   if(typeof _enforceTechLinks==='function')_enforceTechLinks(job.tasks);
+  try{var _relE=(typeof _relievePreferredOverload==='function')?_relievePreferredOverload(job):0;if(_relE&&typeof showToast==='function')showToast('⚖ Délestage : '+_relE+' travail(aux) confié(s) à des collègues pour garder le technicien préféré disponible','#0369a1',4500);}catch(eRel){}
   job.needsProg=false;
   job.updatedAt=new Date().toISOString();
   if(typeof _attachReviewFlags==='function')_attachReviewFlags(job);
@@ -7505,6 +7506,9 @@ async function confirmAcceptOrder(){
   };
   _copyStepFilesToJob(job,step);
   jobs.push(job);saveJobs();
+  // Délestage : si un technicien préféré du cabinet vient d'être surchargé par ce travail,
+  // ses tâches « d'équilibrage » du jour partent vers des collègues avec marge.
+  try{var _relA=(typeof _relievePreferredOverload==='function')?_relievePreferredOverload(job):0;if(_relA){saveJobs();if(typeof showToast==='function')showToast('⚖ Délestage : '+_relA+' travail(aux) confié(s) à des collègues pour garder le technicien préféré disponible','#0369a1',4500);}}catch(eRel){}
 
   // Marquer l'étape comme acceptée côté Supabase
   const list=_pendingOrdersCache[_acceptForm.portalId]||await _fetchOrdersForCab(_acceptForm.portalId);
@@ -8866,6 +8870,253 @@ async function pollTechLive(force){
 }
 setInterval(function(){pollTechLive(false);},25000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)pollTechLive(true);});
+
+// ── Absence d'un technicien : réorganisation de TOUS ses travaux ─────────────
+// Report (toute la fin du travail glisse après son retour) si l'échéance le
+// permet, sinon réassignation à un collègue — en emportant les étapes liées
+// « même technicien que » (ex. le glaçage suit la modélisation), même si elles
+// tombent après le retour.
+function _linkChainIdxs(tasks,idx){
+  var byLabel={};tasks.forEach(function(t,i){if(t.label!=null&&byLabel[t.label]==null)byLabel[t.label]=i;});
+  var inChain={};inChain[idx]=true;var grew=true;
+  while(grew){
+    grew=false;
+    for(var i=0;i<tasks.length;i++){
+      if(inChain[i])continue;
+      var src=tasks[i].sameTechAsLabel!=null?byLabel[tasks[i].sameTechAsLabel]:null;
+      if(src!=null&&inChain[src]){inChain[i]=true;grew=true;continue;}
+      for(var j=0;j<tasks.length;j++){
+        if(inChain[j]&&tasks[j].sameTechAsLabel!=null&&byLabel[tasks[j].sameTechAsLabel]===i){inChain[i]=true;grew=true;break;}
+      }
+    }
+  }
+  return Object.keys(inChain).map(Number).sort(function(a,b){return a-b;});
+}
+// Charge du jour (en éléments) par technicien — même comptage que pick().
+function _dayLoads(dayISO){
+  var ds=new Date(dayISO).toDateString();var c={};
+  Object.keys(TECHS||{}).forEach(function(k){c[k]=0;});
+  jobs.forEach(function(j){(j.tasks||[]).forEach(function(t){
+    if(new Date(t.dueDate).toDateString()===ds&&c[t.tech]!=null)c[t.tech]+=(parseInt(t.nb,10)||1);
+  });});
+  return c;
+}
+// Meilleur remplaçant un jour donné : score de prog intelligente si actif, sinon le plus de marge.
+function _bestReplacementTech(dayISO,excludeTechs,ctx){
+  var day=new Date(dayISO);
+  var cands=Object.keys(TECHS||{}).filter(function(k){
+    if((excludeTechs||[]).indexOf(k)>=0)return false;
+    if(typeof isTechUnavailableForAuto==='function'&&isTechUnavailableForAuto(k,day))return false;
+    return true;
+  });
+  if(!cands.length)return null;
+  var loads=_dayLoads(dayISO);
+  if(typeof _progScoringActive==='function'&&_progScoringActive()){
+    var ranked=cands.map(function(k){
+      return {k:k,sc:_scoreTech(k,{cabinetId:(ctx&&ctx.cabinetId)||null,zone:(ctx&&ctx.zone)||null,loadRatio:(loads[k]||0)/_techCapacity(k)},_progCfg).score,load:loads[k]||0};
+    }).sort(function(a,b){return b.sc-a.sc||a.load-b.load;});
+    return ranked[0].k;
+  }
+  return cands.slice().sort(function(a,b){
+    return (_techCapacity(b)-(loads[b]||0))-(_techCapacity(a)-(loads[a]||0));
+  })[0];
+}
+function _planTechAbsence(techKey,fromKey,toKey){
+  var from=new Date(fromKey+'T00:00:00'),to=new Date(toKey+'T23:59:59');
+  // Premier jour où le technicien retravaille (saute week-ends et autres indispos, borne 15 j).
+  var retour=addWD(new Date(toKey+'T12:00:00'),1),guard=0;
+  while(guard++<15&&typeof isTechUnavailableForAuto==='function'&&isTechUnavailableForAuto(techKey,retour))retour=addWD(retour,1);
+  var moves=[];
+  (jobs||[]).forEach(function(job){
+    var tasks=job.tasks||[];
+    var affected=[];
+    tasks.forEach(function(t,i){
+      if(t.done||t.tech!==techKey)return;
+      var d=new Date(t.dueDate);
+      if(d>=from&&d<=to)affected.push(i);
+    });
+    if(!affected.length)return;
+    // 1) REPORT : toute la fin du travail glisse (l'ordre de la chaîne est conservé
+    //    pour tous les techniciens, leurs étapes dépendant de la sienne).
+    var firstDay=new Date(tasks[affected[0]].dueDate);firstDay.setHours(0,0,0,0);
+    var delta=countWD(firstDay,retour);
+    var deadline=null;
+    try{deadline=(typeof _deliveryDeadline==='function')?_deliveryDeadline(job):null;}catch(e){}
+    var canReport=false,lastNew=null;
+    if(delta>0){
+      tasks.forEach(function(t){
+        if(t.done)return;var d=new Date(t.dueDate);if(d<firstDay)return;
+        var nd=addWD(d,delta);if(!lastNew||nd>lastNew)lastNew=nd;
+      });
+      canReport=!!lastNew&&(!deadline||lastNew.getTime()<=new Date(deadline).getTime());
+    }
+    if(canReport){
+      moves.push({jobId:job.id,kind:'report',delta:delta,firstDay:firstDay.toISOString(),patient:job.patient||'',
+        count:tasks.filter(function(t){return !t.done&&new Date(t.dueDate)>=firstDay;}).length,
+        deadline:deadline?new Date(deadline).toISOString():null});
+      return;
+    }
+    // 2) RÉASSIGNATION : chaîne liée complète (glaçage suit la modélisation), dates inchangées.
+    var claimed={};
+    affected.forEach(function(i){
+      if(claimed[i])return;
+      var chain=_linkChainIdxs(tasks,i).filter(function(x){return !tasks[x].done&&tasks[x].tech===techKey;});
+      chain.forEach(function(x){claimed[x]=true;});
+      var ctx={cabinetId:job.cabinet||null,zone:(typeof _zoneFromTeeth==='function')?_zoneFromTeeth(job.teeth):null};
+      var nt=_bestReplacementTech(tasks[i].dueDate,[techKey],ctx);
+      if(!nt){moves.push({jobId:job.id,kind:'stuck',patient:job.patient||'',label:tasks[i].label||'Étape'});return;}
+      moves.push({jobId:job.id,kind:'reassign',idxs:chain,newTech:nt,patient:job.patient||'',
+        labels:chain.map(function(x){return tasks[x].label||'Étape';}),
+        dates:chain.map(function(x){return tasks[x].dueDate;})});
+    });
+  });
+  return {techKey:techKey,fromKey:fromKey,toKey:toKey,moves:moves};
+}
+function _applyTechAbsencePlan(plan){
+  var n=0;
+  (plan.moves||[]).forEach(function(m){
+    var job=jobs.find(function(j){return String(j.id)===String(m.jobId);});if(!job)return;
+    if(m.kind==='report'){
+      var firstDay=new Date(m.firstDay);
+      (job.tasks||[]).forEach(function(t){
+        if(t.done)return;var d=new Date(t.dueDate);if(d<firstDay)return;
+        t.dueDate=addWD(d,m.delta).toISOString();n++;
+      });
+    }else if(m.kind==='reassign'){
+      (m.idxs||[]).forEach(function(x){var t=job.tasks[x];if(t&&!t.done){t.tech=m.newTech;n++;}});
+    }
+  });
+  // Absence enregistrée → la prog auto (pick/capacité) l'évite désormais aussi.
+  var d=new Date(plan.fromKey+'T12:00:00'),end=new Date(plan.toKey+'T12:00:00');
+  while(d<=end){
+    var key=fmtISO(d);
+    if(!absences[plan.techKey])absences[plan.techKey]=[];
+    if(absences[plan.techKey].indexOf(key)<0)absences[plan.techKey].push(key);
+    d.setDate(d.getDate()+1);
+  }
+  if(absences[plan.techKey])absences[plan.techKey].sort();
+  if(typeof saveAbsences==='function')saveAbsences();
+  saveJobs();
+  if(typeof render==='function')render();
+  if(typeof renderAbsList==='function')renderAbsList();
+  return n;
+}
+
+// ── Délestage : un technicien préféré d'un cabinet reçoit un travail alors qu'il
+// est déjà plein → ses tâches du jour qui n'étaient chez lui QUE pour l'équilibrage
+// (cabinet sans préférence pour lui) partent vers des collègues avec marge.
+function _relievePreferredOverload(newJob){
+  if(!newJob||!Array.isArray(newJob.tasks)||!newJob.tasks.length)return 0;
+  if(!(typeof _progScoringActive==='function'&&_progScoringActive()))return 0;
+  var cabId=newJob.cabinet||null;if(!cabId)return 0;
+  var prefs=(_progCfg&&_progCfg.dentistPrefs&&_progCfg.dentistPrefs[cabId])||[];
+  if(!prefs.length)return 0;
+  var moved=0,checked={};
+  newJob.tasks.forEach(function(t){
+    if(t.done||prefs.indexOf(t.tech)<0)return;
+    var ck=t.tech+'|'+new Date(t.dueDate).toDateString();
+    if(checked[ck])return;checked[ck]=true;
+    moved+=_relieveTechDay(t.tech,t.dueDate,String(newJob.id));
+  });
+  return moved;
+}
+function _relieveTechDay(techKey,dayISO,protectJobId){
+  var cap=_techCapacity(techKey);
+  var ds=new Date(dayISO).toDateString();
+  function load(){
+    var c=0;
+    jobs.forEach(function(j){(j.tasks||[]).forEach(function(t){
+      if(t.tech===techKey&&new Date(t.dueDate).toDateString()===ds)c+=(parseInt(t.nb,10)||1);
+    });});
+    return c;
+  }
+  if(load()<=cap)return 0;
+  // Chaînes déplaçables : autres travaux, non cochées, et dont le cabinet ne
+  // préfère PAS ce technicien (sinon la préférence prime, on n'y touche pas).
+  var cands=[];
+  jobs.forEach(function(j){
+    if(String(j.id)===String(protectJobId))return;
+    var jPrefs=(_progCfg&&_progCfg.dentistPrefs&&_progCfg.dentistPrefs[j.cabinet||''])||[];
+    if(jPrefs.indexOf(techKey)>=0)return;
+    var tasks=j.tasks||[],seen={};
+    tasks.forEach(function(t,i){
+      if(t.done||t.tech!==techKey||seen[i])return;
+      if(new Date(t.dueDate).toDateString()!==ds)return;
+      var chain=_linkChainIdxs(tasks,i).filter(function(x){return !tasks[x].done&&tasks[x].tech===techKey;});
+      chain.forEach(function(x){seen[x]=true;});
+      var w=0;chain.forEach(function(x){if(new Date(tasks[x].dueDate).toDateString()===ds)w+=(parseInt(tasks[x].nb,10)||1);});
+      cands.push({job:j,chain:chain,dayW:w});
+    });
+  });
+  // Les plus lourdes d'abord : le moins de travaux déplacés pour repasser sous la capacité.
+  cands.sort(function(a,b){return b.dayW-a.dayW;});
+  var moved=0;
+  for(var i=0;i<cands.length&&load()>cap;i++){
+    var c=cands[i];
+    var ctx={cabinetId:c.job.cabinet||null,zone:(typeof _zoneFromTeeth==='function')?_zoneFromTeeth(c.job.teeth):null};
+    var nt=_bestReplacementTech(dayISO,[techKey],ctx);
+    if(!nt)break;
+    c.chain.forEach(function(x){c.job.tasks[x].tech=nt;});
+    moved++;
+  }
+  return moved;
+}
+
+// ── UI absence : modal avec aperçu avant validation ──────────────────────────
+var _absCurrentPlan=null;
+function openTechAbsence(k){
+  var t=TECHS[k];if(!t)return;
+  var old=document.getElementById('tech-abs-overlay');if(old)old.remove();
+  var today=fmtISO(new Date());
+  var ov=document.createElement('div');
+  ov.id='tech-abs-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10060;display:flex;align-items:center;justify-content:center;padding:18px;';
+  ov.innerHTML='<div style="background:var(--surface,#fff);border-radius:14px;padding:20px;max-width:560px;width:100%;max-height:86vh;overflow-y:auto;box-shadow:0 24px 70px rgba(2,6,23,.4);">'+
+    '<h3 style="font-size:1.05rem;margin-bottom:4px;">🤒 Absence de '+escHtml(t.label)+'</h3>'+
+    '<p style="font-size:.78rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;">Ses travaux seront reportés après son retour quand la livraison le permet, sinon confiés à un collègue — les étapes « même technicien » (ex. glaçage après modélisation) suivent le remplaçant.</p>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">'+
+      '<label style="font-size:.72rem;font-weight:700;display:flex;flex-direction:column;gap:4px;">Absent du<input type="date" id="abs-from" value="'+today+'" style="padding:8px;border:1.5px solid var(--border);border-radius:8px;"/></label>'+
+      '<label style="font-size:.72rem;font-weight:700;display:flex;flex-direction:column;gap:4px;">au (inclus)<input type="date" id="abs-to" value="'+today+'" style="padding:8px;border:1.5px solid var(--border);border-radius:8px;"/></label>'+
+      '<button type="button" id="abs-prepare" style="align-self:flex-end;background:#1a4a7a;color:#fff;border:none;border-radius:8px;padding:9px 14px;cursor:pointer;font-size:.78rem;">Préparer la réorganisation</button>'+
+    '</div>'+
+    '<div id="abs-preview" style="font-size:.78rem;"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">'+
+      '<button type="button" id="abs-cancel" style="background:none;border:1px solid var(--border);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:.78rem;">Annuler</button>'+
+      '<button type="button" id="abs-apply" style="display:none;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;font-size:.78rem;font-weight:700;">✓ Valider la réorganisation</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+  document.getElementById('abs-cancel').addEventListener('click',function(){ov.remove();});
+  document.getElementById('abs-prepare').addEventListener('click',function(){
+    var fromKey=(document.getElementById('abs-from')||{}).value||today;
+    var toKey=(document.getElementById('abs-to')||{}).value||fromKey;
+    if(toKey<fromKey)toKey=fromKey;
+    _absCurrentPlan=_planTechAbsence(k,fromKey,toKey);
+    var pv=document.getElementById('abs-preview');
+    if(!_absCurrentPlan.moves.length){
+      pv.innerHTML='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:10px 12px;">✅ Aucune étape de '+escHtml(t.label)+' sur cette période — rien à réorganiser. L\'absence sera simplement enregistrée.</div>';
+    }else{
+      pv.innerHTML=_absCurrentPlan.moves.map(function(m){
+        if(m.kind==='report'){
+          return '<div style="border-left:4px solid #0369a1;background:#f0f9ff;border-radius:0 9px 9px 0;padding:8px 11px;margin-bottom:7px;">📅 <strong>'+escHtml(m.patient)+'</strong> — '+m.count+' étape(s) restante(s) décalée(s) de '+m.delta+' j ouvré(s)'+(m.deadline?' · livraison du '+new Date(m.deadline).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' respectée':'')+'</div>';
+        }
+        if(m.kind==='reassign'){
+          return '<div style="border-left:4px solid #d97706;background:#fffbeb;border-radius:0 9px 9px 0;padding:8px 11px;margin-bottom:7px;">→ <strong>'+escHtml(m.patient)+'</strong> : '+m.labels.map(escHtml).join(' 🔗 ')+' → <strong>'+escHtml(getTech(m.newTech).label)+'</strong>'+(m.idxs.length>1?' <span style="color:var(--ink-soft);">(étapes liées : même technicien)</span>':'')+'</div>';
+        }
+        return '<div style="border-left:4px solid #dc2626;background:#fef2f2;border-radius:0 9px 9px 0;padding:8px 11px;margin-bottom:7px;">⚠ <strong>'+escHtml(m.patient)+'</strong> : '+escHtml(m.label)+' — aucun remplaçant disponible, l\'étape reste sur '+escHtml(t.label)+'</div>';
+      }).join('');
+    }
+    document.getElementById('abs-apply').style.display='';
+  });
+  document.getElementById('abs-apply').addEventListener('click',function(){
+    if(!_absCurrentPlan)return;
+    var n=_applyTechAbsencePlan(_absCurrentPlan);
+    ov.remove();
+    if(typeof showToast==='function')showToast('🤒 Absence de '+t.label+' enregistrée — '+n+' étape(s) réorganisée(s)','#2a6049',4500);
+    _absCurrentPlan=null;
+  });
+}
 
 // ── Mode opérations (volume élevé) ──
 var LB_OPS_PAGE=50;
@@ -10704,6 +10955,7 @@ function renderEquipe(){
     return '<div class="team-card" style="flex-wrap:wrap;">'+
       '<div style="width:36px;height:36px;border-radius:50%;background:'+t.color+';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.85rem;flex-shrink:0;">'+ini+'</div>'+
       '<div style="flex:1;"><div style="font-weight:500;font-size:.88rem;">'+t.label+'</div></div>'+
+      '<button type="button" onclick="openTechAbsence(\''+k+'\')" title="Déclarer une absence et réorganiser ses travaux" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 9px;cursor:pointer;font-size:.72rem;">🤒 Absent…</button>'+
       '<input type="color" value="'+t.color+'" onchange="updateTechColor(this)" data-techkey="'+k+'" style="width:30px;height:30px;border:1px solid var(--border);border-radius:5px;cursor:pointer;padding:1px;"/>'+
       '<button data-deltech="'+k+'" style="background:none;border:none;cursor:pointer;color:#c0a090;font-size:.9rem;">✕</button>'+
       accessHtml+
@@ -13398,6 +13650,7 @@ function addDirect(){
   var toothD=_readSaisieTeethFields();const job=applyDeliveryFieldsToObject({id:String(Date.now()),patient:name,type:allItems[0].type,tasks:[],nb:allItems[0].nb,items:allItems,note,cabinet:cab,urgent:urg,createdAt:new Date().toISOString(),trackCode:genTrackCode(),prothesisId:'',teeth:toothD.teeth,links:toothD.links,patientSex:patientSex,patientAge:patientAge},deliv);
   if(missingItems.length){job.missingInfoItems=missingItems;}
   jobs.push(job);saveJobs();
+  try{var _relS=(typeof _relievePreferredOverload==='function')?_relievePreferredOverload(job):0;if(_relS){saveJobs();if(typeof showToast==='function')showToast('⚖ Délestage : '+_relS+' travail(aux) confié(s) à des collègues pour garder le technicien préféré disponible','#0369a1',4500);}}catch(eRel){}
   document.getElementById('saisie-ip').value='';
   if(typeof resetSaisiePatientSex==='function')resetSaisiePatientSex();
   document.getElementById('saisie-inb').value='1';var _iaR=document.getElementById('saisie-iage');if(_iaR)_iaR.value='';
