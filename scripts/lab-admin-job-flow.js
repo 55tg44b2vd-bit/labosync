@@ -156,7 +156,7 @@
         draft: {
           patient: job.patient,
           typeLabel: (typeof global.getJobTypeLabel === 'function') ? global.getJobTypeLabel(job) : '',
-          items: _items2.map(function (it) { return { type: it.type, nb: it.nb || 1 }; }),
+          items: _items2.map(function (it) { return { type: it.type, nb: it.nb || 1, emp: !!it.emp }; }),
           ctx: { cabinetId: job.cabinet || null, teeth: job.teeth || [], emp: !!job.emp, deadline: _dl, excludeJobId: job.id },
         },
         onCommit: function (finalTasks) {

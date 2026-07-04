@@ -123,4 +123,22 @@ assert.strictEqual(caos[0].wd,caos[1].wd,'CAO en parallèle (même jour) via cat
 assert.strictEqual(sig(dc),sig(M([{type:'A'},{type:'B'}],buildCat)),'parité catégories desktop↔mobile');
 ok('catégories explicites : fusion correcte malgré libellés exotiques + parité');
 
+// 9) emp PAR TYPE : _mergeStepsByFamily transmet l'item complet (avec emp) à buildOne
+//    → un type numérique et un type physique dans le même travail = workflows différents.
+function buildPerEmp(it){
+  // buildMergedStepList tague chaque étape avec son emp → ici on simule pareil.
+  if(it.emp)return [{label:'récupération empreinte optique',tech:'a',nb:1,cat:'empreinte',emp:true},{label:'modélisation '+it.type,tech:'b',nb:1,cat:'cao',emp:true}];
+  return [{label:'coulée du modèle plâtre',tech:'a',nb:1,cat:'empreinte',emp:false},{label:'cire '+it.type,tech:'b',nb:1,cat:'cao',emp:false}];
+}
+const de=D([{type:'NUM',emp:true},{type:'PHYS',emp:false}],buildPerEmp);
+// empreinte optique ET coulée plâtre conservées (gestes différents → PAS fusionnées)
+assert.ok(de.some(s=>/empreinte optique/.test(s.label)),'empreinte optique (numérique) présente');
+assert.ok(de.some(s=>/plâtre/.test(s.label)),'coulée plâtre (physique) présente');
+assert.strictEqual(de.filter(s=>s.cat==='empreinte').length,2,'numérique + physique = 2 empreintes distinctes (pas fusionnées)');
+// mais deux types TOUS numériques → une seule empreinte
+const dnum=D([{type:'X',emp:true},{type:'Y',emp:true}],buildPerEmp);
+assert.strictEqual(dnum.filter(s=>s.cat==='empreinte').length,1,'2 types numériques → 1 seule empreinte (fusionnée)');
+assert.strictEqual(sig(de),sig(M([{type:'NUM',emp:true},{type:'PHYS',emp:false}],buildPerEmp)),'parité emp/type desktop↔mobile');
+ok('emp par type : numérique≠physique non fusionnés, mais 2 numériques fusionnés + parité');
+
 console.log('\n'+passed+' tests fusion multi-types passés ✅');

@@ -4391,7 +4391,9 @@ function countWD(from,to){const a=new Date(from);a.setHours(0,0,0,0);const b=new
 // aujourd'hui). Sinon, planification « au plus tôt » à partir d'aujourd'hui (comportement initial).
 function _buildScheduledTasks(items,emp,deadlineISO,opts){
   function buildAt(base){
-    if(items.length===1)return buildTasks(items[0].type,emp,null,base,items[0].nb||1);
+    // emp PAR TYPE : chaque type a sa propre option numérique (un travail peut mêler
+    // numérique et physique). Repli sur l'emp global si l'item n'a pas d'info.
+    if(items.length===1)return buildTasks(items[0].type,(items[0].emp!=null?items[0].emp:emp),null,base,items[0].nb||1);
     // Multi-types : on respecte les phases de fabrication (parallèle/enchaînement) via le
     // décalage en jours ouvrés (wd) calculé par buildMergedStepList, au lieu d'1 étape/jour.
     const steps=buildMergedStepList(items,emp);
@@ -12940,7 +12942,7 @@ function addSaisieLine(){
   // Choisir un type différent du type primaire pour éviter les doublons
   const primaryType=document.getElementById('saisie-it').value;
   const firstOther=customTypes.find(function(t){return t.id!==primaryType;});
-  _saisieLines.push({type:firstOther?firstOther.id:primaryType,nb:1});
+  _saisieLines.push({type:firstOther?firstOther.id:primaryType,nb:1,emp:false});
   renderSaisieLines();
 }
 function removeSaisieLine(i){_saisieLines.splice(i,1);renderSaisieLines();}
@@ -12954,16 +12956,19 @@ function renderSaisieLines(){
       }).join('');
       return '<div style="display:flex;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 10px;">'
         +'<span style="font-size:.7rem;color:var(--ink-soft);white-space:nowrap;">+ Type</span>'
-        +'<select onchange="_saisieLines['+i+'].type=this.value;updateSaisieEmpVisibility()" style="flex:2;font-size:.8rem;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">'+opts+'</select>'
+        +'<select onchange="_saisieLines['+i+'].type=this.value;renderSaisieLines()" style="flex:2;font-size:.8rem;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">'+opts+'</select>'
         +'<input type="number" min="1" max="20" value="'+l.nb+'" oninput="_saisieLines['+i+'].nb=parseInt(this.value)||1" style="width:60px;font-size:.8rem;padding:4px 6px;border:1px solid var(--border);border-radius:6px;text-align:center;">'
+        +(((typeof isProgActif==='function'&&isProgActif())&&_typeSupportsEmp(l.type))?'<label title="Empreinte numérique (workflow scan/CAO) pour CE type" style="display:flex;align-items:center;gap:3px;font-size:.7rem;color:#1d4ed8;white-space:nowrap;cursor:pointer;border:1px solid #bfdbfe;background:#eff6ff;border-radius:6px;padding:3px 6px;"><input type="checkbox" '+(l.emp?'checked':'')+' onchange="_saisieLines['+i+'].emp=this.checked" style="cursor:pointer;"/>📡 Num.</label>':'')
         +'<button onclick="removeSaisieLine('+i+')" style="background:none;border:none;cursor:pointer;color:#c0392b;font-size:1rem;padding:0 4px;">✕</button>'
         +'</div>';
     }).join('')+'</div>';
   if(typeof updateSaisieEmpVisibility==='function')updateSaisieEmpVisibility();
 }
 function getSaisieItems(primaryType,primaryNb){
-  const items=[{type:primaryType,nb:primaryNb}];
-  _saisieLines.forEach(function(l){items.push({type:l.type,nb:l.nb});});
+  // emp PAR TYPE : la case globale = numérique du type PRIMAIRE ; chaque ligne a son propre toggle.
+  var primEmp=_typeSupportsEmp(primaryType)&&!!(document.getElementById('saisie-iemp')&&document.getElementById('saisie-iemp').checked);
+  const items=[{type:primaryType,nb:primaryNb,emp:primEmp}];
+  _saisieLines.forEach(function(l){items.push({type:l.type,nb:l.nb,emp:_typeSupportsEmp(l.type)&&!!l.emp});});
   return items;
 }
 function resetSaisieLines(){_saisieLines=[];renderSaisieLines();}
@@ -12977,7 +12982,9 @@ function _anySaisieTypeSupportsEmp(){
 }
 function updateSaisieEmpVisibility(){
   var wrap=document.getElementById('saisie-emp-wrap');if(!wrap)return;
-  var show=(typeof isProgActif==='function'&&isProgActif())&&_anySaisieTypeSupportsEmp();
+  // La case globale concerne le type PRIMAIRE ; les types ajoutés ont leur propre toggle « 📡 Num. ».
+  var prim=document.getElementById('saisie-it');
+  var show=(typeof isProgActif==='function'&&isProgActif())&&prim&&_typeSupportsEmp(prim.value);
   wrap.style.display=show?'':'none';
   if(!show){var cb=document.getElementById('saisie-iemp');if(cb)cb.checked=false;}
 }
@@ -13166,11 +13173,12 @@ function _mergeStepsByFamily(items,buildOne){
   // (step.cat → registre éditable du labo), sinon repli sur la détection par mots-clés.
   function resolve(tk){
     var cat=(tk.cat&&typeof _stepCatById==='function')?_stepCatById(tk.cat):null;
-    if(cat){
-      var sk=cat.shared?((cat.id==='empreinte')?'scan':(cat.id==='impression_modele')?'print':('cat:'+cat.id)):null;
-      return {order:cat.order||3,shared:sk};
-    }
-    return {order:orderOf(tk.label),shared:isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null)};
+    var order,sk;
+    if(cat){order=cat.order||3;sk=cat.shared?((cat.id==='empreinte')?'scan':(cat.id==='impression_modele')?'print':('cat:'+cat.id)):null;}
+    else{order=orderOf(tk.label);sk=isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null);}
+    // Ne pas fusionner un poste numérique avec son équivalent physique (empreinte optique ≠ coulée plâtre).
+    if(sk)sk+=(tk.emp?'#num':'#phys');
+    return {order:order,shared:sk};
   }
   var all=[];
   items.forEach(function(it){
@@ -13196,7 +13204,10 @@ function _mergeStepsByFamily(items,buildOne){
 }
 function buildMergedStepList(items,emp){
   const tmpBase=new Date();tmpBase.setHours(0,0,0,0);
-  return _mergeStepsByFamily(items,function(it){return buildTasks(it.type,emp,null,tmpBase,it.nb||1)||[];});
+  // emp PAR TYPE (numérique/physique propre à chaque type), repli sur l'emp global.
+  // On tague chaque étape avec son emp pour que la fusion ne mélange PAS empreinte
+  // optique (numérique) et coulée plâtre (physique) — deux gestes différents.
+  return _mergeStepsByFamily(items,function(it){var e=(it.emp!=null?it.emp:emp);var ts=buildTasks(it.type,e,null,tmpBase,it.nb||1)||[];ts.forEach(function(t){t.emp=!!e;});return ts;});
 }
 
 function _promoteQueueItemToJob(q,tasks){

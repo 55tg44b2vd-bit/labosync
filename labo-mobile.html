@@ -4028,11 +4028,11 @@ function _mergeStepsByFamily(items,buildOne){
   function isModelPrint(l){var n=norm(l);return n.indexOf('impression')>=0&&(n.indexOf('model')>=0||n.indexOf('modele')>=0);}
   function resolve(tk){
     var cat=(tk.cat&&typeof _stepCatById==='function')?_stepCatById(tk.cat):null;
-    if(cat){
-      var sk=cat.shared?((cat.id==='empreinte')?'scan':(cat.id==='impression_modele')?'print':('cat:'+cat.id)):null;
-      return {order:cat.order||3,shared:sk};
-    }
-    return {order:orderOf(tk.label),shared:isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null)};
+    var order,sk;
+    if(cat){order=cat.order||3;sk=cat.shared?((cat.id==='empreinte')?'scan':(cat.id==='impression_modele')?'print':('cat:'+cat.id)):null;}
+    else{order=orderOf(tk.label);sk=isScan(tk.label)?'scan':(isModelPrint(tk.label)?'print':null);}
+    if(sk)sk+=(tk.emp?'#num':'#phys');
+    return {order:order,shared:sk};
   }
   var all=[];
   items.forEach(function(it){
@@ -4056,12 +4056,14 @@ function _mergeStepsByFamily(items,buildOne){
 }
 function buildMergedStepListMobile(items,emp){
   var tmpBase=new Date();tmpBase.setHours(0,0,0,0);
-  return _mergeStepsByFamily(items,function(it){return buildTasksMobile(it.type,emp,it.nb||1,tmpBase)||[];});
+  // emp PAR TYPE (repli sur l'emp global) ; tague chaque étape avec son emp (fusion correcte
+  // numérique vs physique).
+  return _mergeStepsByFamily(items,function(it){var e=(it.emp!=null?it.emp:emp);var ts=buildTasksMobile(it.type,e,it.nb||1,tmpBase)||[];ts.forEach(function(t){t.emp=!!e;});return ts;});
 }
 // Construit les étapes planifiées (rétro-planning + lissage) — miroir desktop _buildScheduledTasks.
 function _buildScheduledTasksMobile(items,emp,deadlineISO,opts){
   function buildAt(base){
-    if(items.length===1)return buildTasksMobile(items[0].type,emp,items[0].nb||1,base);
+    if(items.length===1)return buildTasksMobile(items[0].type,(items[0].emp!=null?items[0].emp:emp),items[0].nb||1,base);
     var steps=buildMergedStepListMobile(items,emp);
     return steps.map(function(s){return {label:s.label,tech:s.tech,dueDate:addWD(base,s.wd||1).toISOString(),done:false,nb:s.nb||1};});
   }
