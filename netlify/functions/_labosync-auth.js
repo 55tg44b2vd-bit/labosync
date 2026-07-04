@@ -224,6 +224,34 @@ function signPortalToken(portalId, ttlMs) {
   return `${body}.${sig}`;
 }
 
+/** Token session technicien — accès au portail atelier d'un labo. */
+function signTechToken(labUserId, techKey, ttlMs) {
+  const uid = String(labUserId || '').trim();
+  const tk = String(techKey || '').trim();
+  if (!uid || !tk) return '';
+  const ttl = Number(ttlMs) > 0 ? Number(ttlMs) : 14 * 3600 * 1000;
+  const payload = { labUserId: uid, techKey: tk, role: 'tech', exp: Date.now() + ttl };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', portalSessionSecret()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyTechToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const expected = crypto.createHmac('sha256', portalSessionSecret()).update(parts[0]).digest('base64url');
+  if (expected !== parts[1]) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    if (payload.role !== 'tech' || !payload.labUserId || !payload.techKey) return null;
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch (_) {
+    return null;
+  }
+}
+
 function verifyPortalToken(token) {
   if (!token || typeof token !== 'string') return null;
   const parts = token.split('.');
@@ -349,6 +377,8 @@ module.exports = {
   getBearerToken,
   signPortalToken,
   verifyPortalToken,
+  signTechToken,
+  verifyTechToken,
   getPortalTokenFromEvent,
   labOwnsPortal,
   findLabUserIdForPortal,

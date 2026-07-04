@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Labosync quality tooling",
   "scripts": {
-    "test": "node tests/smoke-functions.cjs && node tests/sync-merge.test.cjs && node tests/customtypes-merge.test.cjs && node tests/load-leveling.test.cjs && node tests/scheduling-parity.test.cjs && node tests/job-dedup.test.cjs && node tests/merge-multitype.test.cjs",
+    "test": "node tests/smoke-functions.cjs && node tests/sync-merge.test.cjs && node tests/customtypes-merge.test.cjs && node tests/load-leveling.test.cjs && node tests/scheduling-parity.test.cjs && node tests/job-dedup.test.cjs && node tests/merge-multitype.test.cjs && node tests/tech-portal.test.cjs",
     "test:smoke": "node tests/smoke-functions.cjs",
     "verify:functions": "node scripts/verify-netlify-functions.cjs",
     "report:errors": "node scripts/error-report.cjs",

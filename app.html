@@ -3137,7 +3137,7 @@ window.addEventListener('resize',function(){
    ══════════════════════════════════════════ */
 // TECHS : toujours depuis localStorage, jamais de valeur par défaut (évite les techniciens fantômes)
 let TECHS=JSON.parse(localStorage.getItem('lb_techs')||'{}');
-function saveTechs(){localStorage.setItem('lb_techs',JSON.stringify(TECHS));scheduleSave();}
+function saveTechs(){localStorage.setItem('lb_techs',JSON.stringify(TECHS));scheduleSave();if(typeof scheduleTechPublish==='function')scheduleTechPublish();}
 function getTech(key){return TECHS[key]||{label:key||'?',color:'#888',soft:'#eee'};}
 // Resynchronise tous les <select> de techniciens dans les formulaires
 function refreshTechSelects(){
@@ -3572,6 +3572,7 @@ function saveJobs(){
   localStorage.setItem('lb_jobs',JSON.stringify(jobs));
   syncWindowLabData();
   scheduleSave();
+  if(typeof scheduleTechPublish==='function')scheduleTechPublish();
 }
 var _saveTimer=null; // var (et non let) : hoisté, car saveCustomTypes() peut être appelé au seed initial (1re visite) avant cette ligne — évite une TDZ qui cassait l'init et le bouton de connexion.
 // Debounce 2s avant d'appeler cloudSave (évite les sauvegardes en rafale)
@@ -8534,17 +8535,35 @@ function renderTech(tech){
       </div>
     </div>`;
   }).join('');
+  const todayKey=_tpDayKey(new Date());
   const jobHtml=tasks.map(t=>{
     const late=new Date(t.dueDate)<today;
     let cls=`tcard tc-${tech}`;
     if(t.urgent)cls+=' urgent';
     if(late)cls+=' late';
-    return `<div class="${cls}" data-jid="${t.jobId}" data-tidx="${t.taskIdx}">
+    const job=jobs.find(j=>String(j.id)===String(t.jobId));
+    const st=job?_techChainStatus(job.tasks,t.taskIdx,todayKey):{state:'ready',waitingOn:null};
+    const ui=_TP_STATE_UI[st.state]||_TP_STATE_UI.ready;
+    let stLine='';
+    if(st.state==='waiting'&&st.waitingOn){
+      stLine=`<div style="background:${ui.soft};color:#92400e;border-radius:6px;padding:3px 7px;font-size:.64rem;font-weight:600;margin-top:5px;">⏳ En attente : ${escHtml(st.waitingOn.label)} (${escHtml(getTech(st.waitingOn.tech).label)})${st.missing>1?' +'+(st.missing-1):''}</div>`;
+    }else if(st.state==='late'&&st.waitingOn){
+      stLine=`<div style="background:${ui.soft};color:#991b1b;border-radius:6px;padding:3px 7px;font-size:.64rem;font-weight:600;margin-top:5px;">🔴 Bloqué : ${escHtml(st.waitingOn.label)} (${escHtml(getTech(st.waitingOn.tech).label)}) en retard</div>`;
+    }
+    const doneInfo=t.done?`<div style="color:#16a34a;font-size:.64rem;font-weight:700;margin-top:4px;">✓ Fait${t.doneBy&&t.doneBy!=='labo'?' par '+escHtml(getTech(t.doneBy).label):''}${t.doneAt?' · '+new Date(t.doneAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):''}</div>`:'';
+    const techNote=t.techNote&&t.techNote.text?`<div class="tnote" style="background:#eef6ff;border-left:3px solid #3b82f6;">💬 ${escHtml(t.techNote.text)} <span style="color:var(--ink-soft);">— ${escHtml(getTech(t.techNote.by).label)}</span></div>`:'';
+    return `<div class="${cls}" data-jid="${t.jobId}" data-tidx="${t.taskIdx}" style="border-left:4px solid ${ui.color};${t.done?'opacity:.6;':''}">
       <div class="tp">${t.patient}</div>
-      <div class="ts">${t.label}${(parseInt(t.nb,10)||1)>1?` <span style="background:#1e293b;color:#fff;border-radius:5px;padding:0 6px;font-size:.62rem;font-weight:700;">×${parseInt(t.nb,10)} élts</span>`:''}</div>
+      <div class="ts" style="${t.done?'text-decoration:line-through;':''}">${t.label}${(parseInt(t.nb,10)||1)>1?` <span style="background:#1e293b;color:#fff;border-radius:5px;padding:0 6px;font-size:.62rem;font-weight:700;">×${parseInt(t.nb,10)} élts</span>`:''}</div>
       <div class="td">📅 <strong>${fmtS(t.dueDate)}</strong></div>
       ${t.trackCode?`<div style="font-family:monospace;font-size:.6rem;color:var(--ink-soft);margin-top:2px;letter-spacing:.06em;">${t.trackCode}</div>`:''}
       ${t.note?`<div class="tnote">📝 ${t.note}</div>`:''}
+      ${techNote}
+      ${stLine}
+      ${doneInfo}
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button type="button" onclick="event.stopPropagation();toggleTaskDone('${t.jobId}',${t.taskIdx})" style="flex:1;background:${t.done?'#e2e8f0':'#16a34a'};color:${t.done?'#475569':'#fff'};border:none;border-radius:6px;padding:4px 6px;font-size:.66rem;cursor:pointer;">${t.done?'↩ Rouvrir':'✓ Fait'}</button>
+      </div>
     </div>`;
   }).join('');
   // Surcharge du jour : somme des éléments programmés ce jour pour ce technicien vs sa capacité.
@@ -8553,7 +8572,13 @@ function renderTech(tech){
   const overHtml=dayLoad>dayCap
     ? '<div style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;border-radius:7px;padding:5px 8px;font-size:.66rem;font-weight:700;margin-bottom:6px;line-height:1.3;">⚠ Surcharge : '+dayLoad+'/'+dayCap+' éléments (+'+(dayLoad-dayCap)+' au-delà de la capacité)</div>'
     : '';
-  el.innerHTML=overHtml+genHtml+jobHtml;
+  const doneCnt=tasks.filter(function(t){return t.done;}).length+gtasks.filter(function(g){return g.done;}).length;
+  const totCnt=tasks.length+gtasks.length;
+  const doneHtml='<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:.68rem;font-weight:700;color:'+(doneCnt>=totCnt?'#16a34a':'var(--ink-soft)')+';">'+
+    '<span>'+doneCnt+'/'+totCnt+' ✓</span>'+
+    '<span style="flex:1;height:5px;background:#e2e8f0;border-radius:99px;overflow:hidden;"><span style="display:block;height:100%;width:'+(totCnt?Math.round(doneCnt/totCnt*100):0)+'%;background:#16a34a;border-radius:99px;"></span></span>'+
+  '</div>';
+  el.innerHTML=doneHtml+overHtml+genHtml+jobHtml;
 }
 
 // ── Tâches atelier génériques (non liées à un travail) ───────────────────────
@@ -8601,6 +8626,238 @@ function deleteGenericTask(id){
   genericTasks=genericTasks.filter(function(x){return x.id!==id;});saveGenericTasks();
   if(typeof render==='function')render();
 }
+
+// ── Portail technicien : accès mobiles, publication de la prog, coches en direct ──
+// Rangée d'étapes = chaîne de fabrication. Statut d'une étape vis-à-vis des précédentes :
+// 'done' (cochée) · 'ready' (tout ce qui précède est fait) · 'waiting' (il manque au moins
+// une étape précédente, aucune en retard) · 'late' (une étape précédente a dépassé sa date).
+function _tpDayKey(d){
+  var x=new Date(d);if(isNaN(x))return '';
+  return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
+}
+function _techChainStatus(steps,idx,todayKey){
+  var me=(steps&&steps[idx])||{};
+  var myKey=_tpDayKey(me.dueDate);
+  if(me.done)return {state:'done',missing:0,waitingOn:null,ownLate:false};
+  var ownLate=!!(myKey&&todayKey&&myKey<todayKey);
+  var missing=[];
+  for(var j=0;j<(steps||[]).length;j++){
+    if(j===idx)continue;
+    var k=_tpDayKey(steps[j].dueDate);
+    // Précède la mienne : jour antérieur, ou même jour et placée avant dans la chaîne.
+    var before=(k&&myKey)?(k<myKey||(k===myKey&&j<idx)):(j<idx);
+    if(before&&!steps[j].done)missing.push({label:steps[j].label||'Étape',tech:steps[j].tech||'',dayKey:k,late:!!(k&&todayKey&&k<todayKey)});
+  }
+  if(!missing.length)return {state:'ready',missing:0,waitingOn:null,ownLate:ownLate};
+  var anyLate=missing.some(function(m){return m.late;});
+  return {state:anyLate?'late':'waiting',missing:missing.length,waitingOn:missing[missing.length-1],ownLate:ownLate};
+}
+var _TP_STATE_UI={
+  ready:{color:'#16a34a',soft:'#dcfce7',label:'Prêt — étapes précédentes faites',icon:'🟢'},
+  waiting:{color:'#d97706',soft:'#fef3c7',label:'En attente',icon:'🟡'},
+  late:{color:'#dc2626',soft:'#fee2e2',label:'Bloqué — étape précédente en retard',icon:'🔴'},
+  done:{color:'#94a3b8',soft:'#f1f5f9',label:'Fait',icon:'✓'}
+};
+function toggleTaskDone(jobId,idx){
+  var job=jobs.find(function(j){return String(j.id)===String(jobId);});
+  if(!job||!Array.isArray(job.tasks)||!job.tasks[idx])return;
+  var t=job.tasks[idx];
+  t.done=!t.done;
+  if(t.done){t.doneAt=new Date().toISOString();t.doneBy='labo';}
+  else{t.doneAt=null;t.doneBy=null;}
+  saveJobs();
+  if(typeof render==='function')render();
+}
+
+// — Accès portail par technicien (TECHS[k].portal = {code, pwd, enabled}) —
+function _techPortalEnabled(){
+  return Object.keys(TECHS||{}).some(function(k){return TECHS[k]&&TECHS[k].portal&&TECHS[k].portal.enabled;});
+}
+function _tpRandCode(){
+  var A='ABCDEFGHJKMNPQRSTUVWXYZ23456789',s='';
+  for(var i=0;i<6;i++)s+=A[Math.floor(Math.random()*A.length)];
+  return 'TEC-'+s;
+}
+function _tpRandPwd(){
+  var A='abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789',s='';
+  for(var i=0;i<8;i++)s+=A[Math.floor(Math.random()*A.length)];
+  return s;
+}
+async function _pushTechLogin(code,payload){
+  if(!currentUser)return false;
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/labo_data',{
+      method:'POST',
+      headers:_supabaseAuthHeaders({'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body:JSON.stringify({
+        id:'techlogin_'+String(code).toUpperCase(),
+        data:Object.assign({labUserId:currentUser.id},payload),
+        updated_at:new Date().toISOString()
+      })
+    });
+    return r.ok;
+  }catch(e){console.warn('_pushTechLogin',e);return false;}
+}
+async function createTechAccess(k){
+  var t=TECHS[k];if(!t||!currentUser)return;
+  // 3 essais : un code peut appartenir à un autre labo (l'upsert est alors refusé par la RLS).
+  for(var i=0;i<3;i++){
+    var code=_tpRandCode(),pwd=_tpRandPwd();
+    var okPush=await _pushTechLogin(code,{techKey:k,code:code,pwd:pwd,enabled:true,label:t.label});
+    if(okPush){
+      t.portal={code:code,pwd:pwd,enabled:true};
+      saveTechs();renderEquipe();
+      scheduleTechPublish();
+      if(typeof showToast==='function')showToast('📱 Accès créé pour '+t.label,'#2a6049');
+      return;
+    }
+  }
+  if(typeof showToast==='function')showToast('❌ Création de l\'accès impossible — réessayez','#c0392b');
+}
+async function regenTechAccessPwd(k){
+  var t=TECHS[k];if(!t||!t.portal)return;
+  var pwd=_tpRandPwd();
+  var okPush=await _pushTechLogin(t.portal.code,{techKey:k,code:t.portal.code,pwd:pwd,enabled:t.portal.enabled!==false,label:t.label});
+  if(okPush){t.portal.pwd=pwd;saveTechs();renderEquipe();if(typeof showToast==='function')showToast('🔁 Nouveau mot de passe pour '+t.label,'#2a6049');}
+  else if(typeof showToast==='function')showToast('❌ Mise à jour impossible','#c0392b');
+}
+async function toggleTechAccess(k){
+  var t=TECHS[k];if(!t||!t.portal)return;
+  var next=!(t.portal.enabled!==false);
+  var okPush=await _pushTechLogin(t.portal.code,{techKey:k,code:t.portal.code,pwd:t.portal.pwd,enabled:next,label:t.label});
+  if(okPush){t.portal.enabled=next;saveTechs();renderEquipe();scheduleTechPublish();}
+  else if(typeof showToast==='function')showToast('❌ Mise à jour impossible','#c0392b');
+}
+function copyTechAccess(k){
+  var t=TECHS[k];if(!t||!t.portal)return;
+  var origin=(location&&location.origin&&location.origin.indexOf('http')===0)?location.origin:'https://labosync.app';
+  var txt='Accès atelier Labosync — '+t.label+'\n'+origin+'/technicien.html\nIdentifiant : '+t.portal.code+'\nMot de passe : '+t.portal.pwd;
+  try{navigator.clipboard.writeText(txt);if(typeof showToast==='function')showToast('📋 Identifiants copiés','#2a6049');}
+  catch(e){prompt('Identifiants à transmettre :',txt);}
+}
+
+// — Publication de la prog vers les téléphones (ligne techprog_<uid>) —
+function _buildTechGraph(){
+  var today=new Date();today.setHours(0,0,0,0);
+  var horizon=new Date(today);horizon.setDate(horizon.getDate()-14);
+  var out=[];
+  (jobs||[]).forEach(function(j){
+    if(!j||!Array.isArray(j.tasks)||!j.tasks.length)return;
+    var keep=j.tasks.some(function(t){return !t.done||new Date(t.dueDate)>=horizon;});
+    if(!keep)return;
+    var dl=null;
+    try{dl=(typeof _deliveryDeadline==='function'&&_deliveryDeadline(j))?_deliveryDeadline(j).toISOString():null;}catch(e){}
+    out.push({
+      id:String(j.id),
+      patient:j.patient||'',
+      urgent:!!j.urgent,
+      note:j.note||'',
+      type:(typeof getJobTypeLabel==='function')?getJobTypeLabel(j):(j.type||''),
+      trackCode:j.trackCode||'',
+      deadline:dl,
+      steps:j.tasks.map(function(t,i){
+        return {i:i,label:t.label||'Étape',tech:t.tech||'',dueDate:t.dueDate||null,nb:parseInt(t.nb,10)||1,
+                done:!!t.done,doneBy:t.doneBy||null,doneAt:t.doneAt||null,techNote:t.techNote||null};
+      })
+    });
+  });
+  var techsPub={};
+  Object.keys(TECHS||{}).forEach(function(k){techsPub[k]={label:(TECHS[k]&&TECHS[k].label)||k,color:(TECHS[k]&&TECHS[k].color)||'#1a4a7a'};});
+  return {
+    v:1,
+    publishedAt:new Date().toISOString(),
+    labName:localStorage.getItem('lb_name')||'',
+    techs:techsPub,
+    jobs:out,
+    gtasks:(genericTasks||[]).map(function(g){return {id:g.id,label:g.label,tech:g.tech,dueDate:g.dueDate,note:g.note||'',done:!!g.done};})
+  };
+}
+var _techPublishTimer=null;
+function scheduleTechPublish(){
+  if(!currentUser||!_techPortalEnabled())return;
+  clearTimeout(_techPublishTimer);
+  _techPublishTimer=setTimeout(publishTechProg,3000);
+}
+async function publishTechProg(){
+  if(!currentUser||!_techPortalEnabled())return;
+  try{
+    await fetch(SB_URL+'/rest/v1/labo_data',{
+      method:'POST',
+      headers:_supabaseAuthHeaders({'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body:JSON.stringify({id:'techprog_'+currentUser.id,data:{labUserId:currentUser.id,graph:_buildTechGraph()},updated_at:new Date().toISOString()})
+    });
+  }catch(e){console.warn('publishTechProg',e);}
+}
+
+// — Coches en direct depuis l'atelier (ligne techlive_<uid>, écrite par tech-portal.js) —
+function _techLiveAppliedRev(){return parseInt(localStorage.getItem('lb_techlive_rev')||'0',10);}
+function _applyTechLive(live){
+  var lastRev=_techLiveAppliedRev(),maxRev=lastRev,count=0,jobsChanged=false,gtChanged=false;
+  var findJobTask=function(key){
+    var p=String(key).split('|');
+    var job=jobs.find(function(j){return String(j.id)===p[0];});
+    return job&&Array.isArray(job.tasks)?job.tasks[parseInt(p[1],10)]:null;
+  };
+  Object.keys(live.checks||{}).forEach(function(key){
+    var ev=live.checks[key];if(!ev||!(ev.rev>lastRev))return;
+    if(ev.rev>maxRev)maxRev=ev.rev;
+    var t=findJobTask(key);if(!t)return;
+    if(!!t.done!==!!ev.done){
+      t.done=!!ev.done;
+      t.doneBy=ev.done?(ev.by||null):null;
+      t.doneAt=ev.done?(ev.at||null):null;
+      jobsChanged=true;count++;
+    }
+  });
+  Object.keys(live.notes||{}).forEach(function(key){
+    var ev=live.notes[key];if(!ev||!(ev.rev>lastRev))return;
+    if(ev.rev>maxRev)maxRev=ev.rev;
+    var t=findJobTask(key);if(!t)return;
+    t.techNote={text:ev.text||'',by:ev.by||'',at:ev.at||''};
+    jobsChanged=true;count++;
+  });
+  Object.keys(live.gtChecks||{}).forEach(function(id){
+    var ev=live.gtChecks[id];if(!ev||!(ev.rev>lastRev))return;
+    if(ev.rev>maxRev)maxRev=ev.rev;
+    var g=(genericTasks||[]).find(function(x){return x.id===id;});if(!g)return;
+    if(!!g.done!==!!ev.done){g.done=!!ev.done;gtChanged=true;count++;}
+  });
+  (live.added||[]).forEach(function(a){
+    if(!a||!a.id||!(a.rev>lastRev))return;
+    if(a.rev>maxRev)maxRev=a.rev;
+    if((genericTasks||[]).some(function(x){return x.id===a.id;}))return;
+    genericTasks.push({id:a.id,label:a.label||'Tâche',tech:a.tech||'',dueDate:a.dueDate||new Date().toISOString(),note:a.note||'',done:false,fromTech:true});
+    gtChanged=true;count++;
+  });
+  return {maxRev:maxRev,count:count,jobsChanged:jobsChanged,gtChanged:gtChanged};
+}
+var _techLivePolling=false;
+async function pollTechLive(force){
+  if(_techLivePolling)return;
+  if(!currentUser||!_techPortalEnabled())return;
+  if(document.hidden&&!force)return;
+  // Jamais avant la fin du cloudRestore : sinon un événement serait marqué
+  // « appliqué » (rev avancée) alors que les travaux ne sont pas encore chargés.
+  if(typeof _initialRestoreDone!=='undefined'&&!_initialRestoreDone)return;
+  _techLivePolling=true;
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/labo_data?id=eq.techlive_'+currentUser.id+'&select=data',{headers:_supabaseAuthHeaders()});
+    if(!r.ok)return;
+    var rows=await r.json();
+    var d=rows&&rows[0]&&rows[0].data;if(!d)return;
+    var res=_applyTechLive(d);
+    if(res.maxRev>_techLiveAppliedRev())localStorage.setItem('lb_techlive_rev',String(res.maxRev));
+    if(res.count>0){
+      if(res.jobsChanged)saveJobs();
+      if(res.gtChanged)saveGenericTasks();
+      if(typeof render==='function')render();
+      if(typeof showToast==='function')showToast('📲 Atelier : '+res.count+' mise(s) à jour','#0369a1');
+    }
+  }catch(e){console.warn('pollTechLive',e);}
+  finally{_techLivePolling=false;}
+}
+setInterval(function(){pollTechLive(false);},25000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)pollTechLive(true);});
 
 // ── Mode opérations (volume élevé) ──
 var LB_OPS_PAGE=50;
@@ -9843,7 +10100,7 @@ document.addEventListener('click',function(e){
   const ra=e.target.closest('[data-removeabstech]');
   if(ra){removeAbsence(ra.dataset.removeabstech,ra.dataset.removeabsdate);return;}
   const deltech=e.target.closest('[data-deltech]');
-  if(deltech){const k=deltech.dataset.deltech;if(TECHS[k]&&confirm('Supprimer '+TECHS[k].label+' ?')){delete TECHS[k];if(techOffDays&&techOffDays[k]){delete techOffDays[k];saveTechOffDays();}saveTechs();render();renderEquipe();refreshTechSelects();renderTechOffDaysList();}return;}
+  if(deltech){const k=deltech.dataset.deltech;if(TECHS[k]&&confirm('Supprimer '+TECHS[k].label+' ?')){const _p=TECHS[k].portal;if(_p&&_p.code&&typeof _pushTechLogin==='function')_pushTechLogin(_p.code,{techKey:k,code:_p.code,pwd:_p.pwd,enabled:false,label:TECHS[k].label});delete TECHS[k];if(techOffDays&&techOffDays[k]){delete techOffDays[k];saveTechOffDays();}saveTechs();render();renderEquipe();refreshTechSelects();renderTechOffDaysList();}return;}
   const qAutoBtn=e.target.closest('.btn-q-auto[data-qid]');
   if(qAutoBtn){programQueueAuto(qAutoBtn.dataset.qid);return;}
   const qManualBtn=e.target.closest('.btn-q-manual[data-qid]');
@@ -10083,7 +10340,7 @@ let absences= JSON.parse(localStorage.getItem('lb_absences')||'{}');
 let techOffDays= JSON.parse(localStorage.getItem('lb_tech_off_days')||'{}');
 // Tâches atelier génériques (non liées à un travail) : {id,label,tech,dueDate,note,done}
 let genericTasks= JSON.parse(localStorage.getItem('lb_generic_tasks')||'[]');
-function saveGenericTasks(){localStorage.setItem('lb_generic_tasks',JSON.stringify(genericTasks));scheduleSave();}
+function saveGenericTasks(){localStorage.setItem('lb_generic_tasks',JSON.stringify(genericTasks));scheduleSave();if(typeof scheduleTechPublish==='function')scheduleTechPublish();}
 // Compat legacy: certains builds/anciens scripts référencent "contges" par erreur.
 // On garde un alias pour éviter de bloquer tout le chargement sur un ReferenceError.
 var contges = conges;
@@ -10418,11 +10675,30 @@ function renderEquipe(){
   if(!Object.keys(TECHS).length){el.innerHTML='<div class="empty">'+t('empty.techs')+'</div>';return;}
   el.innerHTML=Object.keys(TECHS).map(k=>{
     const t=TECHS[k];const ini=t.label.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    return '<div class="team-card">'+
+    let accessHtml='';
+    if(t.portal&&t.portal.code){
+      const on=t.portal.enabled!==false;
+      accessHtml='<div style="width:100%;margin-top:8px;padding:8px 10px;background:'+(on?'#f0fdf4':'#f8fafc')+';border:1px solid '+(on?'#bbf7d0':'var(--border)')+';border-radius:8px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:.72rem;">'+
+        '<span style="font-weight:700;color:'+(on?'#166534':'var(--ink-soft)')+';">📱 Accès atelier '+(on?'actif':'désactivé')+'</span>'+
+        '<span style="font-family:monospace;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 8px;">'+t.portal.code+'</span>'+
+        '<span style="font-family:monospace;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 8px;">'+t.portal.pwd+'</span>'+
+        '<span style="flex:1;"></span>'+
+        '<button type="button" onclick="copyTechAccess(\''+k+'\')" title="Copier les identifiants et le lien" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:.7rem;">📋 Copier</button>'+
+        '<button type="button" onclick="regenTechAccessPwd(\''+k+'\')" title="Générer un nouveau mot de passe" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:.7rem;">🔁 Mot de passe</button>'+
+        '<button type="button" onclick="toggleTechAccess(\''+k+'\')" style="background:none;border:1px solid '+(on?'#fecaca':'#bbf7d0')+';color:'+(on?'#b91c1c':'#166534')+';border-radius:6px;padding:3px 8px;cursor:pointer;font-size:.7rem;">'+(on?'⏸ Désactiver':'▶ Réactiver')+'</button>'+
+      '</div>';
+    }else{
+      accessHtml='<div style="width:100%;margin-top:8px;">'+
+        '<button type="button" onclick="createTechAccess(\''+k+'\')" style="background:#1a4a7a;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:.72rem;cursor:pointer;">📱 Créer un accès atelier (téléphone)</button>'+
+        '<span style="font-size:.68rem;color:var(--ink-soft);margin-left:8px;">Le technicien voit sa prog du jour et coche ses tâches en direct.</span>'+
+      '</div>';
+    }
+    return '<div class="team-card" style="flex-wrap:wrap;">'+
       '<div style="width:36px;height:36px;border-radius:50%;background:'+t.color+';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.85rem;flex-shrink:0;">'+ini+'</div>'+
       '<div style="flex:1;"><div style="font-weight:500;font-size:.88rem;">'+t.label+'</div></div>'+
       '<input type="color" value="'+t.color+'" onchange="updateTechColor(this)" data-techkey="'+k+'" style="width:30px;height:30px;border:1px solid var(--border);border-radius:5px;cursor:pointer;padding:1px;"/>'+
       '<button data-deltech="'+k+'" style="background:none;border:none;cursor:pointer;color:#c0a090;font-size:.9rem;">✕</button>'+
+      accessHtml+
     '</div>';
   }).join('');
 }
@@ -16622,6 +16898,8 @@ async function completeLabBoot(session){
     try{startChatBgPoll();startChatRealtimeAll();}catch(eChat){}
     try{lbHandleOpenDeepLink();}catch(eDl){}
     republishAllPortals().catch(function(e){console.warn('republishAllPortals',e);});
+    // Portail technicien : récupère les coches faites pendant l'absence puis republie la prog.
+    try{setTimeout(function(){pollTechLive(true);scheduleTechPublish();},4000);}catch(eTp){}
 
     try{startRealtime(session.user.id);}catch(e){}
     try{startCourierLabRealtime();}catch(e3){console.warn('courier rt',e3);}
