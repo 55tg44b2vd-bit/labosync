@@ -8901,11 +8901,54 @@ function _dayLoads(dayISO){
   });});
   return c;
 }
-// Meilleur remplaçant un jour donné : score de prog intelligente si actif, sinon le plus de marge.
-function _bestReplacementTech(dayISO,excludeTechs,ctx){
+// Pool de techniciens AUTORISÉS pour une étape — les chips « technicien(s) pouvant
+// réaliser cette étape » du type. null = pas de contrainte (auto, étape inconnue,
+// libellé reformulé par la fusion IA…).
+function _allowedTechsForTask(job,label){
+  if(!job||!label)return null;
+  var norm=function(s){return String(s||'').trim().toLowerCase();};
+  var want=norm(label);if(!want)return null;
+  var typeIds=[];
+  if(Array.isArray(job.items)&&job.items.length)job.items.forEach(function(it){if(it&&it.type)typeIds.push(it.type);});
+  else if(job.type)typeIds.push(job.type);
+  var defs=Array.isArray(customTypes)?customTypes:[];
+  function scan(onlyJobTypes){
+    var found=null;
+    defs.forEach(function(def){
+      if(!def||(onlyJobTypes&&typeIds.indexOf(def.id)<0))return;
+      [].concat(def.steps||[],def.stepsEmp||[]).forEach(function(step){
+        if(found||!step||norm(step.label)!==want)return;
+        if(Array.isArray(step.tech)){
+          var pool=step.tech.filter(function(k){return TECHS[k];});
+          if(pool.length)found=pool;
+        }else if(step.tech&&step.tech!=='auto'&&TECHS[step.tech]){
+          found=[step.tech];
+        }
+      });
+    });
+    return found;
+  }
+  // D'abord les types DU travail ; sinon repli sur tous les types (vieux travaux,
+  // items incomplets) — le libellé identifie le poste.
+  return scan(true)||scan(false);
+}
+// Intersection des pools d'une chaîne liée : le remplaçant doit pouvoir faire TOUTES ses étapes.
+function _allowedTechsForChain(job,tasks,idxs){
+  var out=null;
+  (idxs||[]).forEach(function(x){
+    var p=_allowedTechsForTask(job,tasks[x]&&tasks[x].label);
+    if(!p)return;
+    out=out?out.filter(function(k){return p.indexOf(k)>=0;}):p.slice();
+  });
+  return out;
+}
+// Meilleur remplaçant un jour donné : restreint au pool autorisé de l'étape s'il existe,
+// puis score de prog intelligente si actif, sinon le plus de marge.
+function _bestReplacementTech(dayISO,excludeTechs,ctx,allowed){
   var day=new Date(dayISO);
   var cands=Object.keys(TECHS||{}).filter(function(k){
     if((excludeTechs||[]).indexOf(k)>=0)return false;
+    if(Array.isArray(allowed)&&allowed.indexOf(k)<0)return false;
     if(typeof isTechUnavailableForAuto==='function'&&isTechUnavailableForAuto(k,day))return false;
     return true;
   });
@@ -8963,9 +9006,11 @@ function _planTechAbsence(techKey,fromKey,toKey){
       var chain=_linkChainIdxs(tasks,i).filter(function(x){return !tasks[x].done&&tasks[x].tech===techKey;});
       chain.forEach(function(x){claimed[x]=true;});
       var ctx={cabinetId:job.cabinet||null,zone:(typeof _zoneFromTeeth==='function')?_zoneFromTeeth(job.teeth):null};
-      var nt=_bestReplacementTech(tasks[i].dueDate,[techKey],ctx);
-      if(!nt){moves.push({jobId:job.id,kind:'stuck',patient:job.patient||'',label:tasks[i].label||'Étape'});return;}
-      moves.push({jobId:job.id,kind:'reassign',idxs:chain,newTech:nt,patient:job.patient||'',
+      // Pool du poste : seuls les techniciens autorisés pour CES étapes peuvent reprendre.
+      var allowed=_allowedTechsForChain(job,tasks,chain);
+      var nt=_bestReplacementTech(tasks[i].dueDate,[techKey],ctx,allowed);
+      if(!nt){moves.push({jobId:job.id,kind:'stuck',patient:job.patient||'',label:tasks[i].label||'Étape',pooled:!!allowed});return;}
+      moves.push({jobId:job.id,kind:'reassign',idxs:chain,newTech:nt,patient:job.patient||'',pooled:!!allowed,
         labels:chain.map(function(x){return tasks[x].label||'Étape';}),
         dates:chain.map(function(x){return tasks[x].dueDate;})});
     });
@@ -9054,8 +9099,10 @@ function _relieveTechDay(techKey,dayISO,protectJobId){
   for(var i=0;i<cands.length&&load()>cap;i++){
     var c=cands[i];
     var ctx={cabinetId:c.job.cabinet||null,zone:(typeof _zoneFromTeeth==='function')?_zoneFromTeeth(c.job.teeth):null};
-    var nt=_bestReplacementTech(dayISO,[techKey],ctx);
-    if(!nt)break;
+    // Pool du poste : une chaîne ne part que vers un technicien autorisé pour ses étapes.
+    var allowed=_allowedTechsForChain(c.job,c.job.tasks,c.chain);
+    var nt=_bestReplacementTech(dayISO,[techKey],ctx,allowed);
+    if(!nt)continue;
     c.chain.forEach(function(x){c.job.tasks[x].tech=nt;});
     moved++;
   }
@@ -9102,9 +9149,9 @@ function openTechAbsence(k){
           return '<div style="border-left:4px solid #0369a1;background:#f0f9ff;border-radius:0 9px 9px 0;padding:8px 11px;margin-bottom:7px;">📅 <strong>'+escHtml(m.patient)+'</strong> — '+m.count+' étape(s) restante(s) décalée(s) de '+m.delta+' j ouvré(s)'+(m.deadline?' · livraison du '+new Date(m.deadline).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' respectée':'')+'</div>';
         }
         if(m.kind==='reassign'){
-          return '<div style="border-left:4px solid #d97706;background:#fffbeb;border-radius:0 9px 9px 0;padding:8px 11px;margin-bottom:7px;">→ <strong>'+escHtml(m.patient)+'</strong> : '+m.labels.map(escHtml).join(' 🔗 ')+' → <strong>'+escHtml(getTech(m.newTech).label)+'</strong>'+(m.idxs.length>1?' <span style="color:var(--ink-soft);">(étapes liées : même technicien)</span>':'')+'</div>';
+          return '<div style="border-left:4px solid #d97706;background:#fffbeb;border-radius:0 9px 9px 0;padding:8px 11px;margin-bottom:7px;">→ <strong>'+escHtml(m.patient)+'</strong> : '+m.labels.map(escHtml).join(' 🔗 ')+' → <strong>'+escHtml(getTech(m.newTech).label)+'</strong>'+(m.idxs.length>1?' <span style="color:var(--ink-soft);">(étapes liées : même technicien)</span>':'')+(m.pooled?' <span style="color:var(--ink-soft);">· pool du poste respecté</span>':'')+'</div>';
         }
-        return '<div style="border-left:4px solid #dc2626;background:#fef2f2;border-radius:0 9px 9px 0;padding:8px 11px;margin-bottom:7px;">⚠ <strong>'+escHtml(m.patient)+'</strong> : '+escHtml(m.label)+' — aucun remplaçant disponible, l\'étape reste sur '+escHtml(t.label)+'</div>';
+        return '<div style="border-left:4px solid #dc2626;background:#fef2f2;border-radius:0 9px 9px 0;padding:8px 11px;margin-bottom:7px;">⚠ <strong>'+escHtml(m.patient)+'</strong> : '+escHtml(m.label)+' — '+(m.pooled?'aucun technicien du pool de cette étape n\'est disponible':'aucun remplaçant disponible')+', l\'étape reste sur '+escHtml(t.label)+'</div>';
       }).join('');
     }
     document.getElementById('abs-apply').style.display='';

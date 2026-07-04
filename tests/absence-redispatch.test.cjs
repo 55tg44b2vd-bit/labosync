@@ -20,6 +20,7 @@ function extractFn(src,name){
 }
 
 const FNS=['addWD','countWD','fmtISO','_techCapacity','_scoreTech','_linkChainIdxs','_dayLoads',
+  '_allowedTechsForTask','_allowedTechsForChain',
   '_bestReplacementTech','_planTechAbsence','_applyTechAbsencePlan','_relievePreferredOverload','_relieveTechDay'];
 const code=FNS.map(function(n){return extractFn(appSrc,n);}).join('\n');
 
@@ -28,7 +29,7 @@ function mkCtx(over){
     Date:Date,String:String,Object:Object,Array:Array,Number:Number,Math:Math,
     parseInt:parseInt,isNaN:isNaN,console:console,
     TECHS:{marc:{label:'Marc',color:'#111'},sarah:{label:'Sarah',color:'#222'},tom:{label:'Tom',color:'#333'}},
-    jobs:[],absences:{},
+    jobs:[],absences:{},customTypes:[],
     saveJobs:function(){},saveAbsences:function(){},
     isTechUnavailableForAuto:function(k,d){return d.getDay()===0||d.getDay()===6;},
     _deliveryDeadline:function(j){return j.deadline?new Date(j.deadline):null;}
@@ -129,4 +130,46 @@ const D=(day,h)=>new Date('2026-07-'+String(day).padStart(2,'0')+'T'+(h||'12')+'
   assert.strictEqual(moved,0,'surcharge sans préférence cabinet = comportement inchangé');
 }
 
-console.log('✅ absence-redispatch.test.cjs — chaînes liées, report, réassignation, délestage : OK');
+// ── 6. Pool du poste : le remplaçant est choisi PARMI les techniciens autorisés pour l'étape ──
+{
+  const ctx=mkCtx();
+  ctx.TECHS.kris={label:'Kris',color:'#444'};
+  ctx.customTypes.push({id:'chape',steps:[
+    {label:'modélisation chappe métal',tech:['marc','tom'],dayOffset:2},
+    {label:'montage céramique cosmétique',tech:'auto',dayOffset:3}
+  ]});
+  // Kris et Sarah ont plus de marge, mais seuls marc/tom sont autorisés sur la modélisation.
+  // (job SANS champ type : le repli « libellé dans tous les types » doit retrouver le pool)
+  ctx.jobs.push({id:'p1',patient:'tesfttcf',cabinet:'cabB',deadline:'2026-07-08T23:59:59',tasks:[
+    {label:'modélisation chappe métal',tech:'marc',dueDate:D(7),nb:1,done:false},
+    {label:'montage céramique cosmétique',tech:'kris',dueDate:D(8),nb:1,done:false}
+  ]});
+  const plan=vm.runInContext('_planTechAbsence("marc","2026-07-07","2026-07-07")',ctx);
+  assert.strictEqual(plan.moves[0].kind,'reassign','échéance serrée → réassignation');
+  assert.strictEqual(plan.moves[0].newTech,'tom','remplaçant pris DANS le pool de l\'étape (tom), pas kris/sarah');
+  assert.strictEqual(plan.moves[0].pooled,true,'contrainte de pool signalée');
+
+  // Pool réduit au seul absent → aucun remplaçant : l'étape est signalée, pas déplacée.
+  ctx.customTypes[0].steps[0].tech=['marc'];
+  const plan2=vm.runInContext('_planTechAbsence("marc","2026-07-07","2026-07-07")',ctx);
+  assert.strictEqual(plan2.moves[0].kind,'stuck','pool vide une fois l\'absent retiré → signalé');
+}
+
+// ── 7. Pool sur une chaîne liée : intersection des pools de TOUTES les étapes de la chaîne ──
+{
+  const ctx=mkCtx();
+  ctx.customTypes.push({id:'zircone',steps:[
+    {label:'Modélisation',tech:['marc','sarah','tom'],dayOffset:1},
+    {label:'Glaçage',tech:['marc','tom'],dayOffset:3,sameAs:0}
+  ]});
+  ctx.jobs.push({id:'c1',patient:'chainpool',cabinet:'cabB',type:'zircone',items:[{type:'zircone',nb:1}],deadline:'2026-07-09T23:59:59',tasks:[
+    {label:'Modélisation',tech:'marc',dueDate:D(7),nb:1,done:false},
+    {label:'Glaçage',tech:'marc',dueDate:D(9),nb:1,done:false,sameTechAsLabel:'Modélisation'}
+  ]});
+  const plan=vm.runInContext('_planTechAbsence("marc","2026-07-07","2026-07-07")',ctx);
+  assert.strictEqual(plan.moves[0].kind,'reassign','réassignation de la chaîne');
+  assert.strictEqual(plan.moves[0].newTech,'tom','sarah exclue : elle ne peut pas faire le glaçage (intersection des pools)');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(plan.moves[0].idxs)),[0,1],'chaîne complète');
+}
+
+console.log('✅ absence-redispatch.test.cjs — chaînes liées, report, réassignation, délestage, pools de poste : OK');
